@@ -1,0 +1,7 @@
+profile: minimodel.short-term-memory.v1
+updated_utc: 2026-07-01T03:10:00Z
+current_state:
+  - MiniModel.org is a planned Rust-first peer-to-peer tiny model package exchange and catalog.
+  - It references MiRust.com as a one-way talisman source.
+  - File Handoff setup is initialized with placeholder-only active intake.
+  - Public boundary remains no hosted model weights and no server-side inference.

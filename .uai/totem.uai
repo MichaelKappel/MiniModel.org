@@ -1,0 +1,12 @@
+profile: minimodel.totem.v1
+updated_utc: 2026-07-01T03:10:00Z
+site: MiniModel.org
+role: positive_anchor
+mission: Build a Rust-first peer-to-peer tiny model package catalog and exchange where users verify and run model packages locally.
+anchors:
+  - Peer-to-peer or source-routed transfer, not hosted model-weight service.
+  - Signed or checksum-bound model manifests.
+  - Local verification before SLMComposer import.
+  - Clear separation between catalog metadata, peer transfer, and local execution.
+talisman_source: MiRust.com
+agent_mutability: read_only_without_exact_human_artifact_and_operation_authorization

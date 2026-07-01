@@ -1,0 +1,13 @@
+profile: minimodel.file-handoff.v1
+updated_utc: 2026-07-01T03:10:00Z
+site: MiniModel.org
+setup_route: https://uaix.org/en-us/tools/ai-memory-package-wizard/#setup-file-handoff
+active_buckets:
+  content: agent-file-handoff/Content/
+  improvement: agent-file-handoff/Improvement/
+rules:
+  - Scan Content and Improvement before broad work.
+  - Use accepted intake as site content, roadmap input, manifest design input, or implementation evidence.
+  - Record disposition, proof of use, and final active-intake state in .uai/intake-outcome-ledger.uai.
+  - Remove processed source-site copies unless a human keeps them active.
+completion_gate: Active buckets must be empty or placeholder-only after processing.

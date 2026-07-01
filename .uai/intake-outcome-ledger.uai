@@ -1,0 +1,13 @@
+profile: minimodel.intake-outcome-ledger.v1
+updated_utc: 2026-07-01T03:10:00Z
+site: MiniModel.org
+latest_scan:
+  content_non_placeholder_files: 0
+  improvement_non_placeholder_files: 0
+  outcome: placeholder_only
+records:
+  - id: initial_file_handoff_setup_2026_07_01
+    disposition: setup_complete
+    source_impact: Created independent MiniModel.org File Handoff buckets for future content and improvement intake.
+    memory_impact: Added local UAI anchors and talisman-client reference to MiRust.com.
+    active_intake_after: placeholder_only

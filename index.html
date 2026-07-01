@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniModel.org</title>
+  <meta name="description" content="MiniModel.org is a Rust-first peer-to-peer exchange roadmap for checksum-bound tiny local AI model packages.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header" aria-label="MiniModel navigation">
+    <a class="brand" href="/">
+      <span class="mark" aria-hidden="true"></span>
+      <span>MiniModel.org</span>
+    </a>
+    <nav>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#rules">Rules</a>
+      <a href="#research">Research</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="network-visual" aria-hidden="true">
+        <span class="node node-a"></span>
+        <span class="node node-b"></span>
+        <span class="node node-c"></span>
+        <span class="node node-d"></span>
+        <span class="node node-e"></span>
+        <span class="line line-a"></span>
+        <span class="line line-b"></span>
+        <span class="line line-c"></span>
+        <span class="line line-d"></span>
+      </div>
+      <div class="hero-content">
+        <p class="eyebrow">Rust peer-to-peer tiny model exchange</p>
+        <h1>MiniModel.org</h1>
+        <p class="lede">
+          A planned peer-to-peer catalog for checksum-bound tiny model packages that users download,
+          verify, and run locally.
+        </p>
+        <div class="actions" aria-label="Primary links">
+          <a class="button primary" href="#roadmap">View roadmap</a>
+          <a class="button secondary" href="https://SLMComposer.com/app/">Open SLM Composer</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="statement" id="rules">
+      <div>
+        <h2>Boundary</h2>
+        <p>
+          MiniModel.org is not a model hosting service and not an inference service. The goal is
+          discovery, peer transfer, checksum verification, license routing, and local import.
+        </p>
+      </div>
+      <ul class="rule-list" aria-label="Project rules">
+        <li>No server-side model execution.</li>
+        <li>No hosted runnable model weights from MiniModel.org.</li>
+        <li>Every package is identified by checksums and provenance.</li>
+        <li>Users choose, download, verify, and run models locally.</li>
+      </ul>
+    </section>
+
+    <section class="grid-section" id="roadmap">
+      <div class="section-heading">
+        <p class="eyebrow">Build plan</p>
+        <h2>Roadmap</h2>
+      </div>
+      <ol class="roadmap">
+        <li>
+          <span class="step">01</span>
+          <h3>Manifest</h3>
+          <p>Define a signed MiniModel manifest for `.slm` packages, source identity, license route, tokenizer/config checksums, eval evidence, and final artifact checksum.</p>
+        </li>
+        <li>
+          <span class="step">02</span>
+          <h3>Verifier</h3>
+          <p>Ship a Rust CLI that verifies package bytes, manifest fields, evidence routes, drift cases, and SLMComposer import readiness before a user trusts a file.</p>
+        </li>
+        <li>
+          <span class="step">03</span>
+          <h3>Catalog</h3>
+          <p>Publish static catalog metadata and signed index snapshots. The catalog routes users to sources and peers without serving model weights.</p>
+        </li>
+        <li>
+          <span class="step">04</span>
+          <h3>Peer App</h3>
+          <p>Build a Rust desktop peer app for discovery, chunk transfer, resume, checksum validation, and local handoff to SLMComposer.</p>
+        </li>
+        <li>
+          <span class="step">05</span>
+          <h3>Browser Handoff</h3>
+          <p>Let verified local `.slm` files open in SLMComposer for browser-local Rust/WASM loading and generation.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="grid-section" id="research">
+      <div class="section-heading">
+        <p class="eyebrow">Research prompts</p>
+        <h2>Start here</h2>
+      </div>
+      <div class="research-grid">
+        <article>
+          <h3>P2P Architecture</h3>
+          <p>Compare Rust P2P approaches for a model package exchange: libp2p, Iroh, BitTorrent-style chunking, DHT discovery, static bootstrap registries, NAT traversal, and signed catalogs.</p>
+        </article>
+        <article>
+          <h3>Trust Model</h3>
+          <p>Design checksum-bound manifests for `.slm` files with source SHA, config/tokenizer checksums, license route, eval evidence, quantization, byte count, and final artifact checksum.</p>
+        </article>
+        <article>
+          <h3>Legal Boundary</h3>
+          <p>Recommend UX language, model-card fields, consent flows, takedown handling, and a clear separation between catalog metadata, peer transfer, and local execution.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>MiniModel.org</span>
+    <span>Peer-to-peer model packages</span>
+    <a href="https://Runtime.MiRust.com/">Runtime.MiRust.com</a>
+    <a href="https://SLMComposer.com/app/">SLMComposer.com</a>
+  </footer>
+</body>
+</html>

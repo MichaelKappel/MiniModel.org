@@ -1,5 +1,5 @@
 profile: minimodel.workspace.v3
-updated_utc: 2026-07-01T16:20:00Z
+updated_utc: 2026-07-01T20:46:46Z
 site: MiniModel.org
 workspace_root: E:\Source\Rust\MiniModel.org
 coordinator: E:\Source\Rust\workspace.uai
@@ -13,6 +13,12 @@ public_access_policy:
   .uai: denied
   agent-file-handoff: denied
   workspace.uai: do_not_publish_without_root_deny_or_auth
+deploy_gate:
+  instruction: Before deploying MiniModel.org, make sure MiniModel.org documentation, catalogs, workspace.uai, and public-safe talisman exports reflect the current source state and the SLMComposer/TinyRustLM integration behavior.
+  requirements:
+    - Keep the metadata-only catalog boundary explicit; project servers do not run or serve user model bytes.
+    - Update related docs on SLMComposer.com, Runtime.MiRust.com, TinyRustLM.MiRust.com, and MiRust.com when source options, manifests, verifier behavior, or legal/liability language changes.
+    - Run relevant pointer audits and git diff --check before packaging or deployment.
 required_private_read_order:
   - workspace.uai
   - .uai/index.uai

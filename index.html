@@ -40,6 +40,7 @@
         <p class="lede">
           A planned source catalog for checksum-bound tiny model packages that users bring locally,
           discover externally, transfer by consent, verify, and run locally.
+          SLM Composer exposes the same choices as Local Files, Hugging Face, and P2P Exchange.
         </p>
         <div class="actions" aria-label="Primary links">
           <a class="button primary" href="ROADMAP.md">View roadmap</a>
@@ -111,11 +112,11 @@
       <div class="doc-grid">
         <a href="docs/catalog-boundary.md">
           <h3>Local</h3>
-          <p>User-owned `.slm` files and local JSON lists stay first-class, with browser file-picker import and Rust/WASM validation.</p>
+          <p>User-owned `.slm` files and local JSON lists stay first-class, with browser file-picker import and Rust/WASM validation in SLM Composer.</p>
         </a>
         <a href="docs/catalog-boundary.md">
           <h3>Hugging Face</h3>
-          <p>User-triggered external discovery can route model cards, metadata, file hints, and source revisions without project-server proxying or inference.</p>
+          <p>User-triggered external discovery can route model cards, API metadata, file hints, source revisions, and endpoint context without project-server proxying or inference.</p>
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>P2P</h3>
@@ -161,7 +162,7 @@
         </article>
         <article>
           <h3>Hugging Face Source</h3>
-          <p>Use Hub metadata and model-card discovery as an external source lane while keeping `/resolve/` downloads, tokens, and remote inference outside project servers.</p>
+          <p>Use Hub API metadata, OpenAPI docs, model-card discovery, and endpoint awareness as an external source lane while keeping `/resolve/` downloads, tokens, and remote inference outside project servers.</p>
         </article>
         <article>
           <h3>Trust Model</h3>

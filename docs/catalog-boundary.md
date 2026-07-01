@@ -43,6 +43,16 @@ A catalog entry may include:
 
 A catalog entry must not include a project-server artifact URL. The user can download or receive bytes only through a future consent-based peer app or through their own local file flow.
 
+## Source Lanes
+
+MiniModel.org and SLMComposer should keep three source lanes distinct:
+
+- `local-file` or `local-list`: user-owned local `.slm` files and local JSON metadata lists.
+- `huggingface-hub`: user-triggered external discovery using Hugging Face metadata, model cards, file hints, and source revision context.
+- `minimodel-p2p`: future consent-based peer transfer with manifest, chunk, Merkle, and checksum verification.
+
+Hugging Face `/resolve/` URLs, LFS/Xet/CAS transfers, Inference Providers, Inference Endpoints, and executable Spaces must not be represented as MiniModel.org-hosted bytes or MiniModel.org-run inference. If a user obtains bytes from Hugging Face or another external source, they convert or import them locally and then select the verified `.slm` file in SLMComposer.
+
 ## User Consent Gates
 
 The product flow needs two separate consent moments:

@@ -14,6 +14,16 @@ Project servers never run user models and never serve user model bytes. They may
 4. Peer app: later Rust desktop app for consent-based discovery, resumable transfer, NAT traversal, local quotas, and checksum validation.
 5. SLMComposer handoff: verified local `.slm` files open in the browser-local Rust/WASM runtime.
 
+## Source Options
+
+MiniModel.org should support three source lanes, all ending in local verification:
+
+- User-owned local files and lists: users bring `.slm` files and optional local JSON metadata lists from their own machine.
+- Hugging Face discovery: users may search or inspect external Hugging Face metadata, model cards, file hints, and source revisions, but project servers do not proxy `/resolve/` downloads and do not use project-owned tokens.
+- MiniModel P2P: future consenting peers exchange chunks that are verified by checksum and Merkle data before import.
+
+All source lanes must converge on a user-controlled local `.slm` artifact, a local verifier result or receipt, and a browser file-picker import into SLMComposer. Hugging Face Inference Providers, Inference Endpoints, and executable Spaces are remote execution products, not MiniModel or SLMComposer run paths.
+
 ## Manifest MVP
 
 Each model entry should bind:

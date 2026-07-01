@@ -38,8 +38,8 @@
         <p class="eyebrow">Rust peer-to-peer tiny model exchange</p>
         <h1>MiniModel.org</h1>
         <p class="lede">
-          A planned peer-to-peer catalog for checksum-bound tiny model packages that users download,
-          verify, and run locally.
+          A planned source catalog for checksum-bound tiny model packages that users bring locally,
+          discover externally, transfer by consent, verify, and run locally.
         </p>
         <div class="actions" aria-label="Primary links">
           <a class="button primary" href="ROADMAP.md">View roadmap</a>
@@ -55,14 +55,14 @@
         <h2>Boundary</h2>
         <p>
           MiniModel.org is not a model hosting service and not an inference service. The goal is
-          discovery, peer transfer, checksum verification, license routing, and local import.
+          discovery, external source routing, peer transfer, checksum verification, license routing, and local import.
         </p>
       </div>
       <ul class="rule-list" aria-label="Project rules">
         <li>No server-side model execution.</li>
         <li>No hosted runnable model weights from MiniModel.org.</li>
         <li>Every package is identified by checksums and provenance.</li>
-        <li>Users choose, download, verify, and run models locally.</li>
+        <li>Users choose, obtain, verify, and run models locally.</li>
       </ul>
     </section>
 
@@ -103,6 +103,27 @@
       </p>
     </section>
 
+    <section class="grid-section" id="sources">
+      <div class="section-heading">
+        <p class="eyebrow">Source lanes</p>
+        <h2>Model options</h2>
+      </div>
+      <div class="doc-grid">
+        <a href="docs/catalog-boundary.md">
+          <h3>Local</h3>
+          <p>User-owned `.slm` files and local JSON lists stay first-class, with browser file-picker import and Rust/WASM validation.</p>
+        </a>
+        <a href="docs/catalog-boundary.md">
+          <h3>Hugging Face</h3>
+          <p>User-triggered external discovery can route model cards, metadata, file hints, and source revisions without project-server proxying or inference.</p>
+        </a>
+        <a href="docs/verifier-mvp.md">
+          <h3>P2P</h3>
+          <p>Future peer transfer uses consent, chunk/Merkle verification, local receipts, and SLMComposer handoff after local `.slm` checks pass.</p>
+        </a>
+      </div>
+    </section>
+
     <section class="grid-section" id="docs">
       <div class="section-heading">
         <p class="eyebrow">Implementation docs</p>
@@ -137,6 +158,10 @@
         <article>
           <h3>P2P Architecture</h3>
           <p>Compare Rust P2P approaches for a model package exchange: libp2p, Iroh, BitTorrent-style chunking, DHT discovery, static bootstrap registries, NAT traversal, and signed catalogs.</p>
+        </article>
+        <article>
+          <h3>Hugging Face Source</h3>
+          <p>Use Hub metadata and model-card discovery as an external source lane while keeping `/resolve/` downloads, tokens, and remote inference outside project servers.</p>
         </article>
         <article>
           <h3>Trust Model</h3>

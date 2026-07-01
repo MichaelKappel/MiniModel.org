@@ -1,5 +1,5 @@
-profile: minimodel.uai.index.v2
-updated_utc: 2026-07-01T13:15:00Z
+profile: minimodel.uai.index.v3
+updated_utc: 2026-07-01T16:20:00Z
 site: MiniModel.org
 role: talisman_client
 workspace_coordinator: workspace.uai
@@ -16,3 +16,4 @@ source_relationship: one_way_reference_only
 setup_route: https://uaix.org/en-us/tools/ai-memory-package-wizard/#setup-file-handoff
 public_export: .well-known/uaix-talisman.txt
 public_uai_policy: denied
+latest_route: Source options are local files/lists, user-triggered Hugging Face discovery, and future P2P transfer; project servers remain metadata-only and never run or serve user model bytes.

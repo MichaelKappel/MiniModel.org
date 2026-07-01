@@ -41,7 +41,7 @@ The line-oriented format matches the current TinyRustLM evidence style and keeps
 | `artifact.kind` | Must be `slm` for the first verifier. |
 | `artifact.byte_count` | Decimal byte count for the local `.slm` file. |
 | `artifact.sha256` | SHA256 of the local `.slm` file. |
-| `artifact.acquisition` | Must be `user-local-file` or `consent-peer-transfer`. |
+| `artifact.acquisition` | Must be `user-local-file`, `user-external-download`, or `consent-peer-transfer`. |
 | `artifact.project_server_url` | Must be `none`. |
 | `slm.format_version` | `.slm` format version expected by TinyRustLM. |
 | `slm.model_shape` | TinyRustLM source-shape id or explicit shape id. |
@@ -71,6 +71,19 @@ Evidence fields are optional only when their paired status is `unavailable` or `
 | `evidence.admission.route`, `evidence.admission.sha256` | Admission sidecar. |
 
 The verifier must reject a checksum without a route, a route without a checksum when the status is `passed`, and any route that claims to be a project-hosted model-byte route.
+
+## Source Discovery Fields
+
+Source discovery fields are optional in v0 but reserved so the verifier can distinguish local, Hugging Face, and future P2P paths without changing the artifact boundary.
+
+| Field | Requirement |
+| --- | --- |
+| `source.discovery.kind` | `local-file`, `local-list`, `huggingface-hub`, `minimodel-p2p`, or `unknown`. |
+| `source.discovery.route` | Metadata or model-card route only; it must not be a project-server model-byte route. |
+| `source.discovery.revision` | External source revision, commit, or `unknown`. |
+| `source.discovery.user_token_required` | `true` only when a user-supplied external credential is required; project-owned tokens are forbidden. |
+
+Hugging Face `/resolve/`, Xet/CAS, Inference Providers, Inference Endpoints, and executable Spaces are not MiniModel.org server capabilities. They may inform external discovery or user-side acquisition only.
 
 ## Chunk Fields
 

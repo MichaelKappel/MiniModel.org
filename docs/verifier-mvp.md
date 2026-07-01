@@ -57,7 +57,7 @@ Receipts must not contain model bytes, public model-byte URLs, or claims that Mi
    - reject non-ASCII keys
 2. Boundary parse:
    - require `artifact.project_server_url=none`
-   - require `artifact.acquisition=user-local-file` or `consent-peer-transfer`
+   - require `artifact.acquisition=user-local-file`, `user-external-download`, or `consent-peer-transfer`
    - reject remote execution, install hooks, script hooks, or automatic browser-fetch fields
 3. Metadata parse:
    - require model id, publisher id, license route, model-card route, artifact kind, byte count, checksum, shape, tokenizer checksum, tensor-layout checksum, runtime compatibility, and evidence admission status
@@ -92,6 +92,9 @@ The MVP test suite should include one passing fixture and at least these failure
 - duplicate key
 - route without checksum for passed evidence
 - checksum without route for passed evidence
+- project-owned Hugging Face token requirement
+- Hugging Face `/resolve/` URL represented as a project-server artifact URL
+- remote inference requirement from Hugging Face Inference Providers, Inference Endpoints, or Spaces
 - chunk count drift
 - Merkle root drift
 - signature payload drift when signatures are enabled

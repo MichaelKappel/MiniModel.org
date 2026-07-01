@@ -25,9 +25,19 @@ Each model entry should bind:
 - chunk size, Merkle root, and piece metadata for peer transfer
 - signature fields for publisher identity and future transparency logs
 
+The first concrete schema draft is [docs/manifest-v0.md](docs/manifest-v0.md). It uses a line-oriented `key=value` format so the initial Rust verifier can stay small and local.
+
+## Verifier MVP
+
+The first implementation target is a local Rust verifier, not a network. It parses the manifest, rejects server-byte and server-execution claims, verifies a user-supplied local `.slm` artifact, checks TinyRustLM compatibility fields, and writes a local import receipt.
+
+Verifier planning lives in [docs/verifier-mvp.md](docs/verifier-mvp.md).
+
 ## Legal Boundary
 
 MiniModel.org should act as a metadata directory and information-location tool. Listings should include uploader assertions, license warnings, intended-use fields, prohibited-use fields, consent screens, and takedown/contact routes. Legal review is required before public exchange features.
+
+Catalog and server-boundary rules live in [docs/catalog-boundary.md](docs/catalog-boundary.md).
 
 ## Ecosystem Direction
 
@@ -45,3 +55,8 @@ Model creation and import should follow the TinyRustLM evidence chain: safetenso
 4. Publish metadata-only static catalog prototypes.
 5. Prototype peer transfer with chunk/Merkle verification.
 6. Build a desktop peer app with consent, local cache controls, and SLMComposer handoff.
+
+## Examples
+
+- [examples/minimodel.manifest.v0.example](examples/minimodel.manifest.v0.example)
+- [examples/catalog-entry.v0.json](examples/catalog-entry.v0.json)

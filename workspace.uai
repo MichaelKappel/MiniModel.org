@@ -1,5 +1,5 @@
-profile: minimodel.workspace.v1
-updated_utc: 2026-07-01T13:15:00Z
+profile: minimodel.workspace.v2
+updated_utc: 2026-07-01T15:30:00Z
 site: MiniModel.org
 workspace_root: E:\Source\Rust\MiniModel.org
 coordinator: E:\Source\Rust\workspace.uai
@@ -24,5 +24,6 @@ required_private_read_order:
   - .uai/short-term-memory.uai
 current_state:
   - MiniModel.org is the Rust-first P2P tiny model package exchange roadmap site.
+  - First implementation docs now route manifest v0, the local Rust verifier MVP, metadata-only catalog boundaries, and examples without model-byte hosting.
   - The live public-safe export is verified.
   - Direct public .uai and agent-file-handoff access is denied.

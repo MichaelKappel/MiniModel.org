@@ -15,6 +15,7 @@
     </a>
     <nav>
       <a href="#roadmap">Roadmap</a>
+      <a href="#docs">Docs</a>
       <a href="#rules">Rules</a>
       <a href="#research">Research</a>
     </nav>
@@ -42,6 +43,7 @@
         </p>
         <div class="actions" aria-label="Primary links">
           <a class="button primary" href="ROADMAP.md">View roadmap</a>
+          <a class="button secondary" href="docs/manifest-v0.md">Manifest draft</a>
           <a class="button secondary" href="https://SLMComposer.com/app/">Open SLM Composer</a>
         </div>
       </div>
@@ -98,6 +100,27 @@
       <p class="section-note">
         The full working roadmap is tracked in <a href="ROADMAP.md">ROADMAP.md</a>.
       </p>
+    </section>
+
+    <section class="grid-section" id="docs">
+      <div class="section-heading">
+        <p class="eyebrow">Implementation docs</p>
+        <h2>First build layer</h2>
+      </div>
+      <div class="doc-grid">
+        <a href="docs/manifest-v0.md">
+          <h3>Manifest v0</h3>
+          <p>Line-oriented schema for local `.slm` verification, metadata routes, evidence checksums, chunk metadata, and signature fields.</p>
+        </a>
+        <a href="docs/verifier-mvp.md">
+          <h3>Rust verifier</h3>
+          <p>Local verifier plan for manifest parsing, byte-count drift, checksum drift, TinyRustLM compatibility, and import receipts.</p>
+        </a>
+        <a href="docs/catalog-boundary.md">
+          <h3>Catalog boundary</h3>
+          <p>Metadata-only catalog rules, consent gates, legal posture, takedown routes, and ecosystem tradeoff staging.</p>
+        </a>
+      </div>
     </section>
 
     <section class="grid-section" id="research">

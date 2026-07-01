@@ -58,5 +58,6 @@ Model creation and import should follow the TinyRustLM evidence chain: safetenso
 
 ## Examples
 
+- [catalog/models.v0.json](catalog/models.v0.json)
 - [examples/minimodel.manifest.v0.example](examples/minimodel.manifest.v0.example)
 - [examples/catalog-entry.v0.json](examples/catalog-entry.v0.json)

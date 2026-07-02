@@ -1,10 +1,16 @@
 profile: minimodel.intake-outcome-ledger.v1
-updated_utc: 2026-07-01T03:10:00Z
+updated_utc: 2026-07-02T06:15:00Z
 site: MiniModel.org
 latest_scan:
   content_non_placeholder_files: 0
   improvement_non_placeholder_files: 0
   outcome: placeholder_only
+latest_implementation_note:
+  id: minimodel_local_verifier_mvp_2026_07_02
+  disposition: implemented
+  source_impact: Added `minimodel-core` and `minimodel` Rust verifier crates plus a real q8 manifest example without adding model bytes.
+  memory_impact: Updated workspace and short-term memory routes to the implemented verifier.
+  active_intake_after: placeholder_only
 records:
   - id: initial_file_handoff_setup_2026_07_01
     disposition: setup_complete

@@ -1,8 +1,10 @@
-profile: minimodel.short-term-memory.v2
-updated_utc: 2026-07-01T16:20:00Z
+profile: minimodel.short-term-memory.v3
+updated_utc: 2026-07-02T06:15:00Z
 current_state:
-  - MiniModel.org is a planned Rust-first peer-to-peer tiny model package exchange and catalog.
-  - Source options are user-owned local files/lists, user-triggered Hugging Face metadata discovery, and future consent-based P2P transfer.
+  - MiniModel.org is a Rust-first metadata, verifier, and future peer-to-peer tiny model package exchange workspace.
+  - Source options are user-owned local files/lists, user-triggered Hugging Face metadata discovery/conversion handoff, and future consent-based P2P transfer.
+  - First local verifier implementation exists in `crates/minimodel-core` and `crates/minimodel`: manifest parse, boundary rejection, local artifact byte/SHA256 checks, TinyRustLM `.slm` validation, chunk/Merkle verification, and import receipt writing.
+  - Real non-hosted q8 fixture metadata lives at `examples/tiny-test-model-q8.minimodel.manifest.v0`; the `.slm` artifact remains outside MiniModel.org.
   - It references MiRust.com as a one-way talisman source.
   - File Handoff setup is initialized with placeholder-only active intake.
   - Public boundary remains no hosted model weights and no server-side inference.

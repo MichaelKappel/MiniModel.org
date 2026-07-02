@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "crates/minimodel",
+    "crates/minimodel-core",
+]
+resolver = "2"
+

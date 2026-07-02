@@ -1,0 +1,9 @@
+[package]
+name = "minimodel"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+minimodel-core = { path = "../minimodel-core" }
+

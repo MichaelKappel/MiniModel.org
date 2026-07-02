@@ -1,6 +1,16 @@
 # MiniModel Rust Verifier MVP
 
-The first implementation target is a local Rust verifier. It should prove manifest and `.slm` bytes before any peer networking is attempted.
+The first implementation target is a local Rust verifier. It proves manifest and `.slm` bytes before any peer networking is attempted.
+
+## Current Implementation
+
+MiniModel.org now contains the first standard-library Rust verifier workspace:
+
+- `crates/minimodel-core`: parser, boundary checks, SHA256, chunk/Merkle verification, TinyRustLM `.slm` structural validation, and receipt writing.
+- `crates/minimodel`: CLI wrapper for local developer use.
+- `examples/tiny-test-model-q8.minimodel.manifest.v0`: checksum-bound manifest for the TinyRustLM q8 fixture.
+
+The verifier does not download model bytes. `verify-artifact` only opens the artifact path supplied by the user.
 
 ## Crates And Binaries
 
@@ -44,7 +54,7 @@ The local receipt is also line-oriented:
 | `slm.model_shape` | Verified TinyRustLM shape. |
 | `slm.quantization` | Verified quantization. |
 | `evidence.status` | Summary of available evidence sidecars. |
-| `import.next_gate` | `user-selected-slmcomposer-local-file-open`. |
+| `import.next_gate` | `user-selected-tinyrustlm-local-file-open`. |
 
 Receipts must not contain model bytes, public model-byte URLs, or claims that MiniModel.org endorses the artifact.
 
@@ -102,6 +112,18 @@ The MVP test suite should include one passing fixture and at least these failure
 ## TinyRustLM Handoff
 
 The verifier does not push files into TinyRustLM. It produces a receipt and tells the user which local `.slm` file passed. TinyRustLM continues to load only files selected through the browser file picker, and Rust/WASM remains the final `.slm` validation authority.
+
+## Developer Commands
+
+From the MiniModel.org workspace:
+
+```powershell
+cargo run -p minimodel -- verify-manifest examples\tiny-test-model-q8.minimodel.manifest.v0
+cargo run -p minimodel -- verify-artifact examples\tiny-test-model-q8.minimodel.manifest.v0 ..\SLMComposer.com\tinyrustlm\models\tiny-test-model-q8.slm
+cargo run -p minimodel -- write-import-receipt examples\tiny-test-model-q8.minimodel.manifest.v0 ..\SLMComposer.com\tinyrustlm\models\tiny-test-model-q8.slm .\tiny-test-model-q8.minimodel-receipt
+```
+
+The receipt stores the artifact basename only. It must not store private absolute paths, public model-byte URLs, or endorsement claims.
 
 ## Later Networking Boundary
 

@@ -19,9 +19,11 @@ The MVP manifest is a UTF-8 text file with one `key=value` field per line.
 - Keys are lowercase ASCII with dot separators.
 - Values are trimmed ASCII unless a later field explicitly allows UTF-8.
 - The signed canonical form sorts all non-signature keys lexicographically, uses LF endings, and ends with one trailing LF.
-- SHA256 values use `sha256:` plus 64 uppercase hexadecimal characters.
+- SHA256 values use `sha256:` plus 64 hexadecimal characters. The verifier normalizes hex case.
 
 The line-oriented format matches the current TinyRustLM evidence style and keeps the first Rust verifier independent of a JSON dependency.
+
+The first real fixture manifest is [../examples/tiny-test-model-q8.minimodel.manifest.v0](../examples/tiny-test-model-q8.minimodel.manifest.v0). It binds the TinyRustLM q8 fixture to its artifact SHA256, `.slm` header checksum, tokenizer checksum, tensor-layout checksum, peer-offer route, chunk-list SHA256, and Merkle root without hosting the model bytes.
 
 ## Required Fields
 

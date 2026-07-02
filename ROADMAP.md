@@ -43,7 +43,7 @@ The first concrete schema draft is [docs/manifest-v0.md](docs/manifest-v0.md). I
 
 ## Verifier MVP
 
-The first implementation target is a local Rust verifier, not a network. It parses the manifest, rejects server-byte and server-execution claims, verifies a user-supplied local `.slm` artifact, checks TinyRustLM compatibility fields, and writes a local import receipt.
+The first implementation target is a local Rust verifier, not a network. The initial `minimodel-core` and `minimodel` crates now parse manifests, reject server-byte and server-execution claims, verify a user-supplied local `.slm` artifact, check TinyRustLM compatibility fields, validate chunk/Merkle metadata when present, and write a local import receipt.
 
 Verifier planning lives in [docs/verifier-mvp.md](docs/verifier-mvp.md).
 
@@ -74,6 +74,7 @@ Model creation and import should follow the TinyRustLM evidence chain: safetenso
 ## Examples
 
 - [catalog/models.v0.json](catalog/models.v0.json)
+- [examples/tiny-test-model-q8.minimodel.manifest.v0](examples/tiny-test-model-q8.minimodel.manifest.v0)
 - [examples/minimodel.manifest.v0.example](examples/minimodel.manifest.v0.example)
 - [examples/catalog-entry.v0.json](examples/catalog-entry.v0.json)
 - [examples/share-metadata.v0.json](examples/share-metadata.v0.json)

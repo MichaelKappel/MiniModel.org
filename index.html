@@ -81,7 +81,7 @@
         <li>
           <span class="step">02</span>
           <h3>Verifier</h3>
-          <p>Ship a Rust CLI that verifies package bytes, manifest fields, evidence routes, drift cases, and TinyRustLM import readiness before a user trusts a file.</p>
+          <p>Use the first Rust CLI to verify package bytes, manifest fields, evidence routes, chunk/Merkle data, drift cases, and TinyRustLM import readiness before a user trusts a file.</p>
         </li>
         <li>
           <span class="step">03</span>
@@ -142,7 +142,11 @@
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>Rust verifier</h3>
-          <p>Local verifier plan for manifest parsing, byte-count drift, checksum drift, TinyRustLM compatibility, and import receipts.</p>
+          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, TinyRustLM compatibility, and import receipts.</p>
+        </a>
+        <a href="examples/tiny-test-model-q8.minimodel.manifest.v0">
+          <h3>Fixture manifest</h3>
+          <p>Real q8 fixture manifest binding artifact SHA-256, `.slm` checksum, tokenizer checksum, tensor-layout checksum, peer-offer route, chunk-list SHA-256, and Merkle root.</p>
         </a>
         <a href="docs/catalog-boundary.md">
           <h3>Catalog boundary</h3>

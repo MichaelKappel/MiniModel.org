@@ -73,7 +73,7 @@ Receipts must not contain model bytes, public model-byte URLs, or claims that Mi
 6. Receipt:
    - write a local receipt beside the artifact or to a user-selected path
    - include manifest checksum and artifact checksum
-   - set the next gate to SLMComposer local file open
+   - set the next gate to TinyRustLM local file open
 
 ## Drift Tests
 
@@ -99,9 +99,9 @@ The MVP test suite should include one passing fixture and at least these failure
 - Merkle root drift
 - signature payload drift when signatures are enabled
 
-## SLMComposer Handoff
+## TinyRustLM Handoff
 
-The verifier does not push files into SLMComposer. It produces a receipt and tells the user which local `.slm` file passed. SLMComposer continues to load only files selected through the browser file picker, and Rust/WASM remains the final `.slm` validation authority.
+The verifier does not push files into TinyRustLM. It produces a receipt and tells the user which local `.slm` file passed. TinyRustLM continues to load only files selected through the browser file picker, and Rust/WASM remains the final `.slm` validation authority.
 
 ## Later Networking Boundary
 

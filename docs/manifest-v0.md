@@ -6,7 +6,7 @@ This draft defines the first implementable `minimodel.manifest` shape. It is des
 
 - MiniModel.org servers may publish this schema, example manifests, signed catalog metadata, public key routes, and contact routes.
 - MiniModel.org servers must not host user model bytes or proxy model-byte downloads.
-- SLMComposer remains browser-local. Users select local `.slm` files; Rust/WASM validates the bytes.
+- TinyRustLM remains browser-local. Users select local `.slm` files; Rust/WASM validates the bytes.
 - The first verifier accepts a manifest file plus a user-provided local artifact path.
 
 ## Format
@@ -88,6 +88,8 @@ Hugging Face `/resolve/`, Xet/CAS, Inference Providers, Inference Endpoints, and
 
 TinyRustLM may save a `minimodel.huggingface_conversion_request.v0` JSON handoff when a Hub result has no admitted `.slm` metadata yet. That request is not a manifest and not an execution grant. It is a local planning artifact for a converter or future peer workflow: review the source, convert once, validate the produced `.slm`, publish checksum-bound metadata, and only then make peer availability visible.
 
+After a user imports a verified local `.slm`, TinyRustLM may save a `minimodel.local_slm_share_metadata.v0` JSON bundle. That bundle contains a catalog-entry candidate and a `minimodel.peer_offer.v0` metadata block with real artifact SHA-256, chunk SHA-256 entries, chunk-list SHA-256, and a Merkle root. It must keep `peer_transfer_implemented=false` and `network_transfer_available=false` until a real consent-based peer app exists.
+
 ## Chunk Fields
 
 Chunk fields are reserved for the later peer-transfer phase. The local-only verifier must still parse and validate them when present.
@@ -140,4 +142,4 @@ The first verifier must reject manifests that:
 8. Verify evidence sidecar checksums and route echoes when available.
 9. Write a local import receipt.
 
-The manifest alone never authorizes SLMComposer to fetch bytes. The user must provide the local artifact.
+The manifest alone never authorizes TinyRustLM to fetch bytes. The user must provide the local artifact.

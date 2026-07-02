@@ -9,10 +9,10 @@ Project servers never run user models and never serve user model bytes. They may
 ## Architecture
 
 1. `minimodel-core`: Rust verification library for manifests, checksums, chunks, identities, and import receipts.
-2. `minimodel` CLI: local verifier for `.slm` artifacts, license/model-card fields, evidence routes, and SLMComposer import readiness.
+2. `minimodel` CLI: local verifier for `.slm` artifacts, license/model-card fields, evidence routes, and TinyRustLM import readiness.
 3. Static catalog: metadata-only listings and peer hints, with no model weights.
 4. Peer app: later Rust desktop app for consent-based discovery, resumable transfer, NAT traversal, local quotas, and checksum validation.
-5. SLMComposer handoff: verified local `.slm` files open in the browser-local Rust/WASM runtime.
+5. TinyRustLM handoff: verified local `.slm` files open in the browser-local Rust/WASM runtime.
 
 ## Source Options
 
@@ -22,9 +22,9 @@ MiniModel.org should support three source lanes, all ending in local verificatio
 - Hugging Face discovery: users may search or inspect external Hugging Face metadata, model cards, file hints, and source revisions, but project servers do not proxy `/resolve/` downloads and do not use project-owned tokens.
 - MiniModel P2P: future consenting peers exchange chunks that are verified by checksum and Merkle data before import.
 
-All source lanes must converge on a user-controlled local `.slm` artifact, a local verifier result or receipt, and a browser file-picker import into SLMComposer. Hugging Face Inference Providers, Inference Endpoints, and executable Spaces are remote execution products, not MiniModel or SLMComposer run paths.
+All source lanes must converge on a user-controlled local `.slm` artifact, a local verifier result or receipt, and a browser file-picker import into TinyRustLM. Hugging Face Inference Providers, Inference Endpoints, and executable Spaces are remote execution products, not MiniModel or TinyRustLM run paths.
 
-The Hugging Face lane should produce a local conversion request when no admitted `.slm` metadata exists yet. That request identifies the upstream model id, preferred `.slm` quantization targets, required review/conversion/eval gates, and the rule that project servers do not serve the resulting bytes. Once one user or converter completes the chain, MiniModel metadata can advertise the converted artifact by checksum and later peer hints so other users can obtain the admitted `.slm` through consent-based P2P instead of repeating a large source download and conversion.
+The Hugging Face lane should produce a local conversion request when no admitted `.slm` metadata exists yet. That request identifies the upstream model id, preferred `.slm` quantization targets, required review/conversion/eval gates, and the rule that project servers do not serve the resulting bytes. Once one user or converter completes the chain, TinyRustLM can export a `minimodel.local_slm_share_metadata.v0` bundle with artifact SHA-256, chunk hashes, and a Merkle root. MiniModel metadata can then advertise the converted artifact by checksum and later peer hints so other users can obtain the admitted `.slm` through consent-based P2P instead of repeating a large source download and conversion.
 
 ## Manifest MVP
 
@@ -65,11 +65,13 @@ Model creation and import should follow the TinyRustLM evidence chain: safetenso
 2. Build the Rust verifier and checksum drift tests.
 3. Write local import receipts for verified `.slm` files.
 4. Publish metadata-only static catalog prototypes.
-5. Prototype peer transfer with chunk/Merkle verification.
-6. Build a desktop peer app with consent, local cache controls, and SLMComposer handoff.
+5. Export local share-metadata bundles from verified `.slm` imports, including chunk hashes and Merkle roots.
+6. Prototype peer transfer with chunk/Merkle verification.
+7. Build a desktop peer app with consent, local cache controls, and TinyRustLM handoff.
 
 ## Examples
 
 - [catalog/models.v0.json](catalog/models.v0.json)
 - [examples/minimodel.manifest.v0.example](examples/minimodel.manifest.v0.example)
 - [examples/catalog-entry.v0.json](examples/catalog-entry.v0.json)
+- [examples/share-metadata.v0.json](examples/share-metadata.v0.json)

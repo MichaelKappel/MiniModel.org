@@ -66,6 +66,17 @@ Hugging Face search results are source records, not runnable TinyRustLM model en
 
 Until that chain exists for a model, the honest status is `conversion required`.
 
+## Local Share Metadata Bundle
+
+TinyRustLM may export `minimodel.local_slm_share_metadata.v0` after a user imports a verified local `.slm`. This bundle is the first practical bridge from "converted once" to later P2P availability:
+
+- `catalog_entry` records the artifact byte count, artifact SHA-256, local filename hint, source identity, optional `source_huggingface_model_id`, and no-server-byte flags.
+- `peer_offer` records chunk size, chunk count, per-chunk SHA-256 values, chunk-list SHA-256, and a Merkle root.
+- `boundary.peer_transfer_implemented` must be `false` until a real peer transfer implementation exists.
+- `peer_offer.transfer.network_transfer_available` must be `false` until a consenting peer app can transfer and reverify chunks.
+
+The bundle may be submitted for review or used by future peer software, but it is not an endorsement and not an execution grant. TinyRustLM still runs only a user-selected local `.slm` after Rust/WASM validation.
+
 ## TinyRustLM UI Mapping
 
 TinyRustLM should expose the same source lanes in plain language:

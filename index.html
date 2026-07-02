@@ -39,7 +39,7 @@
         <h1>MiniModel.org</h1>
         <p class="lede">
           A planned source catalog for checksum-bound tiny model packages that users bring locally,
-          discover externally, transfer by consent, verify, and run locally.
+          discover externally, describe with share metadata, transfer by consent, verify, and run locally.
           TinyRustLM exposes the same choices as Local Files, Hugging Face, and P2P Exchange.
         </p>
         <div class="actions" aria-label="Primary links">
@@ -63,7 +63,7 @@
         <li>No server-side model execution.</li>
         <li>No hosted runnable model weights from MiniModel.org.</li>
         <li>Every package is identified by checksums and provenance.</li>
-        <li>Users choose, obtain, verify, and run models locally.</li>
+        <li>Users choose, obtain, verify, share metadata for, and run models locally.</li>
       </ul>
     </section>
 
@@ -90,11 +90,16 @@
         </li>
         <li>
           <span class="step">04</span>
+          <h3>Share Metadata</h3>
+          <p>Export a local `minimodel.local_slm_share_metadata.v0` bundle from verified `.slm` imports with artifact SHA256, chunk hashes, chunk-list SHA256, Merkle root, and disabled live-transfer flags.</p>
+        </li>
+        <li>
+          <span class="step">05</span>
           <h3>Peer App</h3>
           <p>Build a Rust desktop peer app for discovery, chunk transfer, resume, checksum validation, and local handoff to TinyRustLM.</p>
         </li>
         <li>
-          <span class="step">05</span>
+          <span class="step">06</span>
           <h3>Browser Handoff</h3>
           <p>Let verified local `.slm` files open in TinyRustLM for browser-local Rust/WASM loading and generation.</p>
         </li>
@@ -116,11 +121,11 @@
         </a>
         <a href="docs/catalog-boundary.md">
           <h3>Hugging Face</h3>
-          <p>User-triggered external discovery can route model cards, API metadata, file hints, source revisions, and endpoint context without project-server proxying or inference.</p>
+          <p>User-triggered external discovery can route model cards, API metadata, file hints, source revisions, endpoint context, and conversion-request handoffs without project-server proxying or inference.</p>
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>P2P</h3>
-          <p>Future peer transfer uses consent, chunk/Merkle verification, local receipts, and TinyRustLM handoff after local `.slm` checks pass.</p>
+          <p>Today TinyRustLM can save checksum-bound share metadata from a verified local `.slm`; future peer transfer uses that shape with consent, chunk/Merkle verification, local receipts, and TinyRustLM handoff.</p>
         </a>
       </div>
     </section>
@@ -146,6 +151,10 @@
         <a href="catalog/models.v0.json">
           <h3>Catalog endpoint</h3>
           <p>Static metadata entries for local `.slm` imports, checksum verification, and TinyRustLM browser handoff without hosted model bytes.</p>
+        </a>
+        <a href="examples/share-metadata.v0.json">
+          <h3>Share metadata example</h3>
+          <p>Example local bundle for a verified `.slm` with catalog-entry candidate, peer-offer metadata, chunk hashes, and live transfer explicitly disabled.</p>
         </a>
       </div>
     </section>

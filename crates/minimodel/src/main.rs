@@ -133,6 +133,36 @@ fn run() -> Result<(), String> {
             println!("artifact.sha256: {}", report.artifact_sha256);
             println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
         }
+        "prepare-peer-share" => {
+            let artifact = one_arg(&mut args, "artifact.slm")?;
+            let output_dir = one_arg(&mut args, "output-dir")?;
+            let model_id = one_arg(&mut args, "model-id")?;
+            let optional_first = args.next();
+            let optional_second = args.next();
+            no_more_args(&mut args)?;
+            let (source_huggingface_model_id, known_peer_base_url) =
+                split_catalog_entry_optional_args(optional_first, optional_second);
+            let report = minimodel_core::prepare_peer_share_path(
+                Path::new(&artifact),
+                Path::new(&output_dir),
+                &model_id,
+                source_huggingface_model_id.as_deref(),
+                known_peer_base_url.as_deref(),
+            )?;
+            println!("MiniModel peer share prepared: {output_dir}");
+            println!("model.id: {}", report.model_id);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("manifest: {}", report.manifest_path);
+            println!("peer_offer: {}", report.peer_offer_path);
+            println!("peer_pieces: {}", report.piece_dir_path);
+            println!("piece_count: {}", report.piece_count);
+            println!("catalog_entry: {}", report.catalog_entry_path);
+            println!("peer_source_count: {}", report.peer_source_count);
+            println!(
+                "serve_hint: minimodel serve-peer-pieces \"{}\" \"{}\" 127.0.0.1:8123",
+                report.manifest_path, report.piece_dir_path
+            );
+        }
         "serve-peer-pieces" => {
             let manifest = one_arg(&mut args, "manifest")?;
             let piece_dir = one_arg(&mut args, "piece-dir")?;
@@ -210,6 +240,9 @@ fn print_usage() {
     eprintln!("  minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>");
     eprintln!("  minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>");
     eprintln!("  minimodel import-peer-request <request-json> <manifest> <output-dir>");
+    eprintln!(
+        "  minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]"
+    );
     eprintln!("  minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>");
     eprintln!(
         "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]"

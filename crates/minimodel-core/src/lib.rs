@@ -15,6 +15,10 @@ pub use slm::SlmReport;
 
 use sha256::{bytes_to_hex, normalize_sha256, parse_sha256_hex, sha256, sha256_prefixed};
 
+const MINIMODEL_MANIFEST_SCHEMA_CHECKSUM: &str =
+    "sha256:05d9dbd4f31ba6affeb9b4b70672636c296f9d584056f7add9ccc0fc02153cf4";
+const DEFAULT_PEER_CHUNK_SIZE: usize = 1_048_576;
+
 #[derive(Debug, Clone)]
 pub struct ArtifactVerification {
     pub manifest_sha256: String,
@@ -72,6 +76,18 @@ pub struct PeerImportRequestExecution {
     pub manifest_sha256: String,
     pub artifact_sha256: String,
     pub merkle_root_sha256: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerSharePreparation {
+    pub manifest_path: String,
+    pub peer_offer_path: String,
+    pub piece_dir_path: String,
+    pub catalog_entry_path: String,
+    pub model_id: String,
+    pub artifact_sha256: String,
+    pub piece_count: usize,
+    pub peer_source_count: usize,
 }
 
 pub fn verify_manifest_path(path: &Path) -> Result<Manifest, String> {
@@ -378,6 +394,75 @@ pub fn write_catalog_entry_path(
         model_id: bundle.manifest.require("model.id")?.to_string(),
         artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
         peer_offer_sha256,
+    })
+}
+
+pub fn prepare_peer_share_path(
+    artifact_path: &Path,
+    output_dir: &Path,
+    model_id: &str,
+    source_huggingface_model_id: Option<&str>,
+    known_peer_base_url: Option<&str>,
+) -> Result<PeerSharePreparation, String> {
+    let model_id = validate_minimodel_model_id(model_id)?;
+    let source_huggingface_model_id = match source_huggingface_model_id {
+        Some(value) if !value.trim().is_empty() => Some(validate_huggingface_model_id(value)?),
+        _ => None,
+    };
+    let known_peer_base_url = match known_peer_base_url {
+        Some(value) if !value.trim().is_empty() => Some(normalize_known_peer_base_url(value)?),
+        _ => None,
+    };
+    let artifact_file_name = artifact_file_name_for_share(artifact_path)?;
+    let stem = artifact_stem_for_share(&artifact_file_name)?;
+    let artifact_bytes =
+        fs::read(artifact_path).map_err(|error| format!("failed to read artifact: {error}"))?;
+    let slm = slm::validate_slm_bytes(&artifact_bytes)?;
+    let chunks = chunk_proofs(&artifact_bytes, DEFAULT_PEER_CHUNK_SIZE)?;
+    let peer_offer_path = output_dir.join(format!("{stem}.minimodel-peer-offer"));
+    let peer_offer_route = file_name_for_route(&peer_offer_path, "peer offer")?;
+    let peer_offer_text = peer_offer_text(&artifact_bytes, &slm, &artifact_file_name, &chunks)?;
+    let peer_offer_sha256 = sha256_prefixed(peer_offer_text.as_bytes());
+    let manifest_path = output_dir.join(format!("{stem}.minimodel.manifest.v0"));
+    let manifest_text = minimodel_manifest_text(
+        &model_id,
+        &artifact_bytes,
+        &slm,
+        &chunks,
+        &peer_offer_route,
+        &peer_offer_sha256,
+        source_huggingface_model_id.as_deref(),
+    )?;
+    let manifest = Manifest::parse(&manifest_text)?;
+    manifest.validate()?;
+    verify_artifact_bytes(&manifest, manifest_text.as_bytes(), &artifact_bytes)?;
+
+    create_empty_dir(output_dir)?;
+    fs::write(&manifest_path, manifest_text)
+        .map_err(|error| format!("failed to write MiniModel manifest: {error}"))?;
+    fs::write(&peer_offer_path, peer_offer_text)
+        .map_err(|error| format!("failed to write peer offer proof: {error}"))?;
+
+    let piece_dir = output_dir.join(format!("{stem}.peer-pieces"));
+    let piece_report = export_peer_pieces_path(&manifest_path, artifact_path, &piece_dir)?;
+    let catalog_entry_path = output_dir.join(format!("{stem}.catalog-entry.v0.json"));
+    let catalog_report = write_catalog_entry_path(
+        &manifest_path,
+        &peer_offer_path,
+        &catalog_entry_path,
+        source_huggingface_model_id.as_deref(),
+        known_peer_base_url.as_deref(),
+    )?;
+
+    Ok(PeerSharePreparation {
+        manifest_path: manifest_path.display().to_string(),
+        peer_offer_path: peer_offer_path.display().to_string(),
+        piece_dir_path: piece_dir.display().to_string(),
+        catalog_entry_path: catalog_entry_path.display().to_string(),
+        model_id,
+        artifact_sha256: catalog_report.artifact_sha256,
+        piece_count: piece_report.piece_count,
+        peer_source_count: usize::from(known_peer_base_url.is_some()),
     })
 }
 
@@ -921,6 +1006,20 @@ fn validate_huggingface_model_id(value: &str) -> Result<String, String> {
     Ok(text.to_string())
 }
 
+fn validate_minimodel_model_id(value: &str) -> Result<String, String> {
+    let text = value.trim();
+    if text.is_empty()
+        || !text.bytes().all(|byte| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || matches!(byte, b'-' | b'_' | b'.' | b'/')
+        })
+    {
+        return Err("model.id must be route-safe lowercase ASCII".to_string());
+    }
+    Ok(text.to_string())
+}
+
 fn normalize_known_peer_base_url(value: &str) -> Result<String, String> {
     let url = HttpUrl::parse(value)?;
     reject_project_server_peer_host(&url.host)?;
@@ -929,6 +1028,30 @@ fn normalize_known_peer_base_url(value: &str) -> Result<String, String> {
         text.push('/');
     }
     Ok(text)
+}
+
+fn artifact_file_name_for_share(path: &Path) -> Result<String, String> {
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "artifact path must include a file name".to_string())?;
+    require_safe_piece_file_name(file_name)?;
+    if !file_name.ends_with(".slm") {
+        return Err("artifact file name must end with .slm".to_string());
+    }
+    Ok(file_name.to_string())
+}
+
+fn artifact_stem_for_share(file_name: &str) -> Result<String, String> {
+    let stem = file_name
+        .strip_suffix(".slm")
+        .ok_or_else(|| "artifact file name must end with .slm".to_string())?;
+    if stem.is_empty() {
+        return Err("artifact file name stem must not be empty".to_string());
+    }
+    require_safe_piece_file_name(stem)?;
+    Ok(stem.to_string())
 }
 
 fn known_peer_sources_json(peer_base_url: &str) -> String {
@@ -941,6 +1064,203 @@ fn known_peer_sources_json(peer_base_url: &str) -> String {
         json_bool_field("project_server_runs_model_bytes", false),
     ];
     format!("[{{{}}}]", fields.join(", "))
+}
+
+fn minimodel_manifest_text(
+    model_id: &str,
+    artifact_bytes: &[u8],
+    slm: &SlmReport,
+    chunks: &[ChunkProof],
+    peer_offer_route: &str,
+    peer_offer_sha256: &str,
+    source_huggingface_model_id: Option<&str>,
+) -> Result<String, String> {
+    let source_kind = if source_huggingface_model_id.is_some() {
+        "safetensors"
+    } else {
+        "slm-native"
+    };
+    let source_id = source_huggingface_model_id.unwrap_or(model_id);
+    let source_discovery_kind = if source_huggingface_model_id.is_some() {
+        "huggingface-hub"
+    } else {
+        "local-file"
+    };
+    let chunk_list_sha256 = sha256_prefixed(chunk_list_text(chunks).as_bytes());
+    let mut text = String::new();
+    push_line(&mut text, "manifest.version", "0");
+    push_line(&mut text, "manifest.kind", "minimodel.manifest");
+    push_line(&mut text, "manifest.schema_id", "minimodel.manifest.v0");
+    push_line(
+        &mut text,
+        "manifest.schema_checksum",
+        MINIMODEL_MANIFEST_SCHEMA_CHECKSUM,
+    );
+    push_line(&mut text, "manifest.created_utc", &utc_now()?);
+    push_line(&mut text, "model.id", model_id);
+    push_line(&mut text, "model.version", "0.1.0-local");
+    push_line(&mut text, "publisher.id", "local-user");
+    push_line(&mut text, "publisher.key_id", "local-user-unsigned");
+    push_line(&mut text, "model_card.route", "none");
+    push_line(&mut text, "license.route", "none");
+    push_line(&mut text, "artifact.kind", "slm");
+    push_line(
+        &mut text,
+        "artifact.byte_count",
+        &artifact_bytes.len().to_string(),
+    );
+    push_line(
+        &mut text,
+        "artifact.sha256",
+        &sha256_prefixed(artifact_bytes),
+    );
+    push_line(
+        &mut text,
+        "artifact.acquisition",
+        if source_huggingface_model_id.is_some() {
+            "user-external-download"
+        } else {
+            "user-local-file"
+        },
+    );
+    push_line(&mut text, "artifact.project_server_url", "none");
+    push_line(
+        &mut text,
+        "slm.format_version",
+        &slm.format_version.to_string(),
+    );
+    push_line(&mut text, "slm.checksum", &slm.checksum);
+    push_line(&mut text, "slm.model_shape", &slm.model_shape);
+    push_line(&mut text, "slm.quantization", &slm.quantization);
+    push_line(&mut text, "slm.tokenizer_checksum", &slm.tokenizer_checksum);
+    push_line(
+        &mut text,
+        "slm.tensor_layout_checksum",
+        &slm.tensor_layout_checksum,
+    );
+    push_line(&mut text, "runtime.compatibility", "tinyrustlm");
+    push_line(&mut text, "runtime.minimum_version", "0.1.0");
+    push_line(&mut text, "source.kind", source_kind);
+    push_line(&mut text, "source.id", source_id);
+    push_line(&mut text, "source.revision", "local-conversion");
+    push_line(&mut text, "source.discovery.kind", source_discovery_kind);
+    push_line(&mut text, "source.discovery.route", "none");
+    push_line(&mut text, "source.discovery.revision", "unknown");
+    push_line(&mut text, "source.discovery.user_token_required", "false");
+    if let Some(source_id) = source_huggingface_model_id {
+        push_line(&mut text, "source.huggingface_model_id", source_id);
+    }
+    push_line(&mut text, "evidence.admission.status", "passed");
+    push_line(&mut text, "evidence.admission.route", peer_offer_route);
+    push_line(&mut text, "evidence.admission.sha256", peer_offer_sha256);
+    push_line(&mut text, "chunks.mode", "fixed-size-merkle-v0");
+    push_line(
+        &mut text,
+        "chunks.size",
+        &DEFAULT_PEER_CHUNK_SIZE.to_string(),
+    );
+    push_line(&mut text, "chunks.count", &chunks.len().to_string());
+    push_line(
+        &mut text,
+        "chunks.merkle_root_sha256",
+        &merkle_root_sha256(chunks)?,
+    );
+    push_line(&mut text, "chunks.list.route", peer_offer_route);
+    push_line(&mut text, "chunks.list.sha256", &chunk_list_sha256);
+    for (index, chunk) in chunks.iter().enumerate() {
+        let prefix = format!("chunk.{index}");
+        push_line(
+            &mut text,
+            &format!("{prefix}.offset"),
+            &chunk.offset.to_string(),
+        );
+        push_line(
+            &mut text,
+            &format!("{prefix}.byte_count"),
+            &chunk.byte_count.to_string(),
+        );
+        push_line(&mut text, &format!("{prefix}.sha256"), &chunk.sha256);
+    }
+    push_line(&mut text, "signature.kind", "unsigned-draft");
+    push_line(&mut text, "signature.key_id", "none");
+    push_line(&mut text, "signature.public_key_route", "none");
+    push_line(&mut text, "signature.payload_sha256", "none");
+    push_line(&mut text, "signature.value", "none");
+    Ok(text)
+}
+
+fn peer_offer_text(
+    artifact_bytes: &[u8],
+    slm: &SlmReport,
+    artifact_file_name: &str,
+    chunks: &[ChunkProof],
+) -> Result<String, String> {
+    require_safe_piece_file_name(artifact_file_name)?;
+    let mut text = String::new();
+    push_line(&mut text, "minimodel_peer_offer_version", "0");
+    push_line(&mut text, "offer_kind", "minimodel.peer_offer.v0");
+    push_line(&mut text, "artifact_kind", "slm");
+    push_line(&mut text, "artifact_file_name", artifact_file_name);
+    push_line(
+        &mut text,
+        "artifact_byte_count",
+        &artifact_bytes.len().to_string(),
+    );
+    push_line(
+        &mut text,
+        "artifact_sha256",
+        &sha256_prefixed(artifact_bytes),
+    );
+    push_line(&mut text, "slm_version", &slm.format_version.to_string());
+    push_line(&mut text, "slm_checksum", &slm.checksum);
+    push_line(&mut text, "slm_model_shape", &slm.model_shape);
+    push_line(&mut text, "slm_quantization", &slm.quantization);
+    push_line(&mut text, "slm_tokenizer_checksum", &slm.tokenizer_checksum);
+    push_line(
+        &mut text,
+        "slm_tensor_layout_checksum",
+        &slm.tensor_layout_checksum,
+    );
+    push_line(&mut text, "chunk_algorithm", "sha256-merkle-v0");
+    push_line(
+        &mut text,
+        "chunk_size",
+        &DEFAULT_PEER_CHUNK_SIZE.to_string(),
+    );
+    push_line(&mut text, "chunk_count", &chunks.len().to_string());
+    push_line(
+        &mut text,
+        "chunk_list_sha256",
+        &sha256_prefixed(chunk_list_text(chunks).as_bytes()),
+    );
+    push_line(
+        &mut text,
+        "merkle_root_sha256",
+        &merkle_root_sha256(chunks)?,
+    );
+    push_line(&mut text, "transfer_network_available", "false");
+    push_line(&mut text, "project_server_serves_model_bytes", "false");
+    push_line(&mut text, "project_server_runs_model_bytes", "false");
+    push_line(
+        &mut text,
+        "required_next_gate",
+        "consent-based-peer-transfer-and-rust-reverify-before-import",
+    );
+    for (index, chunk) in chunks.iter().enumerate() {
+        let prefix = format!("chunk.{index}");
+        push_line(
+            &mut text,
+            &format!("{prefix}.offset"),
+            &chunk.offset.to_string(),
+        );
+        push_line(
+            &mut text,
+            &format!("{prefix}.byte_count"),
+            &chunk.byte_count.to_string(),
+        );
+        push_line(&mut text, &format!("{prefix}.sha256"), &chunk.sha256);
+    }
+    Ok(text)
 }
 
 fn json_string_field(key: &str, value: &str) -> String {
@@ -2226,6 +2546,73 @@ mod tests {
         assert!(text.contains("\"consent_status\": \"publisher-declared-consenting-peer\""));
         assert!(text.contains("\"project_server_serves_model_bytes\": false"));
         assert!(!text.contains("artifact_project_server_url\": \"http"));
+    }
+
+    #[test]
+    fn prepares_peer_share_from_local_slm_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer share preparation test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("prepare-peer-share");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let report = prepare_peer_share_path(
+            &artifact_path,
+            &dir,
+            "tinyrustlm/prepared-tiny-test-model-q8",
+            Some("ExampleOrg/Tiny-Q8-Source"),
+            Some("http://127.0.0.1:8123/peer-pieces"),
+        )
+        .unwrap();
+
+        assert_eq!(report.model_id, "tinyrustlm/prepared-tiny-test-model-q8");
+        assert_eq!(report.piece_count, 1);
+        assert_eq!(report.peer_source_count, 1);
+        assert_eq!(
+            report.artifact_sha256,
+            "sha256:6af985853325eaa6d3eaaa8aadd3511da9596eb542fb2d03a9bc9dc1f4377adf"
+        );
+        let manifest_path = Path::new(&report.manifest_path);
+        let peer_offer_path = Path::new(&report.peer_offer_path);
+        let catalog_entry_path = Path::new(&report.catalog_entry_path);
+        let piece_dir_path = Path::new(&report.piece_dir_path);
+        assert!(manifest_path.exists());
+        assert!(peer_offer_path.exists());
+        assert!(catalog_entry_path.exists());
+        assert!(piece_dir_path.join("minimodel.peer_piece_set.v0").exists());
+
+        let manifest = std::fs::read_to_string(manifest_path).unwrap();
+        assert!(manifest.contains("artifact.acquisition=user-external-download"));
+        assert!(manifest.contains("source.kind=safetensors"));
+        assert!(manifest.contains("source.huggingface_model_id=ExampleOrg/Tiny-Q8-Source"));
+        assert!(manifest.contains("chunks.mode=fixed-size-merkle-v0"));
+        verify_artifact_path(manifest_path, &artifact_path).unwrap();
+        inspect_peer_piece_dir_path(manifest_path, piece_dir_path).unwrap();
+
+        let catalog = std::fs::read_to_string(catalog_entry_path).unwrap();
+        assert!(catalog.contains("\"source_huggingface_model_id\": \"ExampleOrg/Tiny-Q8-Source\""));
+        assert!(catalog.contains("\"peer_source_count\": 1"));
+        assert!(catalog.contains("\"peer_base_url\": \"http://127.0.0.1:8123/peer-pieces/\""));
+        assert!(!catalog.contains("artifact_project_server_url\": \"http"));
+    }
+
+    #[test]
+    fn rejects_prepare_peer_share_project_server_peer_before_output() {
+        let dir = unique_dir("prepare-peer-share-project-host");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let error = prepare_peer_share_path(
+            Path::new("missing.slm"),
+            &dir,
+            "tinyrustlm/prepared-tiny-test-model-q8",
+            None,
+            Some("http://MiniModel.org/peer-pieces"),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("project server"));
+        assert!(!dir.exists());
     }
 
     #[test]

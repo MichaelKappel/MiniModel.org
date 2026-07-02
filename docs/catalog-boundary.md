@@ -117,7 +117,7 @@ minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <an
 minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>...
 ```
 
-The announcement path lets a converter hand over a small JSON file instead of a rewritten catalog entry or model bytes. The apply command validates the announcement against the catalog entry and produces the P2P-ready entry used by `write-catalog-snapshot`.
+The announcement path lets a converter hand over a small JSON file instead of a rewritten catalog entry or model bytes. The apply command validates the announcement against the catalog entry and produces the P2P-ready entry used by `write-catalog-snapshot`. TinyRustLM can also apply a local peer-source announcement JSON to a loaded proof-ready `models.v0.json` snapshot for local review and import-request generation; that browser overlay still validates only metadata, never fetches model bytes, and still hands the receiver to Rust `import-peer-request`.
 
 MiniModel can merge generated entries into a metadata-only catalog snapshot with:
 

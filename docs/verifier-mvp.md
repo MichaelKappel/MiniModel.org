@@ -29,6 +29,7 @@ minimodel verify-manifest <manifest>
 minimodel verify-artifact <manifest> <artifact.slm>
 minimodel write-import-receipt <manifest> <artifact.slm> <receipt.minimodel-receipt>
 minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>
+minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>
 minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>
 minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>
 ```
@@ -40,6 +41,8 @@ minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>
 `write-import-receipt` only succeeds after `verify-artifact` passes.
 
 `export-peer-pieces` only succeeds after `verify-artifact` passes. It writes local piece files plus `minimodel.peer_piece_set.v0`, a metadata sidecar that binds the manifest checksum, artifact checksum, chunk count, chunk SHA256 rows, chunk-list SHA256, and Merkle root. The piece files are model bytes and must stay outside project servers.
+
+`serve-peer-pieces` validates an existing peer-piece directory before binding a local HTTP listener. It serves only `minimodel.peer_piece_set.v0` and the exact piece file names declared in that sidecar. It does not publish to MiniModel.org, does not discover peers, and stops when the user stops the process.
 
 `fetch-peer-pieces` is the first live transfer-shaped prototype. It pulls `minimodel.peer_piece_set.v0` plus each listed chunk from a user-provided `http://` peer base URL, rejects project-server hostnames, verifies the piece-set against the manifest, verifies every downloaded piece SHA256 before writing it, and leaves final artifact acceptance to `assemble-peer-pieces`.
 
@@ -92,8 +95,10 @@ Receipts must not contain model bytes, public model-byte URLs, or claims that Mi
 6. Peer-piece export, fetch, and assembly:
    - export fixed-size local piece files from a verified `.slm`
    - write `minimodel.peer_piece_set.v0` beside those local pieces
+   - serve only the declared sidecar and piece files from a user-started local HTTP peer
    - fetch a piece-set and chunk files from a consenting direct HTTP peer endpoint
    - reject MiniModel.org, TinyRustLM.com, SLMComposer.com, MiRust.com, and related project hostnames as model-byte peers
+   - reject arbitrary unlisted files in the peer-piece directory
    - reject modified piece bytes before assembly
    - re-run full artifact verification before the assembled `.slm` is accepted
 7. Receipt:
@@ -138,6 +143,7 @@ cargo run -p minimodel -- verify-manifest examples\tiny-test-model-q8.minimodel.
 cargo run -p minimodel -- verify-artifact examples\tiny-test-model-q8.minimodel.manifest.v0 ..\SLMComposer.com\tinyrustlm\models\tiny-test-model-q8.slm
 cargo run -p minimodel -- write-import-receipt examples\tiny-test-model-q8.minimodel.manifest.v0 ..\SLMComposer.com\tinyrustlm\models\tiny-test-model-q8.slm .\tiny-test-model-q8.minimodel-receipt
 cargo run -p minimodel -- export-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 ..\SLMComposer.com\tinyrustlm\models\tiny-test-model-q8.slm .\peer-pieces\tiny-test-model-q8
+cargo run -p minimodel -- serve-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 .\peer-pieces\tiny-test-model-q8 127.0.0.1:8123
 cargo run -p minimodel -- fetch-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 http://127.0.0.1:8123/ .\peer-pieces-fetched\tiny-test-model-q8
 cargo run -p minimodel -- assemble-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 .\peer-pieces\tiny-test-model-q8 .\tiny-test-model-q8.from-pieces.slm
 ```
@@ -146,4 +152,4 @@ The receipt stores the artifact basename only. It must not store private absolut
 
 ## Later Networking Boundary
 
-Peer transfer can reuse the same manifest, peer-piece, direct-HTTP fetch, and receipt fields, but it must not change the local verification contract. The first `fetch-peer-pieces` command is intentionally narrow: it is for known consenting peers or local test endpoints, not MiniModel.org hosting. A future peer app may add identity exchange, peer discovery, relays, NAT traversal, resumable transfer, and cache policy; MiniModel.org servers still publish only metadata, schemas, public key routes, and takedown/contact routes.
+Peer transfer can reuse the same manifest, peer-piece, direct-HTTP serve/fetch, and receipt fields, but it must not change the local verification contract. The first `serve-peer-pieces` and `fetch-peer-pieces` commands are intentionally narrow: they are for known consenting peers or local test endpoints, not MiniModel.org hosting. A future peer app may add identity exchange, peer discovery, relays, NAT traversal, resumable transfer, and cache policy; MiniModel.org servers still publish only metadata, schemas, public key routes, and takedown/contact routes.

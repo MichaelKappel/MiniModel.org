@@ -84,11 +84,12 @@ The MiniModel verifier can now export local peer pieces after verification:
 
 ```text
 minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>
+minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>
 minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>
 minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>
 ```
 
-This creates, fetches, and consumes a local `minimodel.peer_piece_set.v0` sidecar plus chunk files. `fetch-peer-pieces` is a narrow direct-peer prototype: it downloads the sidecar and listed chunks from a user-provided `http://` peer endpoint, rejects project-server hostnames, and verifies every piece checksum before writing the local output directory. The sidecar proves what a peer transport should carry, and `assemble-peer-pieces` re-runs full Rust artifact verification before writing the accepted `.slm`. The chunk files are model bytes and must not be uploaded to MiniModel.org.
+This creates, serves, fetches, and consumes a local `minimodel.peer_piece_set.v0` sidecar plus chunk files. `serve-peer-pieces` is sender-side only: it validates the local peer-piece directory and serves only the declared sidecar plus declared piece files from a user-started HTTP listener. `fetch-peer-pieces` is receiver-side: it downloads the sidecar and listed chunks from a user-provided `http://` peer endpoint, rejects project-server hostnames, and verifies every piece checksum before writing the local output directory. The sidecar proves what a peer transport should carry, and `assemble-peer-pieces` re-runs full Rust artifact verification before writing the accepted `.slm`. The chunk files are model bytes and must not be uploaded to MiniModel.org.
 
 The bundle may be submitted for review or used by future peer software, but it is not an endorsement and not an execution grant. TinyRustLM still runs only a user-selected local `.slm` after Rust/WASM validation.
 
@@ -98,7 +99,7 @@ TinyRustLM should expose the same source lanes in plain language:
 
 - `Your Local Files`: first-class runnable path through the browser file picker.
 - `Hugging Face`: user-triggered metadata discovery, model-card review, source revision context, API endpoint awareness, conversion-request JSON, and optional local Rust conversion-script handoff only.
-- `P2P Exchange`: MiniModel metadata, peer-offer proof, direct peer-piece fetch, and local peer-piece export/reassembly for converted `.slm` records now; broader peer discovery and relay flow later, still requiring local receipt and `.slm` verification before browser execution.
+- `P2P Exchange`: MiniModel metadata, peer-offer proof, direct known-peer serve/fetch, and local peer-piece export/reassembly for converted `.slm` records now; broader peer discovery and relay flow later, still requiring local receipt and `.slm` verification before browser execution.
 
 Advanced source details may show catalog URLs, Hugging Face search fields, checksums, manifests, evidence routes, and verifier status, but the first-load Chat mode should keep those behind progressive disclosure.
 
@@ -139,7 +140,7 @@ The first public deliverable is not a hosted model network. It is a stable docum
 
 - manifest schema
 - verifier plan
-- local peer-piece export, direct peer fetch, and reassembly
+- local peer-piece export, direct peer serve/fetch, and reassembly
 - metadata-only catalog rules
 - example manifest
 - example catalog entry

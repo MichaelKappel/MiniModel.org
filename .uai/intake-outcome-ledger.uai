@@ -1,11 +1,17 @@
 profile: minimodel.intake-outcome-ledger.v1
-updated_utc: 2026-07-02T15:23:00Z
+updated_utc: 2026-07-02T16:40:00Z
 site: MiniModel.org
 latest_scan:
   content_non_placeholder_files: 0
   improvement_non_placeholder_files: 0
   outcome: placeholder_only
 latest_implementation_note:
+  id: minimodel_direct_peer_piece_serve_2026_07_02
+  disposition: implemented
+  source_impact: Added sender-side direct HTTP peer-piece serving, validated declared piece files before serving, and added tests that prevent arbitrary unlisted file exposure.
+  memory_impact: Updated workspace and short-term memory routes to the direct known-peer serve/fetch bridge.
+  active_intake_after: placeholder_only
+previous_implementation_note:
   id: minimodel_direct_peer_piece_fetch_2026_07_02
   disposition: implemented
   source_impact: Added direct HTTP peer-piece fetch on top of local peer-piece export/reassembly without adding model bytes to the repo or public servers.

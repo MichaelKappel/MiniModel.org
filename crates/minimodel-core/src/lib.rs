@@ -2,9 +2,10 @@ mod manifest;
 mod sha256;
 mod slm;
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -40,6 +41,15 @@ pub struct PeerPieceFetch {
     pub artifact_sha256: String,
     pub merkle_root_sha256: String,
     pub peer_base_url: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerPieceServe {
+    pub piece_set_path: String,
+    pub piece_count: usize,
+    pub manifest_sha256: String,
+    pub artifact_sha256: String,
+    pub merkle_root_sha256: String,
 }
 
 pub fn verify_manifest_path(path: &Path) -> Result<Manifest, String> {
@@ -271,6 +281,42 @@ pub fn fetch_peer_pieces_http_path(
     }
 }
 
+pub fn inspect_peer_piece_dir_path(
+    manifest_path: &Path,
+    piece_dir: &Path,
+) -> Result<PeerPieceServe, String> {
+    let manifest_bytes =
+        fs::read(manifest_path).map_err(|error| format!("failed to read manifest: {error}"))?;
+    let manifest_text = std::str::from_utf8(&manifest_bytes)
+        .map_err(|_| "manifest must be valid UTF-8".to_string())?;
+    let manifest = Manifest::parse(manifest_text)?;
+    manifest.validate()?;
+    require_fixed_chunk_mode(&manifest)?;
+    let piece_set_path = piece_dir.join("minimodel.peer_piece_set.v0");
+    let piece_set_text = fs::read_to_string(&piece_set_path)
+        .map_err(|error| format!("failed to read peer piece set: {error}"))?;
+    let piece_set = Manifest::parse(&piece_set_text)?;
+    validate_piece_set(&manifest, &manifest_bytes, &piece_set)?;
+    let chunk_count = validate_peer_piece_files(&piece_set, piece_dir)?;
+    Ok(PeerPieceServe {
+        piece_set_path: piece_set_path.display().to_string(),
+        piece_count: chunk_count,
+        manifest_sha256: sha256_prefixed(&manifest_bytes),
+        artifact_sha256: normalize_sha256(manifest.require("artifact.sha256")?)?,
+        merkle_root_sha256: normalize_sha256(manifest.require("chunks.merkle_root_sha256")?)?,
+    })
+}
+
+pub fn serve_peer_pieces_http_path(
+    manifest_path: &Path,
+    piece_dir: &Path,
+    bind_addr: &str,
+) -> Result<PeerPieceServe, String> {
+    let report = inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
+    serve_peer_piece_dir_http_path(piece_dir, bind_addr, None)?;
+    Ok(report)
+}
+
 pub fn import_receipt_text(
     report: &ArtifactVerification,
     artifact_path: &Path,
@@ -484,36 +530,16 @@ fn assemble_peer_pieces_to_temp(
     let mut written = 0u64;
     for index in 0..chunk_count {
         let prefix = format!("piece.{index}");
-        let file_name = piece_set.require(&format!("{prefix}.file"))?;
-        require_safe_piece_file_name(file_name)?;
-        let offset = parse_usize(
-            piece_set.require(&format!("{prefix}.offset"))?,
-            "piece.offset",
-        )?;
-        let byte_count = parse_usize(
-            piece_set.require(&format!("{prefix}.byte_count"))?,
-            "piece.byte_count",
-        )?;
-        if offset as u64 != written {
+        let spec = peer_piece_spec(piece_set, index)?;
+        if spec.offset as u64 != written {
             return Err(format!(
-                "{prefix}.offset mismatch: expected append offset {written}, got {offset}"
+                "{prefix}.offset mismatch: expected append offset {written}, got {}",
+                spec.offset
             ));
         }
-        let bytes = fs::read(piece_dir.join(file_name))
+        let bytes = fs::read(piece_dir.join(&spec.file_name))
             .map_err(|error| format!("failed to read peer piece {index}: {error}"))?;
-        if bytes.len() != byte_count {
-            return Err(format!(
-                "{prefix}.byte_count mismatch: expected {byte_count}, file had {}",
-                bytes.len()
-            ));
-        }
-        let expected_sha = normalize_sha256(piece_set.require(&format!("{prefix}.sha256"))?)?;
-        let actual_sha = sha256_prefixed(&bytes);
-        if expected_sha != actual_sha {
-            return Err(format!(
-                "{prefix}.sha256 mismatch: expected {expected_sha}, file had {actual_sha}"
-            ));
-        }
+        validate_piece_bytes(&prefix, &bytes, spec.byte_count, &spec.sha256, "file had")?;
         use std::io::Write;
         out.write_all(&bytes)
             .map_err(|error| format!("failed to append peer piece {index}: {error}"))?;
@@ -536,31 +562,200 @@ fn fetch_peer_pieces_to_temp(
         .map_err(|error| format!("failed to create temporary peer piece directory: {error}"))?;
     for index in 0..chunk_count {
         let prefix = format!("piece.{index}");
-        let file_name = piece_set.require(&format!("{prefix}.file"))?;
-        require_safe_piece_file_name(file_name)?;
-        let byte_count = parse_usize(
-            piece_set.require(&format!("{prefix}.byte_count"))?,
-            "piece.byte_count",
-        )?;
-        let expected_sha = normalize_sha256(piece_set.require(&format!("{prefix}.sha256"))?)?;
-        let piece_url = base_url.join_file(file_name)?;
-        let bytes = http_get_bytes(&piece_url, byte_count)?;
-        if bytes.len() != byte_count {
-            return Err(format!(
-                "{prefix}.byte_count mismatch: expected {byte_count}, peer sent {}",
-                bytes.len()
-            ));
-        }
-        let actual_sha = sha256_prefixed(&bytes);
-        if actual_sha != expected_sha {
-            return Err(format!(
-                "{prefix}.sha256 mismatch: expected {expected_sha}, peer sent {actual_sha}"
-            ));
-        }
-        fs::write(temp_dir.join(file_name), bytes)
+        let spec = peer_piece_spec(piece_set, index)?;
+        let piece_url = base_url.join_file(&spec.file_name)?;
+        let bytes = http_get_bytes(&piece_url, spec.byte_count)?;
+        validate_piece_bytes(&prefix, &bytes, spec.byte_count, &spec.sha256, "peer sent")?;
+        fs::write(temp_dir.join(&spec.file_name), bytes)
             .map_err(|error| format!("failed to write fetched peer piece {index}: {error}"))?;
     }
     Ok(())
+}
+
+fn validate_peer_piece_files(piece_set: &Manifest, piece_dir: &Path) -> Result<usize, String> {
+    let chunk_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
+    for index in 0..chunk_count {
+        let prefix = format!("piece.{index}");
+        let spec = peer_piece_spec(piece_set, index)?;
+        let bytes = fs::read(piece_dir.join(&spec.file_name))
+            .map_err(|error| format!("failed to read peer piece {index}: {error}"))?;
+        validate_piece_bytes(&prefix, &bytes, spec.byte_count, &spec.sha256, "file had")?;
+    }
+    Ok(chunk_count)
+}
+
+#[derive(Debug, Clone)]
+struct PeerPieceSpec {
+    file_name: String,
+    offset: usize,
+    byte_count: usize,
+    sha256: String,
+}
+
+fn peer_piece_spec(piece_set: &Manifest, index: usize) -> Result<PeerPieceSpec, String> {
+    let prefix = format!("piece.{index}");
+    let file_name = piece_set.require(&format!("{prefix}.file"))?;
+    require_safe_piece_file_name(file_name)?;
+    Ok(PeerPieceSpec {
+        file_name: file_name.to_string(),
+        offset: parse_usize(
+            piece_set.require(&format!("{prefix}.offset"))?,
+            "piece.offset",
+        )?,
+        byte_count: parse_usize(
+            piece_set.require(&format!("{prefix}.byte_count"))?,
+            "piece.byte_count",
+        )?,
+        sha256: normalize_sha256(piece_set.require(&format!("{prefix}.sha256"))?)?,
+    })
+}
+
+fn validate_piece_bytes(
+    prefix: &str,
+    bytes: &[u8],
+    byte_count: usize,
+    expected_sha: &str,
+    observed_label: &str,
+) -> Result<(), String> {
+    if bytes.len() != byte_count {
+        return Err(format!(
+            "{prefix}.byte_count mismatch: expected {byte_count}, {observed_label} {}",
+            bytes.len()
+        ));
+    }
+    let actual_sha = sha256_prefixed(bytes);
+    if actual_sha != expected_sha {
+        return Err(format!(
+            "{prefix}.sha256 mismatch: expected {expected_sha}, {observed_label} {actual_sha}"
+        ));
+    }
+    Ok(())
+}
+
+fn serve_peer_piece_dir_http_path(
+    piece_dir: &Path,
+    bind_addr: &str,
+    request_limit: Option<usize>,
+) -> Result<(), String> {
+    let listener = TcpListener::bind(bind_addr)
+        .map_err(|error| format!("failed to bind peer piece server at {bind_addr}: {error}"))?;
+    serve_peer_piece_dir_http_listener(piece_dir, listener, request_limit)
+}
+
+fn serve_peer_piece_dir_http_listener(
+    piece_dir: &Path,
+    listener: TcpListener,
+    request_limit: Option<usize>,
+) -> Result<(), String> {
+    let piece_set_text = fs::read_to_string(piece_dir.join("minimodel.peer_piece_set.v0"))
+        .map_err(|error| format!("failed to read peer piece set: {error}"))?;
+    let piece_set = Manifest::parse(&piece_set_text)?;
+    let allowed_names = allowed_peer_piece_names(&piece_set)?;
+    let mut served = 0usize;
+    loop {
+        if let Some(limit) = request_limit {
+            if served >= limit {
+                return Ok(());
+            }
+        }
+        let (mut stream, _) = listener
+            .accept()
+            .map_err(|error| format!("failed to accept peer request: {error}"))?;
+        served = served
+            .checked_add(1)
+            .ok_or_else(|| "served request count overflow".to_string())?;
+        if let Err(error) = serve_peer_piece_request(&mut stream, piece_dir, &allowed_names) {
+            let _ = write_http_response(&mut stream, "400 Bad Request", error.as_bytes());
+        }
+    }
+}
+
+fn allowed_peer_piece_names(piece_set: &Manifest) -> Result<BTreeSet<String>, String> {
+    let chunk_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
+    let mut names = BTreeSet::new();
+    names.insert("minimodel.peer_piece_set.v0".to_string());
+    for index in 0..chunk_count {
+        names.insert(peer_piece_spec(piece_set, index)?.file_name);
+    }
+    Ok(names)
+}
+
+fn serve_peer_piece_request(
+    stream: &mut TcpStream,
+    piece_dir: &Path,
+    allowed_names: &BTreeSet<String>,
+) -> Result<(), String> {
+    let request = read_http_request_headers(stream)?;
+    let request_text = std::str::from_utf8(&request)
+        .map_err(|_| "peer request headers must be valid UTF-8".to_string())?;
+    let request_line = request_text
+        .lines()
+        .next()
+        .ok_or_else(|| "peer request missing request line".to_string())?;
+    let mut parts = request_line.split_whitespace();
+    let method = parts
+        .next()
+        .ok_or_else(|| "peer request missing method".to_string())?;
+    let path = parts
+        .next()
+        .ok_or_else(|| "peer request missing path".to_string())?;
+    if method != "GET" {
+        write_http_response(stream, "405 Method Not Allowed", b"method not allowed")?;
+        return Ok(());
+    }
+    if path.contains('?') || path.contains('#') {
+        write_http_response(stream, "400 Bad Request", b"plain file paths only")?;
+        return Ok(());
+    }
+    let file_name = path.trim_start_matches('/');
+    if file_name.is_empty() || require_safe_piece_file_name(file_name).is_err() {
+        write_http_response(stream, "400 Bad Request", b"bad peer piece path")?;
+        return Ok(());
+    }
+    if !allowed_names.contains(file_name) {
+        write_http_response(stream, "404 Not Found", b"not found")?;
+        return Ok(());
+    }
+    let bytes = fs::read(piece_dir.join(file_name))
+        .map_err(|error| format!("failed to read served peer piece: {error}"))?;
+    write_http_response(stream, "200 OK", &bytes)
+}
+
+fn read_http_request_headers(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
+    let mut request = Vec::new();
+    let mut buffer = [0u8; 1024];
+    loop {
+        let read = stream
+            .read(&mut buffer)
+            .map_err(|error| format!("failed to read peer request: {error}"))?;
+        if read == 0 {
+            break;
+        }
+        request.extend_from_slice(&buffer[..read]);
+        if request.windows(4).any(|window| window == b"\r\n\r\n") {
+            return Ok(request);
+        }
+        if request.len() > 16 * 1024 {
+            return Err("peer request headers exceeded 16 KiB".to_string());
+        }
+    }
+    Err("peer request missing HTTP header terminator".to_string())
+}
+
+fn write_http_response(stream: &mut TcpStream, status: &str, body: &[u8]) -> Result<(), String> {
+    let header = format!(
+        "HTTP/1.0 {status}\r\nContent-Length: {}\r\nConnection: close\r\nContent-Type: application/octet-stream\r\n\r\n",
+        body.len()
+    );
+    stream
+        .write_all(header.as_bytes())
+        .map_err(|error| format!("failed to write peer response header: {error}"))?;
+    stream
+        .write_all(body)
+        .map_err(|error| format!("failed to write peer response body: {error}"))?;
+    stream
+        .flush()
+        .map_err(|error| format!("failed to flush peer response: {error}"))
 }
 
 fn create_empty_dir(path: &Path) -> Result<(), String> {
@@ -1107,6 +1302,26 @@ mod tests {
     }
 
     #[test]
+    fn inspect_peer_piece_dir_rejects_payload_drift_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer piece serve drift test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-piece-serve-drift");
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        let piece_dir = dir.join("pieces");
+        export_peer_pieces_path(&manifest_path, &artifact_path, &piece_dir).unwrap();
+        let piece_path = piece_dir.join("piece-00000000.bin");
+        let mut piece = std::fs::read(&piece_path).unwrap();
+        piece[0] ^= 0x01;
+        std::fs::write(&piece_path, piece).unwrap();
+        let error = inspect_peer_piece_dir_path(&manifest_path, &piece_dir).unwrap_err();
+        assert!(error.contains("piece.0.sha256"));
+    }
+
+    #[test]
     fn fetches_peer_pieces_over_local_http_when_fixture_present() {
         let Some(artifact_path) = sibling_q8_fixture() else {
             eprintln!("skipping HTTP peer fetch test; TinyRustLM fixture not present");
@@ -1119,7 +1334,7 @@ mod tests {
         std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
         let served_piece_dir = dir.join("served-pieces");
         export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
-        let peer_url = start_static_piece_server(served_piece_dir, 2);
+        let peer_url = start_peer_piece_server(served_piece_dir, 2);
         let fetched_piece_dir = dir.join("fetched-pieces");
         let fetch = fetch_peer_pieces_http_path(&manifest_path, &peer_url, &fetched_piece_dir)
             .expect("HTTP peer fetch should pass");
@@ -1152,12 +1367,36 @@ mod tests {
         let mut piece = std::fs::read(&piece_path).unwrap();
         piece[0] ^= 0x01;
         std::fs::write(&piece_path, piece).unwrap();
-        let peer_url = start_static_piece_server(served_piece_dir, 2);
+        let peer_url = start_peer_piece_server(served_piece_dir, 2);
         let fetched_piece_dir = dir.join("fetched-pieces");
         let error =
             fetch_peer_pieces_http_path(&manifest_path, &peer_url, &fetched_piece_dir).unwrap_err();
         assert!(error.contains("piece.0.sha256"));
         assert!(!fetched_piece_dir.exists());
+    }
+
+    #[test]
+    fn peer_piece_server_does_not_expose_unlisted_files_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping HTTP peer exposure test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-piece-http-exposure");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        let served_piece_dir = dir.join("served-pieces");
+        export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
+        std::fs::write(
+            served_piece_dir.join("unlisted-model-bytes.slm"),
+            b"do not serve",
+        )
+        .unwrap();
+        let peer_url = start_peer_piece_server(served_piece_dir, 1);
+        let url = HttpUrl::parse(&format!("{peer_url}unlisted-model-bytes.slm")).unwrap();
+        let error = http_get_bytes(&url, 1024).unwrap_err();
+        assert!(error.contains("404 Not Found"));
     }
 
     #[test]
@@ -1204,58 +1443,12 @@ mod tests {
         ))
     }
 
-    fn start_static_piece_server(root: PathBuf, request_count: usize) -> String {
+    fn start_peer_piece_server(root: PathBuf, request_count: usize) -> String {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         std::thread::spawn(move || {
-            for _ in 0..request_count {
-                let Ok((mut stream, _)) = listener.accept() else {
-                    return;
-                };
-                let mut request = Vec::new();
-                let mut buffer = [0u8; 1024];
-                loop {
-                    let Ok(read) = stream.read(&mut buffer) else {
-                        return;
-                    };
-                    if read == 0 {
-                        break;
-                    }
-                    request.extend_from_slice(&buffer[..read]);
-                    if request.windows(4).any(|window| window == b"\r\n\r\n") {
-                        break;
-                    }
-                }
-                let request_text = String::from_utf8_lossy(&request);
-                let path = request_text
-                    .lines()
-                    .next()
-                    .and_then(|line| line.split_whitespace().nth(1))
-                    .unwrap_or("/");
-                let relative = path.trim_start_matches('/');
-                if relative.is_empty()
-                    || relative.contains("..")
-                    || relative.contains('/')
-                    || relative.contains('\\')
-                {
-                    write_http_response(&mut stream, "400 Bad Request", b"bad request");
-                    continue;
-                }
-                match std::fs::read(root.join(relative)) {
-                    Ok(bytes) => write_http_response(&mut stream, "200 OK", &bytes),
-                    Err(_) => write_http_response(&mut stream, "404 Not Found", b"not found"),
-                }
-            }
+            serve_peer_piece_dir_http_listener(&root, listener, Some(request_count)).unwrap();
         });
         format!("http://{address}/")
-    }
-
-    fn write_http_response(stream: &mut std::net::TcpStream, status: &str, body: &[u8]) {
-        let header = format!(
-            "HTTP/1.0 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            body.len()
-        );
-        stream.write_all(header.as_bytes()).unwrap();
-        stream.write_all(body).unwrap();
     }
 }

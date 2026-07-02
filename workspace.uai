@@ -1,5 +1,5 @@
 profile: minimodel.workspace.v7
-updated_utc: 2026-07-02T15:23:00Z
+updated_utc: 2026-07-02T16:40:00Z
 site: MiniModel.org
 workspace_root: E:\Source\Rust\MiniModel.org
 coordinator: E:\Source\Rust\workspace.uai
@@ -30,7 +30,7 @@ required_private_read_order:
   - .uai/short-term-memory.uai
 current_state:
   - MiniModel.org is the Rust-first P2P tiny model package exchange roadmap site.
-  - Source options are user-owned local files/lists, user-triggered Hugging Face discovery, local Hugging Face conversion-request/script handoff, local share metadata export after verified `.slm` import, direct known-peer HTTP piece fetch, and future broader P2P discovery/relay; all converge on local `.slm` verification.
-  - First implementation code now includes a standard-library Rust verifier workspace: `crates/minimodel-core` plus `crates/minimodel`, real q8 fixture manifest, local `.slm` artifact verification, chunk/Merkle checks, local peer-piece export, direct HTTP peer-piece fetch with project-server host rejection, peer-piece reassembly, and basename-only import receipts.
+  - Source options are user-owned local files/lists, user-triggered Hugging Face discovery, local Hugging Face conversion-request/script handoff, local share metadata export after verified `.slm` import, direct known-peer HTTP piece serve/fetch, and future broader P2P discovery/relay; all converge on local `.slm` verification.
+  - First implementation code now includes a standard-library Rust verifier workspace: `crates/minimodel-core` plus `crates/minimodel`, real q8 fixture manifest, local `.slm` artifact verification, chunk/Merkle checks, local peer-piece export, direct HTTP peer-piece serving/fetch with project-server host rejection, peer-piece reassembly, and basename-only import receipts.
   - The live public-safe export is verified.
   - Direct public .uai and agent-file-handoff access is denied.

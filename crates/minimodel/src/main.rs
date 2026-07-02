@@ -112,6 +112,30 @@ fn run() -> Result<(), String> {
             println!("artifact.sha256: {}", report.artifact_sha256);
             println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
         }
+        "serve-peer-pieces" => {
+            let manifest = one_arg(&mut args, "manifest")?;
+            let piece_dir = one_arg(&mut args, "piece-dir")?;
+            let bind_addr = one_arg(&mut args, "bind-addr")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_peer_piece_dir_path(
+                Path::new(&manifest),
+                Path::new(&piece_dir),
+            )?;
+            println!("MiniModel peer pieces ready to serve: {piece_dir}");
+            println!("bind_addr: {bind_addr}");
+            println!("peer_base_url: http://{bind_addr}/");
+            println!("piece_set: {}", report.piece_set_path);
+            println!("piece_count: {}", report.piece_count);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+            println!("Press Ctrl+C to stop serving peer pieces.");
+            minimodel_core::serve_peer_pieces_http_path(
+                Path::new(&manifest),
+                Path::new(&piece_dir),
+                &bind_addr,
+            )?;
+        }
         _ => {
             print_usage();
             return Err(format!("unsupported command {command}"));
@@ -142,4 +166,5 @@ fn print_usage() {
     eprintln!("  minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>");
     eprintln!("  minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>");
     eprintln!("  minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>");
+    eprintln!("  minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>");
 }

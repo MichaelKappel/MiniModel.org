@@ -67,10 +67,11 @@ Hugging Face search results are source records, not runnable TinyRustLM model en
 5. The converter writes a local `.slm`, validates it with the Rust packer/verifier, and records a checksum-bound conversion receipt plus runtime-smoke and eval/admission evidence.
 6. The converter runs `minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]`.
 7. `prepare-peer-share` validates the `.slm`, writes a MiniModel manifest, writes a `.minimodel-peer-offer` proof, exports local peer pieces, and writes catalog JSON in one output directory.
-8. The converter can run `minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...` to merge one or more generated entries into a metadata-only catalog snapshot after Rust rejects artifact URLs, project-server byte/execution claims, duplicate model ids, peer-source count drift, and project-server peer hosts.
-9. If a consenting peer URL becomes known after the proof-ready entry exists, the converter can run `minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>` and then regenerate the metadata-only snapshot.
-10. MiniModel.org may list the resulting metadata with `source_huggingface_model_id`, artifact byte count, artifact SHA-256, manifest route, evidence routes, `peer_offer_route`, `peer_offer_sha256`, `peer_offer_merkle_root_sha256`, `peer_hint_status`, `peer_import_status`, and optional `peer_source_count` / `peer_sources` when a consenting direct peer is already known.
-11. P2P transfer may use the metadata and chunk/Merkle fields so later users can obtain verified `.slm` bytes from consenting peers instead of repeating a large source download and conversion.
+8. If a consenting peer URL becomes known after the proof-ready entry exists, the converter can run `minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>` and send the announcement metadata to a catalog maintainer, or run `minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>` for a direct local entry update.
+9. A catalog maintainer can run `minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...` to validate model/artifact/proof identity, deduplicate peer URLs, and write `peer_sources` without touching model bytes.
+10. The converter or maintainer can run `minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...` to merge one or more generated entries into a metadata-only catalog snapshot after Rust rejects artifact URLs, project-server byte/execution claims, duplicate model ids, peer-source count drift, and project-server peer hosts.
+11. MiniModel.org may list the resulting metadata with `source_huggingface_model_id`, artifact byte count, artifact SHA-256, manifest route, evidence routes, `peer_offer_route`, `peer_offer_sha256`, `peer_offer_merkle_root_sha256`, `peer_hint_status`, `peer_import_status`, and optional `peer_source_count` / `peer_sources` when a consenting direct peer is already known through a validated entry or announcement.
+12. P2P transfer may use the metadata and chunk/Merkle fields so later users can obtain verified `.slm` bytes from consenting peers instead of repeating a large source download and conversion.
 
 Until that chain exists for a model, the honest status is `Rust conversion required`.
 
@@ -107,6 +108,15 @@ minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-ur
 
 The command validates the existing entry, rejects project-server peer hosts, writes one consenting direct-peer row, and revalidates the result before writing. This is the low-friction "converted once, listed as P2P-ready later" step.
 
+For catalog publication, a converter can publish a metadata-only peer-source announcement and a maintainer can merge it into the proof-ready entry:
+
+```text
+minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>
+minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...
+```
+
+The announcement path lets a converter hand over a small JSON file instead of a rewritten catalog entry or model bytes. The apply command validates the announcement against the catalog entry and produces the P2P-ready entry used by `write-catalog-snapshot`.
+
 MiniModel can merge generated entries into a metadata-only catalog snapshot with:
 
 ```text
@@ -135,7 +145,7 @@ TinyRustLM should expose the same source lanes in plain language:
 
 - `Your Local Files`: first-class runnable path through the browser file picker.
 - `Hugging Face`: user-triggered metadata discovery, model-card review, source revision context, API endpoint awareness, conversion-request JSON, and optional local Rust conversion-script handoff into `prepare-peer-share`.
-- `P2P Exchange`: MiniModel metadata, peer-offer proof, optional catalog-listed consenting peer sources, direct known-peer serve/fetch, local peer-piece export/reassembly, one-command `prepare-peer-share` sender execution, metadata-only snapshots generated by `write-catalog-snapshot`, one-command `import-peer-request` receiver execution, and catalog entries generated by `write-catalog-entry` for advanced/manual records now; broader peer discovery and relay flow later, still requiring local receipt and `.slm` verification before browser execution.
+- `P2P Exchange`: MiniModel metadata, peer-offer proof, optional catalog-listed consenting peer sources, peer-source announcement metadata, direct known-peer serve/fetch, local peer-piece export/reassembly, one-command `prepare-peer-share` sender execution, metadata-only snapshots generated by `write-catalog-snapshot`, one-command `import-peer-request` receiver execution, and catalog entries generated by `write-catalog-entry` for advanced/manual records now; broader peer discovery and relay flow later, still requiring local receipt and `.slm` verification before browser execution.
 
 Advanced source details may show catalog URLs, Hugging Face search fields, checksums, manifests, evidence routes, and verifier status, but the first-load Chat mode should keep those behind progressive disclosure.
 

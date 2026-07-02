@@ -1,29 +1,34 @@
-profile: minimodel.intake-outcome-ledger.v2
-updated_utc: 2026-07-02T20:20:00Z
+profile: minimodel.intake-outcome-ledger.v3
+updated_utc: 2026-07-02T21:15:00Z
 site: MiniModel.org
 latest_scan:
   content_non_placeholder_files: 0
   improvement_non_placeholder_files: 0
   outcome: placeholder_only
 latest_implementation_note:
+  id: minimodel_peer_source_announcement_2026_07_02
+  disposition: implemented
+  source_impact: Added portable `write-peer-source-announcement` metadata and maintainer-side `apply-peer-source-announcements` so converted-once availability can become P2P-ready catalog metadata after drift checks, without project servers hosting bytes.
+  memory_impact: Updated MiniModel.org workspace/short-term memory and routed the July 2 TinyRustLM/MiniModel intake synthesis into the verifier/catalog boundary.
+  active_intake_after: placeholder_only
+previous_implementation_note:
   id: minimodel_add_peer_source_2026_07_02
   disposition: implemented
   source_impact: Added `add-peer-source` to turn proof-ready catalog-entry JSON into P2P-ready metadata after a consenting direct peer URL becomes known.
   memory_impact: Updated MiniModel.org workspace/short-term memory and SLMComposer long-term pointers to the late peer-source publication command.
   active_intake_after: placeholder_only
-previous_implementation_note:
+earlier_implementation_note:
   id: minimodel_direct_peer_piece_serve_2026_07_02
   disposition: implemented
   source_impact: Added sender-side direct HTTP peer-piece serving, validated declared piece files before serving, and added tests that prevent arbitrary unlisted file exposure.
   memory_impact: Updated workspace and short-term memory routes to the direct known-peer serve/fetch bridge.
   active_intake_after: placeholder_only
-earlier_implementation_note:
-  id: minimodel_direct_peer_piece_fetch_2026_07_02
-  disposition: implemented
-  source_impact: Added direct HTTP peer-piece fetch on top of local peer-piece export/reassembly without adding model bytes to the repo or public servers.
-  memory_impact: Updated workspace and short-term memory routes to the direct known-peer fetch bridge.
-  active_intake_after: placeholder_only
 records:
+  - id: minimodel_direct_peer_piece_fetch_2026_07_02
+    disposition: implemented
+    source_impact: Added direct HTTP peer-piece fetch on top of local peer-piece export/reassembly without adding model bytes to the repo or public servers.
+    memory_impact: Updated workspace and short-term memory routes to the direct known-peer fetch bridge.
+    active_intake_after: placeholder_only
   - id: minimodel_peer_piece_mvp_2026_07_02
     disposition: implemented
     source_impact: Added local peer-piece export/reassembly on top of the verifier without adding model bytes to the repo or public servers.

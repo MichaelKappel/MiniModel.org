@@ -234,6 +234,47 @@ fn run() -> Result<(), String> {
                 report.output_path
             );
         }
+        "write-peer-source-announcement" => {
+            let catalog_entry_json = one_arg(&mut args, "catalog-entry-json")?;
+            let output_json = one_arg(&mut args, "output-json")?;
+            let known_peer_base_url = one_arg(&mut args, "known-peer-base-url")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::write_peer_source_announcement_path(
+                Path::new(&catalog_entry_json),
+                Path::new(&output_json),
+                &known_peer_base_url,
+            )?;
+            println!("MiniModel peer source announcement written: {output_json}");
+            println!("source_catalog_entry: {}", report.catalog_entry_path);
+            println!("announcement: {}", report.announcement_path);
+            println!("model.id: {}", report.model_id);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("peer_offer.sha256: {}", report.peer_offer_sha256);
+            println!("peer_base_url: {}", report.peer_base_url);
+        }
+        "apply-peer-source-announcements" => {
+            let catalog_entry_json = one_arg(&mut args, "catalog-entry-json")?;
+            let output_json = one_arg(&mut args, "output-json")?;
+            let announcement_paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
+            let report = minimodel_core::apply_peer_source_announcements_path(
+                Path::new(&catalog_entry_json),
+                Path::new(&output_json),
+                &announcement_paths,
+            )?;
+            println!("MiniModel peer source announcements applied: {output_json}");
+            println!("source_catalog_entry: {}", report.catalog_entry_path);
+            println!("catalog_entry: {}", report.output_path);
+            println!("model.id: {}", report.model_id);
+            println!(
+                "applied_announcement_count: {}",
+                report.applied_announcement_count
+            );
+            println!("peer_source_count: {}", report.peer_source_count);
+            println!(
+                "catalog_snapshot_hint: minimodel write-catalog-snapshot models.v0.json \"{}\"",
+                report.output_path
+            );
+        }
         "write-catalog-snapshot" => {
             let output_json = one_arg(&mut args, "output-json")?;
             let entry_paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
@@ -285,6 +326,12 @@ fn print_usage() {
     );
     eprintln!(
         "  minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>"
+    );
+    eprintln!(
+        "  minimodel write-peer-source-announcement <catalog-entry-json> <output-json> <known-peer-base-url>"
+    );
+    eprintln!(
+        "  minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>..."
     );
     eprintln!("  minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...");
 }

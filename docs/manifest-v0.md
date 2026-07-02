@@ -140,6 +140,15 @@ minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-ur
 
 `add-peer-source` reads and validates the existing catalog entry, rejects project-server peer hosts, writes exactly one `known-direct-http-peer-v0` row, revalidates `peer_source_count`, and writes a new catalog-entry JSON for the next `write-catalog-snapshot` run. It does not upload, proxy, or fetch `.slm` bytes.
 
+For catalog publication where a converter needs to hand peer availability to a maintainer, MiniModel can write and apply a metadata-only announcement:
+
+```text
+minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>
+minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...
+```
+
+The announcement binds the catalog entry checksum, model id, artifact byte count, artifact SHA256, peer-offer SHA256, Merkle root, and one validated consenting direct peer URL. The apply command rejects model/artifact/proof drift, deduplicates peer URLs, writes `peer_sources`, revalidates the entry, and leaves the next `write-catalog-snapshot` run to publish metadata only. This is the maintainable route for "converted once, then later users see P2P Import" without making project servers byte hosts.
+
 TinyRustLM may use a catalog-listed peer source to prefill the receiver request, but Rust still fetches, assembles, verifies, and writes a local import receipt before the user imports the `.slm` through the browser file picker.
 
 The MiniModel verifier can also turn a verified local `.slm` into local peer pieces with `export-peer-pieces`. The output directory contains chunk files plus `minimodel.peer_piece_set.v0`. `serve-peer-pieces` validates that directory, starts a user-controlled local HTTP listener, and serves only the declared sidecar plus declared piece file names. `fetch-peer-pieces` can retrieve that sidecar and its listed chunks from a user-provided direct `http://` peer endpoint, rejects project-server hostnames, and verifies every chunk SHA-256 before writing the local piece directory. `assemble-peer-pieces` verifies each local chunk again, assembles a temporary `.slm`, and then applies the full manifest/artifact/`.slm` verifier before writing the accepted output file. `import-peer-request` wraps the receiver sequence for TinyRustLM request JSON: request validation, manifest binding, known-peer fetch, assembly, artifact verification, and receipt writing in one output directory. This tests the byte contract a future P2P transport must preserve while still keeping project servers out of the model-byte path.

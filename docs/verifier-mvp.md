@@ -37,6 +37,8 @@ minimodel import-peer-request <request-json> <manifest> <output-dir>
 minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]
 minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]
 minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>
+minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>
+minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...
 minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
 ```
 
@@ -61,6 +63,10 @@ minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
 `write-catalog-entry` validates a MiniModel manifest and `.minimodel-peer-offer` proof against each other before writing JSON catalog metadata. It rejects artifact, SLM field, chunk count, chunk-list, Merkle root, evidence checksum, and per-chunk drift. The generated entry may advertise `peer_hint_status=peer-offer-ready-known-peer-needed` and `peer_import_status=request-script-ready`, which means TinyRustLM can save a peer-import request/script, not that MiniModel.org serves bytes. When `[known-peer-base-url]` is provided, it also validates a direct `http://` consenting peer URL, rejects project-server hosts, and writes `peer_source_count` / `peer_sources` metadata so the browser can offer `P2P Import` without a separate manual peer URL step.
 
 `add-peer-source` is the late availability step for a proof-ready catalog entry. It reads an existing catalog-entry JSON, validates the entry, rejects project-server peer hosts, writes exactly one `known-direct-http-peer-v0` row for the provided consenting direct peer URL, revalidates `peer_source_count`, and writes a new catalog-entry JSON. This lets a converter produce proof metadata first, then publish P2P availability later without rerunning Hugging Face conversion or uploading `.slm` bytes.
+
+`write-peer-source-announcement` is the portable availability step. It reads a validated catalog-entry JSON plus a consenting direct peer URL and writes `minimodel.peer_source_announcement` JSON. The announcement binds model id, artifact byte count, artifact SHA256, peer-offer SHA256, peer-offer Merkle root, the catalog entry checksum, and one validated `known-direct-http-peer-v0` row. It is metadata only and still does not upload, proxy, fetch, or serve model bytes.
+
+`apply-peer-source-announcements` is the catalog-maintainer merge step. It validates a proof-ready catalog entry, validates one or more peer-source announcements, rejects model/artifact/peer-offer drift, deduplicates peer URLs, writes `peer_sources`, revalidates `peer_source_count`, and produces a new catalog-entry JSON for the next `write-catalog-snapshot` run. This is the first durable "converted once, later users see P2P Import by default" publication path while keeping project servers out of the byte path.
 
 `write-catalog-snapshot` validates one or more catalog-entry JSON files and writes a metadata-only `minimodel.model_catalog` snapshot. It rejects duplicate `model_id` values, artifact/model/download URLs, project-server byte/execution claims, peer-source count drift, unsupported peer-source rows, and project-server peer hosts. This is the first Rust-owned publication step for "converted once, listed as P2P-ready later"; the snapshot can be loaded by TinyRustLM as metadata, while model bytes still come only from local files or consenting peers.
 
@@ -174,6 +180,8 @@ cargo run -p minimodel -- prepare-peer-share ..\SLMComposer.com\tinyrustlm\model
 cargo run -p minimodel -- write-catalog-entry examples\tiny-test-model-q8.minimodel.manifest.v0 examples\tiny-test-model-q8.minimodel-peer-offer examples\catalog-entry.v0.json
 cargo run -p minimodel -- write-catalog-entry examples\tiny-test-model-q8.minimodel.manifest.v0 examples\tiny-test-model-q8.minimodel-peer-offer examples\catalog-entry.with-peer.v0.json tinyrustlm/tiny-test-model-q8 http://127.0.0.1:8123/
 cargo run -p minimodel -- add-peer-source examples\catalog-entry.v0.json examples\catalog-entry.later-peer.v0.json http://127.0.0.1:8123/
+cargo run -p minimodel -- write-peer-source-announcement examples\catalog-entry.v0.json examples\catalog-entry.peer-source-announcement.v0.json http://127.0.0.1:8123/
+cargo run -p minimodel -- apply-peer-source-announcements examples\catalog-entry.v0.json examples\catalog-entry.announced-peer.v0.json examples\catalog-entry.peer-source-announcement.v0.json
 cargo run -p minimodel -- write-catalog-snapshot .\models.v0.json examples\catalog-entry.v0.json
 ```
 

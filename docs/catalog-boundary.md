@@ -119,6 +119,8 @@ minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry
 
 The announcement path lets a converter hand over a small JSON file instead of a rewritten catalog entry or model bytes. The apply command validates the announcement against the catalog entry and produces the P2P-ready entry used by `write-catalog-snapshot`. TinyRustLM can also apply a local peer-source announcement JSON to a loaded proof-ready `models.v0.json` snapshot for local review and import-request generation; that browser overlay still validates only metadata, never fetches model bytes, and still hands the receiver to Rust `import-peer-request`.
 
+A catalog snapshot may also declare checksum-bound peer-source announcement feed routes for the browser to verify automatically. The accepted fields are `peer_source_announcement_route` plus `peer_source_announcement_sha256`, or `peer_source_announcement_routes` / `peer_source_announcement_feeds` arrays containing `route` and SHA-256 fields. TinyRustLM resolves each route relative to the loaded catalog URL, requires it to stay on the same origin as the catalog, verifies the fetched JSON SHA-256, then applies the announcement records with the same proof-ready catalog matching rules. The feed is still metadata only: a failed feed does not create peer sources, a passing feed does not fetch `.slm` bytes, and Rust `import-peer-request` remains the transfer and receipt boundary.
+
 MiniModel can merge generated entries into a metadata-only catalog snapshot with:
 
 ```text

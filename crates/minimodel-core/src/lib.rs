@@ -337,6 +337,7 @@ pub fn write_catalog_entry_path(
     peer_offer_path: &Path,
     output_path: &Path,
     source_huggingface_model_id: Option<&str>,
+    known_peer_base_url: Option<&str>,
 ) -> Result<CatalogEntryReport, String> {
     let bundle = read_valid_manifest_path(manifest_path)?;
     require_fixed_chunk_mode(&bundle.manifest)?;
@@ -353,6 +354,10 @@ pub fn write_catalog_entry_path(
         Some(value) if !value.trim().is_empty() => Some(validate_huggingface_model_id(value)?),
         _ => None,
     };
+    let known_peer_base_url = match known_peer_base_url {
+        Some(value) if !value.trim().is_empty() => Some(normalize_known_peer_base_url(value)?),
+        _ => None,
+    };
     let catalog_entry = catalog_entry_json(
         &bundle.manifest,
         &peer_offer,
@@ -360,6 +365,7 @@ pub fn write_catalog_entry_path(
         &peer_offer_route,
         &peer_offer_sha256,
         source_huggingface_model_id.as_deref(),
+        known_peer_base_url.as_deref(),
     )?;
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)
@@ -701,6 +707,7 @@ fn catalog_entry_json(
     peer_offer_route: &str,
     peer_offer_sha256: &str,
     source_huggingface_model_id: Option<&str>,
+    known_peer_base_url: Option<&str>,
 ) -> Result<String, String> {
     let mut fields = Vec::new();
     fields.push(json_number_field("catalog_version", "0"));
@@ -757,6 +764,15 @@ fn catalog_entry_json(
     ));
     fields.push(json_string_field("peer_offer_route", peer_offer_route));
     fields.push(json_string_field("peer_offer_sha256", peer_offer_sha256));
+    if let Some(peer_base_url) = known_peer_base_url {
+        fields.push(json_number_field("peer_source_count", "1"));
+        fields.push(json_raw_field(
+            "peer_sources",
+            &known_peer_sources_json(peer_base_url),
+        ));
+    } else {
+        fields.push(json_number_field("peer_source_count", "0"));
+    }
     fields.push(json_string_field(
         "peer_offer_kind",
         "minimodel.peer_offer.v0",
@@ -905,8 +921,34 @@ fn validate_huggingface_model_id(value: &str) -> Result<String, String> {
     Ok(text.to_string())
 }
 
+fn normalize_known_peer_base_url(value: &str) -> Result<String, String> {
+    let url = HttpUrl::parse(value)?;
+    reject_project_server_peer_host(&url.host)?;
+    let mut text = url.to_string();
+    if !text.ends_with('/') {
+        text.push('/');
+    }
+    Ok(text)
+}
+
+fn known_peer_sources_json(peer_base_url: &str) -> String {
+    let fields = [
+        json_string_field("source_kind", "known-direct-http-peer-v0"),
+        json_string_field("transport", "direct-http-piece-server-v0"),
+        json_string_field("peer_base_url", peer_base_url),
+        json_string_field("consent_status", "publisher-declared-consenting-peer"),
+        json_bool_field("project_server_serves_model_bytes", false),
+        json_bool_field("project_server_runs_model_bytes", false),
+    ];
+    format!("[{{{}}}]", fields.join(", "))
+}
+
 fn json_string_field(key: &str, value: &str) -> String {
     format!("{}: {}", json_string(key), json_string(value))
+}
+
+fn json_raw_field(key: &str, value: &str) -> String {
+    format!("{}: {}", json_string(key), value)
 }
 
 fn json_number_field(key: &str, value: &str) -> String {
@@ -2164,6 +2206,7 @@ mod tests {
             &peer_offer_path,
             &catalog_path,
             Some("example-org/example-source"),
+            Some("http://127.0.0.1:8123/peer-pieces"),
         )
         .unwrap();
         let text = std::fs::read_to_string(&catalog_path).unwrap();
@@ -2177,6 +2220,10 @@ mod tests {
         assert!(text.contains("\"peer_hint_status\": \"peer-offer-ready-known-peer-needed\""));
         assert!(text.contains("\"peer_import_status\": \"request-script-ready\""));
         assert!(text.contains("\"source_huggingface_model_id\": \"example-org/example-source\""));
+        assert!(text.contains("\"peer_source_count\": 1"));
+        assert!(text.contains("\"peer_sources\": [{"));
+        assert!(text.contains("\"peer_base_url\": \"http://127.0.0.1:8123/peer-pieces/\""));
+        assert!(text.contains("\"consent_status\": \"publisher-declared-consenting-peer\""));
         assert!(text.contains("\"project_server_serves_model_bytes\": false"));
         assert!(!text.contains("artifact_project_server_url\": \"http"));
     }
@@ -2196,10 +2243,35 @@ mod tests {
         )
         .unwrap();
 
-        let error = write_catalog_entry_path(&manifest_path, &peer_offer_path, &catalog_path, None)
-            .unwrap_err();
+        let error =
+            write_catalog_entry_path(&manifest_path, &peer_offer_path, &catalog_path, None, None)
+                .unwrap_err();
 
         assert!(error.contains("peer offer chunk_count mismatch"));
+        assert!(!catalog_path.exists());
+    }
+
+    #[test]
+    fn rejects_catalog_entry_project_server_peer_source() {
+        let dir = unique_dir("catalog-entry-project-peer");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+
+        let error = write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_path,
+            None,
+            Some("http://MiniModel.org/peer-pieces/"),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("project server"));
         assert!(!catalog_path.exists());
     }
 

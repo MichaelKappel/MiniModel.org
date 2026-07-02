@@ -20,6 +20,7 @@
   "peer_import_status": "request-script-ready",
   "peer_offer_route": "tiny-test-model-q8.minimodel-peer-offer",
   "peer_offer_sha256": "sha256:9da5ada1eb8dd9bb77b8e46cea624f380808aee82568f555b6420fd59fa8d642",
+  "peer_source_count": 0,
   "peer_offer_kind": "minimodel.peer_offer.v0",
   "peer_offer_chunk_algorithm": "sha256-merkle-v0",
   "peer_offer_chunk_size": 1048576,

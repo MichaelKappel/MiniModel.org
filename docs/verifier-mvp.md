@@ -34,7 +34,7 @@ minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>
 minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>
 minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>
 minimodel import-peer-request <request-json> <manifest> <output-dir>
-minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id]
+minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]
 ```
 
 `verify-manifest` checks schema, required fields, boundary fields, license/model-card routes, route shape, and signature placeholder rules.
@@ -53,7 +53,7 @@ minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-hugg
 
 `import-peer-request` is the receiver-side one-command path for a TinyRustLM `minimodel.peer_import_request.v0` file. It parses the request, rejects project-server or Hugging Face byte-source claims, checks the request's model id, byte count, artifact SHA-256, safe local output names, and known peer URL against the supplied manifest, then runs the same fetch, assemble, full artifact verification, and receipt-writing chain into the chosen output directory. This is the first "select a proof-ready model, enter peer URL, run one Rust verifier command" path; it still requires a consenting direct peer and never fetches model bytes from MiniModel.org.
 
-`write-catalog-entry` validates a MiniModel manifest and `.minimodel-peer-offer` proof against each other before writing JSON catalog metadata. It rejects artifact, SLM field, chunk count, chunk-list, Merkle root, evidence checksum, and per-chunk drift. The generated entry may advertise `peer_hint_status=peer-offer-ready-known-peer-needed` and `peer_import_status=request-script-ready`, which means TinyRustLM can save a peer-import request/script, not that MiniModel.org serves bytes.
+`write-catalog-entry` validates a MiniModel manifest and `.minimodel-peer-offer` proof against each other before writing JSON catalog metadata. It rejects artifact, SLM field, chunk count, chunk-list, Merkle root, evidence checksum, and per-chunk drift. The generated entry may advertise `peer_hint_status=peer-offer-ready-known-peer-needed` and `peer_import_status=request-script-ready`, which means TinyRustLM can save a peer-import request/script, not that MiniModel.org serves bytes. When `[known-peer-base-url]` is provided, it also validates a direct `http://` consenting peer URL, rejects project-server hosts, and writes `peer_source_count` / `peer_sources` metadata so the browser can offer `P2P Import` without a separate manual peer URL step.
 
 ## Receipt Fields
 
@@ -111,8 +111,9 @@ Receipts must not contain model bytes, public model-byte URLs, or claims that Mi
 7. Catalog-entry writing:
    - validate `.minimodel-peer-offer` against the manifest
    - reject mismatched artifact, SLM, chunk-list, Merkle, admission-checksum, or per-chunk fields
+   - reject known peer source URLs that point at project servers
    - write metadata-only JSON with no project-server artifact URL
-   - mark proof-ready entries as known-peer/import-request ready, not server-hosted
+   - mark proof-ready entries as import-request ready, optionally with catalog-listed consenting peer source metadata, not server-hosted bytes
 8. Receipt:
    - write a local receipt beside the artifact or to a user-selected path
    - include manifest checksum and artifact checksum
@@ -161,6 +162,7 @@ cargo run -p minimodel -- fetch-peer-pieces examples\tiny-test-model-q8.minimode
 cargo run -p minimodel -- assemble-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 .\peer-pieces\tiny-test-model-q8 .\tiny-test-model-q8.from-pieces.slm
 cargo run -p minimodel -- import-peer-request .\tiny-test-model-q8.minimodel-peer-import-request.json examples\tiny-test-model-q8.minimodel.manifest.v0 .\tiny-test-model-q8-peer-import
 cargo run -p minimodel -- write-catalog-entry examples\tiny-test-model-q8.minimodel.manifest.v0 examples\tiny-test-model-q8.minimodel-peer-offer examples\catalog-entry.v0.json
+cargo run -p minimodel -- write-catalog-entry examples\tiny-test-model-q8.minimodel.manifest.v0 examples\tiny-test-model-q8.minimodel-peer-offer examples\catalog-entry.with-peer.v0.json tinyrustlm/tiny-test-model-q8 http://127.0.0.1:8123/
 ```
 
 The receipt stores the artifact basename only. It must not store private absolute paths, public model-byte URLs, or endorsement claims.

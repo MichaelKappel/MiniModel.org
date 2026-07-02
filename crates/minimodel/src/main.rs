@@ -161,13 +161,17 @@ fn run() -> Result<(), String> {
             let manifest = one_arg(&mut args, "manifest")?;
             let peer_offer = one_arg(&mut args, "peer-offer")?;
             let output_json = one_arg(&mut args, "output-json")?;
-            let source_huggingface_model_id = args.next();
+            let optional_first = args.next();
+            let optional_second = args.next();
             no_more_args(&mut args)?;
+            let (source_huggingface_model_id, known_peer_base_url) =
+                split_catalog_entry_optional_args(optional_first, optional_second);
             let report = minimodel_core::write_catalog_entry_path(
                 Path::new(&manifest),
                 Path::new(&peer_offer),
                 Path::new(&output_json),
                 source_huggingface_model_id.as_deref(),
+                known_peer_base_url.as_deref(),
             )?;
             println!("MiniModel catalog entry written: {output_json}");
             println!("model.id: {}", report.model_id);
@@ -208,6 +212,54 @@ fn print_usage() {
     eprintln!("  minimodel import-peer-request <request-json> <manifest> <output-dir>");
     eprintln!("  minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>");
     eprintln!(
-        "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id]"
+        "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]"
     );
+}
+
+fn split_catalog_entry_optional_args(
+    first: Option<String>,
+    second: Option<String>,
+) -> (Option<String>, Option<String>) {
+    match (first, second) {
+        (Some(value), None) if is_peer_url_arg(&value) => (None, Some(value)),
+        (first, second) => (first, second),
+    }
+}
+
+fn is_peer_url_arg(value: &str) -> bool {
+    value.trim_start().starts_with("http://")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catalog_entry_optional_args_accept_source_only() {
+        let (source, peer) =
+            split_catalog_entry_optional_args(Some("example-org/source-model".to_string()), None);
+
+        assert_eq!(source.as_deref(), Some("example-org/source-model"));
+        assert_eq!(peer, None);
+    }
+
+    #[test]
+    fn catalog_entry_optional_args_accept_peer_only() {
+        let (source, peer) =
+            split_catalog_entry_optional_args(Some("http://127.0.0.1:8123/".to_string()), None);
+
+        assert_eq!(source, None);
+        assert_eq!(peer.as_deref(), Some("http://127.0.0.1:8123/"));
+    }
+
+    #[test]
+    fn catalog_entry_optional_args_accept_source_and_peer() {
+        let (source, peer) = split_catalog_entry_optional_args(
+            Some("example-org/source-model".to_string()),
+            Some("http://127.0.0.1:8123/".to_string()),
+        );
+
+        assert_eq!(source.as_deref(), Some("example-org/source-model"));
+        assert_eq!(peer.as_deref(), Some("http://127.0.0.1:8123/"));
+    }
 }

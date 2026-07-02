@@ -99,10 +99,24 @@ After a user imports a verified local `.slm`, TinyRustLM may save a `minimodel.l
 MiniModel can also write a catalog entry from an admitted manifest plus peer-offer proof:
 
 ```text
-minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id]
+minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]
 ```
 
-The command validates that the peer-offer artifact fields, `.slm` fields, chunk count, chunk-list SHA-256, Merkle root, admission checksum, and per-chunk rows match the manifest before JSON is written. A generated catalog row may use `peer_hint_status=peer-offer-ready-known-peer-needed` and `peer_import_status=request-script-ready`. Those fields mean the UI can save a P2P import request and Rust `import-peer-request` script once the user supplies a consenting peer URL; they do not authorize TinyRustLM or MiniModel.org to fetch model bytes from project servers.
+The command validates that the peer-offer artifact fields, `.slm` fields, chunk count, chunk-list SHA-256, Merkle root, admission checksum, and per-chunk rows match the manifest before JSON is written. A generated catalog row may use `peer_hint_status=peer-offer-ready-known-peer-needed` and `peer_import_status=request-script-ready`. Those fields mean the UI can save a P2P import request and Rust `import-peer-request` script; they do not authorize TinyRustLM or MiniModel.org to fetch model bytes from project servers.
+
+When `[known-peer-base-url]` is supplied, `write-catalog-entry` validates the direct `http://` peer URL, rejects project-server hosts, normalizes the trailing slash, and writes:
+
+| Field | Requirement |
+| --- | --- |
+| `peer_source_count` | Number of peer source rows. The first prototype writes `0` or `1`. |
+| `peer_sources[].source_kind` | `known-direct-http-peer-v0`. |
+| `peer_sources[].transport` | `direct-http-piece-server-v0`. |
+| `peer_sources[].peer_base_url` | Direct consenting peer URL for `minimodel.peer_piece_set.v0` and declared chunk files. |
+| `peer_sources[].consent_status` | `publisher-declared-consenting-peer`. |
+| `peer_sources[].project_server_serves_model_bytes` | Must be `false`. |
+| `peer_sources[].project_server_runs_model_bytes` | Must be `false`. |
+
+TinyRustLM may use a catalog-listed peer source to prefill the receiver request, but Rust still fetches, assembles, verifies, and writes a local import receipt before the user imports the `.slm` through the browser file picker.
 
 The MiniModel verifier can also turn a verified local `.slm` into local peer pieces with `export-peer-pieces`. The output directory contains chunk files plus `minimodel.peer_piece_set.v0`. `serve-peer-pieces` validates that directory, starts a user-controlled local HTTP listener, and serves only the declared sidecar plus declared piece file names. `fetch-peer-pieces` can retrieve that sidecar and its listed chunks from a user-provided direct `http://` peer endpoint, rejects project-server hostnames, and verifies every chunk SHA-256 before writing the local piece directory. `assemble-peer-pieces` verifies each local chunk again, assembles a temporary `.slm`, and then applies the full manifest/artifact/`.slm` verifier before writing the accepted output file. `import-peer-request` wraps the receiver sequence for TinyRustLM request JSON: request validation, manifest binding, known-peer fetch, assembly, artifact verification, and receipt writing in one output directory. This tests the byte contract a future P2P transport must preserve while still keeping project servers out of the model-byte path.
 

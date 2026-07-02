@@ -22,7 +22,7 @@ Project servers must not serve:
 - safetensors, GGUF, ONNX, or other model-weight files from users
 - server-side inference endpoints for user models
 - proxy download URLs that turn MiniModel.org into a model-byte relay
-- automatic SLMComposer fetch instructions for catalog entries
+- automatic TinyRustLM fetch instructions for catalog entries
 
 ## Catalog Entry Shape
 
@@ -45,17 +45,17 @@ A catalog entry must not include a project-server artifact URL. The user can dow
 
 ## Source Lanes
 
-MiniModel.org and SLMComposer should keep three source lanes distinct:
+MiniModel.org and TinyRustLM should keep three source lanes distinct:
 
 - `local-file` or `local-list`: user-owned local `.slm` files and local JSON metadata lists.
 - `huggingface-hub`: user-triggered external discovery using Hugging Face metadata, model cards, file hints, and source revision context.
 - `minimodel-p2p`: future consent-based peer transfer with manifest, chunk, Merkle, and checksum verification.
 
-Hugging Face `/resolve/` URLs, LFS/Xet/CAS transfers, Inference Providers, Inference Endpoints, and executable Spaces must not be represented as MiniModel.org-hosted bytes or MiniModel.org-run inference. Project servers do not proxy Hugging Face downloads. If a user obtains bytes from Hugging Face or another external source, they convert or import them locally and then select the verified `.slm` file in SLMComposer.
+Hugging Face `/resolve/` URLs, LFS/Xet/CAS transfers, Inference Providers, Inference Endpoints, and executable Spaces must not be represented as MiniModel.org-hosted bytes or MiniModel.org-run inference. Project servers do not proxy Hugging Face downloads. If a user obtains bytes from Hugging Face or another external source, they convert or import them locally and then select the verified `.slm` file in TinyRustLM.
 
-## SLM Composer UI Mapping
+## TinyRustLM UI Mapping
 
-SLM Composer should expose the same source lanes in plain language:
+TinyRustLM should expose the same source lanes in plain language:
 
 - `Your Local Files`: first-class runnable path through the browser file picker.
 - `Hugging Face`: user-triggered metadata discovery, model-card review, source revision context, and API endpoint awareness only.
@@ -68,7 +68,7 @@ Advanced source details may show catalog URLs, Hugging Face search fields, check
 The product flow needs two separate consent moments:
 
 1. Transfer consent: the user chooses to obtain bytes from a peer or from a source outside MiniModel.org.
-2. Execution consent: the user chooses to open a verified local `.slm` file in SLMComposer.
+2. Execution consent: the user chooses to open a verified local `.slm` file in TinyRustLM.
 
 The metadata catalog must not collapse either step into an automatic action.
 

@@ -40,13 +40,13 @@
         <p class="lede">
           A planned source catalog for checksum-bound tiny model packages that users bring locally,
           discover externally, transfer by consent, verify, and run locally.
-          SLM Composer exposes the same choices as Local Files, Hugging Face, and P2P Exchange.
+          TinyRustLM exposes the same choices as Local Files, Hugging Face, and P2P Exchange.
         </p>
         <div class="actions" aria-label="Primary links">
           <a class="button primary" href="ROADMAP.md">View roadmap</a>
           <a class="button secondary" href="docs/manifest-v0.md">Manifest draft</a>
           <a class="button secondary" href="catalog/models.v0.json">Catalog JSON</a>
-          <a class="button secondary" href="https://SLMComposer.com/app/">Open SLM Composer</a>
+          <a class="button secondary" href="https://TinyRustLM.com/">Open TinyRustLM</a>
         </div>
       </div>
     </section>
@@ -81,7 +81,7 @@
         <li>
           <span class="step">02</span>
           <h3>Verifier</h3>
-          <p>Ship a Rust CLI that verifies package bytes, manifest fields, evidence routes, drift cases, and SLMComposer import readiness before a user trusts a file.</p>
+          <p>Ship a Rust CLI that verifies package bytes, manifest fields, evidence routes, drift cases, and TinyRustLM import readiness before a user trusts a file.</p>
         </li>
         <li>
           <span class="step">03</span>
@@ -91,12 +91,12 @@
         <li>
           <span class="step">04</span>
           <h3>Peer App</h3>
-          <p>Build a Rust desktop peer app for discovery, chunk transfer, resume, checksum validation, and local handoff to SLMComposer.</p>
+          <p>Build a Rust desktop peer app for discovery, chunk transfer, resume, checksum validation, and local handoff to TinyRustLM.</p>
         </li>
         <li>
           <span class="step">05</span>
           <h3>Browser Handoff</h3>
-          <p>Let verified local `.slm` files open in SLMComposer for browser-local Rust/WASM loading and generation.</p>
+          <p>Let verified local `.slm` files open in TinyRustLM for browser-local Rust/WASM loading and generation.</p>
         </li>
       </ol>
       <p class="section-note">
@@ -112,7 +112,7 @@
       <div class="doc-grid">
         <a href="docs/catalog-boundary.md">
           <h3>Local</h3>
-          <p>User-owned `.slm` files and local JSON lists stay first-class, with browser file-picker import and Rust/WASM validation in SLM Composer.</p>
+          <p>User-owned `.slm` files and local JSON lists stay first-class, with browser file-picker import and Rust/WASM validation in TinyRustLM.</p>
         </a>
         <a href="docs/catalog-boundary.md">
           <h3>Hugging Face</h3>
@@ -120,7 +120,7 @@
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>P2P</h3>
-          <p>Future peer transfer uses consent, chunk/Merkle verification, local receipts, and SLMComposer handoff after local `.slm` checks pass.</p>
+          <p>Future peer transfer uses consent, chunk/Merkle verification, local receipts, and TinyRustLM handoff after local `.slm` checks pass.</p>
         </a>
       </div>
     </section>
@@ -145,7 +145,7 @@
         </a>
         <a href="catalog/models.v0.json">
           <h3>Catalog endpoint</h3>
-          <p>Static metadata entries for local `.slm` imports, checksum verification, and SLMComposer browser handoff without hosted model bytes.</p>
+          <p>Static metadata entries for local `.slm` imports, checksum verification, and TinyRustLM browser handoff without hosted model bytes.</p>
         </a>
       </div>
     </section>
@@ -179,8 +179,8 @@
   <footer>
     <span>MiniModel.org</span>
     <span>Peer-to-peer model packages</span>
-    <a href="https://Runtime.MiRust.com/">Runtime.MiRust.com</a>
-    <a href="https://SLMComposer.com/app/">SLMComposer.com</a>
+    <a href="https://TinyRustLM.com/">TinyRustLM.com</a>
+    <a href="https://TinyRustLM.MiRust.com/developer-portal/">TinyRustLM developer portal</a>
   </footer>
 </body>
 </html>

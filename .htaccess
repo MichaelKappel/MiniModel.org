@@ -1,0 +1,11 @@
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^(\.git|\.uai|agent-file-handoff)(/|$) - [F,L]
+</IfModule>
+
+<FilesMatch "^(workspace\.uai|ftp\.txt)$">
+  Require all denied
+</FilesMatch>

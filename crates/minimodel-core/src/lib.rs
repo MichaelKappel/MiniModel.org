@@ -75,6 +75,15 @@ pub struct CatalogSnapshotReport {
 }
 
 #[derive(Debug, Clone)]
+pub struct CatalogPeerSourceAttachment {
+    pub catalog_entry_path: String,
+    pub output_path: String,
+    pub model_id: String,
+    pub peer_source_count: usize,
+    pub peer_base_url: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct PeerImportRequestExecution {
     pub request_path: String,
     pub peer_base_url: String,
@@ -440,6 +449,57 @@ pub fn write_catalog_snapshot_path(
         entry_count: entry_paths.len(),
         p2p_ready_count,
         peer_source_count,
+    })
+}
+
+pub fn add_peer_source_to_catalog_entry_path(
+    catalog_entry_path: &Path,
+    output_path: &Path,
+    known_peer_base_url: &str,
+) -> Result<CatalogPeerSourceAttachment, String> {
+    let peer_base_url = normalize_known_peer_base_url(known_peer_base_url)?;
+    let label = catalog_entry_path.display().to_string();
+    let text = fs::read_to_string(catalog_entry_path)
+        .map_err(|error| format!("failed to read catalog entry {label}: {error}"))?;
+    let mut value: Value = serde_json::from_str(&text)
+        .map_err(|error| format!("failed to parse catalog entry {label}: {error}"))?;
+    let original_summary = validate_catalog_entry_value(&value, &label)?;
+    if original_summary.peer_source_count != 0 {
+        return Err(format!(
+            "{label} already has {} peer source(s); add-peer-source only upgrades proof-ready catalog entries",
+            original_summary.peer_source_count
+        ));
+    }
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| format!("{label} catalog entry must be a JSON object"))?;
+    object.insert("peer_source_count".to_string(), Value::Number(1.into()));
+    object.insert(
+        "peer_sources".to_string(),
+        serde_json::from_str(&known_peer_sources_json(&peer_base_url))
+            .map_err(|error| format!("failed to build peer source metadata: {error}"))?,
+    );
+
+    let output_label = output_path.display().to_string();
+    let updated_summary = validate_catalog_entry_value(&value, &output_label)?;
+    if updated_summary.model_id != original_summary.model_id {
+        return Err(format!(
+            "{output_label} model_id changed while attaching peer source"
+        ));
+    }
+    let text = serde_json::to_string_pretty(&value)
+        .map_err(|error| format!("failed to format catalog entry JSON: {error}"))?
+        + "\n";
+    ensure_parent_dir(output_path, "catalog entry")?;
+    fs::write(output_path, text)
+        .map_err(|error| format!("failed to write catalog entry: {error}"))?;
+
+    Ok(CatalogPeerSourceAttachment {
+        catalog_entry_path: catalog_entry_path.display().to_string(),
+        output_path: output_path.display().to_string(),
+        model_id: updated_summary.model_id,
+        peer_source_count: updated_summary.peer_source_count,
+        peer_base_url,
     })
 }
 
@@ -2824,6 +2884,121 @@ mod tests {
         assert!(text.contains("\"consent_status\": \"publisher-declared-consenting-peer\""));
         assert!(text.contains("\"project_server_serves_model_bytes\": false"));
         assert!(!text.contains("artifact_project_server_url\": \"http"));
+    }
+
+    #[test]
+    fn adds_peer_source_to_existing_catalog_entry() {
+        let dir = unique_dir("catalog-entry-add-peer");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let catalog_entry_with_peer_path =
+            dir.join("tiny-test-model-q8.catalog-entry.with-peer.v0.json");
+        let catalog_snapshot_path = dir.join("models.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            Some("example-org/example-source"),
+            None,
+        )
+        .unwrap();
+        let proof_ready_text = std::fs::read_to_string(&catalog_entry_path).unwrap();
+        assert!(proof_ready_text.contains("\"peer_source_count\": 0"));
+        assert!(!proof_ready_text.contains("\"peer_sources\""));
+
+        let report = add_peer_source_to_catalog_entry_path(
+            &catalog_entry_path,
+            &catalog_entry_with_peer_path,
+            "http://127.0.0.1:8123/peer-pieces",
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(&catalog_entry_with_peer_path).unwrap();
+
+        assert_eq!(report.model_id, "tinyrustlm/tiny-test-model-q8");
+        assert_eq!(report.peer_source_count, 1);
+        assert_eq!(report.peer_base_url, "http://127.0.0.1:8123/peer-pieces/");
+        assert!(text.contains("\"peer_source_count\": 1"));
+        assert!(text.contains("\"peer_sources\": ["));
+        assert!(text.contains("\"peer_base_url\": \"http://127.0.0.1:8123/peer-pieces/\""));
+        assert!(text.contains("\"project_server_serves_model_bytes\": false"));
+        assert!(!text.contains("artifact_project_server_url\": \"http"));
+
+        let snapshot_report =
+            write_catalog_snapshot_path(&catalog_snapshot_path, &[catalog_entry_with_peer_path])
+                .unwrap();
+        assert_eq!(snapshot_report.p2p_ready_count, 1);
+        assert_eq!(snapshot_report.peer_source_count, 1);
+        let original_text = std::fs::read_to_string(&catalog_entry_path).unwrap();
+        assert!(!original_text.contains("http://127.0.0.1:8123/peer-pieces/"));
+    }
+
+    #[test]
+    fn rejects_add_peer_source_project_server_peer_before_output() {
+        let dir = unique_dir("catalog-entry-add-project-peer");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let output_path = dir.join("tiny-test-model-q8.catalog-entry.with-peer.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let error = add_peer_source_to_catalog_entry_path(
+            &catalog_entry_path,
+            &output_path,
+            "http://MiniModel.org/peer-pieces/",
+        )
+        .unwrap_err();
+
+        assert!(error.contains("project server"));
+        assert!(error.contains("never serve model bytes"));
+        assert!(!output_path.exists());
+    }
+
+    #[test]
+    fn rejects_add_peer_source_when_entry_already_has_peer_source() {
+        let dir = unique_dir("catalog-entry-add-existing-peer");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let output_path = dir.join("tiny-test-model-q8.catalog-entry.replaced-peer.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            None,
+            Some("http://127.0.0.1:8123/peer-pieces"),
+        )
+        .unwrap();
+
+        let error = add_peer_source_to_catalog_entry_path(
+            &catalog_entry_path,
+            &output_path,
+            "http://127.0.0.1:9123/peer-pieces",
+        )
+        .unwrap_err();
+
+        assert!(error.contains("already has 1 peer source"));
+        assert!(error.contains("proof-ready catalog entries"));
+        assert!(!output_path.exists());
     }
 
     #[test]

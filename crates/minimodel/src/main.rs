@@ -213,6 +213,27 @@ fn run() -> Result<(), String> {
             println!("peer_offer.sha256: {}", report.peer_offer_sha256);
             println!("catalog_entry: {}", report.catalog_entry_path);
         }
+        "add-peer-source" => {
+            let catalog_entry_json = one_arg(&mut args, "catalog-entry-json")?;
+            let output_json = one_arg(&mut args, "output-json")?;
+            let known_peer_base_url = one_arg(&mut args, "known-peer-base-url")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::add_peer_source_to_catalog_entry_path(
+                Path::new(&catalog_entry_json),
+                Path::new(&output_json),
+                &known_peer_base_url,
+            )?;
+            println!("MiniModel peer source attached: {output_json}");
+            println!("source_catalog_entry: {}", report.catalog_entry_path);
+            println!("catalog_entry: {}", report.output_path);
+            println!("model.id: {}", report.model_id);
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("peer_source_count: {}", report.peer_source_count);
+            println!(
+                "catalog_snapshot_hint: minimodel write-catalog-snapshot models.v0.json \"{}\"",
+                report.output_path
+            );
+        }
         "write-catalog-snapshot" => {
             let output_json = one_arg(&mut args, "output-json")?;
             let entry_paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
@@ -261,6 +282,9 @@ fn print_usage() {
     eprintln!("  minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>");
     eprintln!(
         "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]"
+    );
+    eprintln!(
+        "  minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>"
     );
     eprintln!("  minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...");
 }

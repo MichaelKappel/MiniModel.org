@@ -90,7 +90,7 @@ Hugging Face `/resolve/`, Xet/CAS, Inference Providers, Inference Endpoints, and
 
 TinyRustLM may save a `minimodel.huggingface_conversion_request.v0` JSON handoff when a Hub result has no admitted `.slm` metadata yet. That request is not a manifest and not an execution grant. It is a local planning artifact for a converter or future peer workflow: review the source, convert once, validate the produced `.slm`, publish checksum-bound metadata, and only then make peer availability visible.
 
-TinyRustLM may also save a `.tinyrustlm-convert.ps1` handoff script for the same Hub record. The script should be treated as a local convenience wrapper around Rust commands, not as MiniModel metadata and not as an acquisition grant. Its expected command chain is `inspect-safetensors`, `plan-safetensors-source`, `convert-safetensors-trained`, `validate`, `validate-manifest`, and then MiniModel `prepare-peer-share`; it requires a user-owned local `.safetensors` path and must not download model bytes.
+TinyRustLM may also save a `.tinyrustlm-convert.ps1` handoff script for the same Hub record. The script should be treated as a local convenience wrapper around Rust commands, not as MiniModel metadata and not as an acquisition grant. Its expected first command is `tinyrustlm-slm-pack convert-huggingface-request`, which consumes the saved conversion request plus a user-owned local `.safetensors` path, writes a verified `.slm`, and writes a checksum-bound conversion receipt before MiniModel `prepare-peer-share` publishes metadata. The script must not download model bytes.
 
 The peer-offer output is a text manifest, usually named `.minimodel-peer-offer`, with SHA-256 artifact identity, fixed-size chunk SHA-256 rows, a chunk-list SHA-256, and a Merkle root. It proves what a future peer client must transfer and what the recipient must reverify before local browser import. It is not executable code and not a project-hosted artifact URL.
 
@@ -131,6 +131,14 @@ When `[known-peer-base-url]` is supplied, `write-catalog-entry` validates the di
 | `peer_sources[].consent_status` | `publisher-declared-consenting-peer`. |
 | `peer_sources[].project_server_serves_model_bytes` | Must be `false`. |
 | `peer_sources[].project_server_runs_model_bytes` | Must be `false`. |
+
+If a catalog entry was generated before a consenting peer URL was known, MiniModel can attach that peer-source metadata later without rerunning conversion:
+
+```text
+minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>
+```
+
+`add-peer-source` reads and validates the existing catalog entry, rejects project-server peer hosts, writes exactly one `known-direct-http-peer-v0` row, revalidates `peer_source_count`, and writes a new catalog-entry JSON for the next `write-catalog-snapshot` run. It does not upload, proxy, or fetch `.slm` bytes.
 
 TinyRustLM may use a catalog-listed peer source to prefill the receiver request, but Rust still fetches, assembles, verifies, and writes a local import receipt before the user imports the `.slm` through the browser file picker.
 

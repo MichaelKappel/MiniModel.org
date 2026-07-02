@@ -62,14 +62,15 @@ Hugging Face search results are source records, not runnable TinyRustLM model en
 
 1. A user or converter worker selects a Hugging Face model id and saves local handoff files.
 2. The conversion-request JSON records source identity, target quantization, evidence gates, and no-server-byte boundaries.
-3. The optional `.tinyrustlm-convert.ps1` script runs local Rust packer commands: `inspect-safetensors`, `plan-safetensors-source`, `convert-safetensors-trained`, `validate`, and `validate-manifest`.
+3. The optional `.tinyrustlm-convert.ps1` script runs `tinyrustlm-slm-pack convert-huggingface-request` with the saved request plus a user-owned local `.safetensors` path.
 4. Conversion happens outside project servers, using reviewed source bytes, config, tokenizer, license, and model-card metadata. The generated script does not download bytes and does not call a project proxy.
-5. The converter writes a local `.slm`, validates it with the Rust packer/verifier, and records runtime-smoke plus eval/admission evidence.
+5. The converter writes a local `.slm`, validates it with the Rust packer/verifier, and records a checksum-bound conversion receipt plus runtime-smoke and eval/admission evidence.
 6. The converter runs `minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]`.
 7. `prepare-peer-share` validates the `.slm`, writes a MiniModel manifest, writes a `.minimodel-peer-offer` proof, exports local peer pieces, and writes catalog JSON in one output directory.
 8. The converter can run `minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...` to merge one or more generated entries into a metadata-only catalog snapshot after Rust rejects artifact URLs, project-server byte/execution claims, duplicate model ids, peer-source count drift, and project-server peer hosts.
-9. MiniModel.org may list the resulting metadata with `source_huggingface_model_id`, artifact byte count, artifact SHA-256, manifest route, evidence routes, `peer_offer_route`, `peer_offer_sha256`, `peer_offer_merkle_root_sha256`, `peer_hint_status`, `peer_import_status`, and optional `peer_source_count` / `peer_sources` when a consenting direct peer is already known.
-10. P2P transfer may use the metadata and chunk/Merkle fields so later users can obtain verified `.slm` bytes from consenting peers instead of repeating a large source download and conversion.
+9. If a consenting peer URL becomes known after the proof-ready entry exists, the converter can run `minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>` and then regenerate the metadata-only snapshot.
+10. MiniModel.org may list the resulting metadata with `source_huggingface_model_id`, artifact byte count, artifact SHA-256, manifest route, evidence routes, `peer_offer_route`, `peer_offer_sha256`, `peer_offer_merkle_root_sha256`, `peer_hint_status`, `peer_import_status`, and optional `peer_source_count` / `peer_sources` when a consenting direct peer is already known.
+11. P2P transfer may use the metadata and chunk/Merkle fields so later users can obtain verified `.slm` bytes from consenting peers instead of repeating a large source download and conversion.
 
 Until that chain exists for a model, the honest status is `Rust conversion required`.
 
@@ -97,6 +98,14 @@ minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-hugg
 ```
 
 The command rejects drift between the manifest and proof before writing JSON. Its output may set `peer_hint_status` to `peer-offer-ready-known-peer-needed` and `peer_import_status` to `request-script-ready`. Without a known peer URL, that status means TinyRustLM can offer a P2P import request/script after the user enters one consenting peer URL. With `[known-peer-base-url]`, the command validates the peer URL, rejects project-server hosts, and writes `peer_source_count=1` plus a `peer_sources` row so TinyRustLM can show `P2P Import` immediately while still saving a Rust reverify request/script instead of fetching bytes in the browser.
+
+MiniModel can attach peer-source metadata after conversion when the converter did not know the public peer endpoint yet:
+
+```text
+minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>
+```
+
+The command validates the existing entry, rejects project-server peer hosts, writes one consenting direct-peer row, and revalidates the result before writing. This is the low-friction "converted once, listed as P2P-ready later" step.
 
 MiniModel can merge generated entries into a metadata-only catalog snapshot with:
 

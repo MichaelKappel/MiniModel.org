@@ -1,5 +1,5 @@
-profile: minimodel.workspace.v4
-updated_utc: 2026-07-02T00:12:07Z
+profile: minimodel.workspace.v5
+updated_utc: 2026-07-02T04:53:29Z
 site: MiniModel.org
 workspace_root: E:\Source\Rust\MiniModel.org
 coordinator: E:\Source\Rust\workspace.uai
@@ -30,7 +30,7 @@ required_private_read_order:
   - .uai/short-term-memory.uai
 current_state:
   - MiniModel.org is the Rust-first P2P tiny model package exchange roadmap site.
-  - Source options are user-owned local files/lists, user-triggered Hugging Face discovery, local share metadata export after verified `.slm` import, and future consent-based P2P transfer; all converge on local `.slm` verification.
+  - Source options are user-owned local files/lists, user-triggered Hugging Face discovery, local Hugging Face conversion-request/script handoff, local share metadata export after verified `.slm` import, and future consent-based P2P transfer; all converge on local `.slm` verification.
   - First implementation docs now route manifest v0, the local Rust verifier MVP, metadata-only catalog boundaries, and examples without model-byte hosting.
   - The live public-safe export is verified.
   - Direct public .uai and agent-file-handoff access is denied.

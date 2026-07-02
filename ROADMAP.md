@@ -24,7 +24,9 @@ MiniModel.org should support three source lanes, all ending in local verificatio
 
 All source lanes must converge on a user-controlled local `.slm` artifact, a local verifier result or receipt, and a browser file-picker import into TinyRustLM. Hugging Face Inference Providers, Inference Endpoints, and executable Spaces are remote execution products, not MiniModel or TinyRustLM run paths.
 
-The Hugging Face lane should produce a local conversion request when no admitted `.slm` metadata exists yet. That request identifies the upstream model id, preferred `.slm` quantization targets, required review/conversion/eval gates, and the rule that project servers do not serve the resulting bytes. Once one user or converter completes the chain, TinyRustLM can export a `minimodel.local_slm_share_metadata.v0` bundle with artifact SHA-256, chunk hashes, and a Merkle root. MiniModel metadata can then advertise the converted artifact by checksum and later peer hints so other users can obtain the admitted `.slm` through consent-based P2P instead of repeating a large source download and conversion.
+The Hugging Face lane should produce local handoff files when no admitted `.slm` metadata exists yet. The conversion-request JSON identifies the upstream model id, preferred `.slm` quantization targets, required review/conversion/eval gates, and the rule that project servers do not serve the resulting bytes. TinyRustLM may also save a `.tinyrustlm-convert.ps1` script that runs the local Rust packer commands for `inspect-safetensors`, `plan-safetensors-source`, `convert-safetensors-trained`, `validate`, and `validate-manifest` against user-owned local files. The script does not download model bytes.
+
+Once one user or converter completes the chain, TinyRustLM can export a `minimodel.local_slm_share_metadata.v0` bundle with artifact SHA-256, chunk hashes, and a Merkle root. MiniModel metadata can then advertise the converted artifact by checksum and later peer hints so other users can obtain the admitted `.slm` through consent-based P2P instead of repeating a large source download and conversion.
 
 ## Manifest MVP
 

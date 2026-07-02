@@ -58,11 +58,13 @@ Hugging Face `/resolve/` URLs, LFS/Xet/CAS transfers, Inference Providers, Infer
 
 Hugging Face search results are source records, not runnable TinyRustLM model entries. A result becomes useful to TinyRustLM only after the conversion chain produces a checksum-bound `.slm` artifact:
 
-1. A user or converter worker selects a Hugging Face model id and saves a conversion request.
-2. Conversion happens outside project servers, using reviewed source bytes, config, tokenizer, license, and model-card metadata.
-3. The converter writes a local `.slm`, validates it with the Rust packer/verifier, and records runtime-smoke plus eval/admission evidence.
-4. MiniModel.org may list the resulting metadata with `source_huggingface_model_id`, artifact byte count, artifact SHA-256, manifest route, evidence routes, and `peer_hint_status`.
-5. Future P2P transfer may use the metadata and chunk/Merkle fields so later users can obtain verified `.slm` bytes from consenting peers instead of repeating a large source download and conversion.
+1. A user or converter worker selects a Hugging Face model id and saves local handoff files.
+2. The conversion-request JSON records source identity, target quantization, evidence gates, and no-server-byte boundaries.
+3. The optional `.tinyrustlm-convert.ps1` script runs local Rust packer commands: `inspect-safetensors`, `plan-safetensors-source`, `convert-safetensors-trained`, `validate`, and `validate-manifest`.
+4. Conversion happens outside project servers, using reviewed source bytes, config, tokenizer, license, and model-card metadata. The generated script does not download bytes and does not call a project proxy.
+5. The converter writes a local `.slm`, validates it with the Rust packer/verifier, and records runtime-smoke plus eval/admission evidence.
+6. MiniModel.org may list the resulting metadata with `source_huggingface_model_id`, artifact byte count, artifact SHA-256, manifest route, evidence routes, and `peer_hint_status`.
+7. Future P2P transfer may use the metadata and chunk/Merkle fields so later users can obtain verified `.slm` bytes from consenting peers instead of repeating a large source download and conversion.
 
 Until that chain exists for a model, the honest status is `conversion required`.
 
@@ -82,7 +84,7 @@ The bundle may be submitted for review or used by future peer software, but it i
 TinyRustLM should expose the same source lanes in plain language:
 
 - `Your Local Files`: first-class runnable path through the browser file picker.
-- `Hugging Face`: user-triggered metadata discovery, model-card review, source revision context, and API endpoint awareness only.
+- `Hugging Face`: user-triggered metadata discovery, model-card review, source revision context, API endpoint awareness, conversion-request JSON, and optional local Rust conversion-script handoff only.
 - `P2P Exchange`: MiniModel metadata for converted `.slm` records now, future peer-transfer flow later, still requiring local receipt and `.slm` verification before browser execution.
 
 Advanced source details may show catalog URLs, Hugging Face search fields, checksums, manifests, evidence routes, and verifier status, but the first-load Chat mode should keep those behind progressive disclosure.

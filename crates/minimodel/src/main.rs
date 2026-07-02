@@ -286,6 +286,26 @@ fn run() -> Result<(), String> {
             println!("p2p_ready_count: {}", report.p2p_ready_count);
             println!("peer_source_count: {}", report.peer_source_count);
         }
+        "write-catalog-snapshot-with-announcements" => {
+            let output_json = one_arg(&mut args, "output-json")?;
+            let rest: Vec<String> = args.collect();
+            let (entry_paths, announcement_paths) = split_catalog_snapshot_announcement_args(rest)?;
+            let report = minimodel_core::write_catalog_snapshot_with_announcements_path(
+                Path::new(&output_json),
+                &entry_paths,
+                &announcement_paths,
+            )?;
+            println!("MiniModel catalog snapshot written with announcements: {output_json}");
+            println!("catalog: {}", report.catalog_path);
+            println!("entry_count: {}", report.entry_count);
+            println!("announcement_count: {}", report.announcement_count);
+            println!(
+                "applied_announcement_count: {}",
+                report.applied_announcement_count
+            );
+            println!("p2p_ready_count: {}", report.p2p_ready_count);
+            println!("peer_source_count: {}", report.peer_source_count);
+        }
         _ => {
             print_usage();
             return Err(format!("unsupported command {command}"));
@@ -334,6 +354,9 @@ fn print_usage() {
         "  minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>..."
     );
     eprintln!("  minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...");
+    eprintln!(
+        "  minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>..."
+    );
 }
 
 fn split_catalog_entry_optional_args(
@@ -348,6 +371,27 @@ fn split_catalog_entry_optional_args(
 
 fn is_peer_url_arg(value: &str) -> bool {
     value.trim_start().starts_with("http://")
+}
+
+fn split_catalog_snapshot_announcement_args(
+    args: Vec<String>,
+) -> Result<(Vec<PathBuf>, Vec<PathBuf>), String> {
+    let Some(marker_index) = args.iter().position(|arg| arg == "--announcements") else {
+        return Err(
+            "write-catalog-snapshot-with-announcements requires --announcements before announcement JSON paths"
+                .to_string(),
+        );
+    };
+    let entry_paths: Vec<PathBuf> = args[..marker_index].iter().map(PathBuf::from).collect();
+    let announcement_paths: Vec<PathBuf> =
+        args[marker_index + 1..].iter().map(PathBuf::from).collect();
+    if entry_paths.is_empty() {
+        return Err("missing catalog-entry-json before --announcements".to_string());
+    }
+    if announcement_paths.is_empty() {
+        return Err("missing announcement-json after --announcements".to_string());
+    }
+    Ok((entry_paths, announcement_paths))
 }
 
 #[cfg(test)]
@@ -381,5 +425,40 @@ mod tests {
 
         assert_eq!(source.as_deref(), Some("example-org/source-model"));
         assert_eq!(peer.as_deref(), Some("http://127.0.0.1:8123/"));
+    }
+
+    #[test]
+    fn catalog_snapshot_announcement_args_split_entries_and_announcements() {
+        let (entries, announcements) = split_catalog_snapshot_announcement_args(vec![
+            "entry-a.json".to_string(),
+            "entry-b.json".to_string(),
+            "--announcements".to_string(),
+            "announcement-a.json".to_string(),
+            "announcement-b.json".to_string(),
+        ])
+        .unwrap();
+
+        assert_eq!(
+            entries,
+            vec![PathBuf::from("entry-a.json"), PathBuf::from("entry-b.json")]
+        );
+        assert_eq!(
+            announcements,
+            vec![
+                PathBuf::from("announcement-a.json"),
+                PathBuf::from("announcement-b.json")
+            ]
+        );
+    }
+
+    #[test]
+    fn catalog_snapshot_announcement_args_require_marker() {
+        let error = split_catalog_snapshot_announcement_args(vec![
+            "entry-a.json".to_string(),
+            "announcement-a.json".to_string(),
+        ])
+        .unwrap_err();
+
+        assert!(error.contains("--announcements"));
     }
 }

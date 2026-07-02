@@ -69,9 +69,10 @@ Hugging Face search results are source records, not runnable TinyRustLM model en
 7. `prepare-peer-share` validates the `.slm`, writes a MiniModel manifest, writes a `.minimodel-peer-offer` proof, exports local peer pieces, and writes catalog JSON in one output directory.
 8. If a consenting peer URL becomes known after the proof-ready entry exists, the converter can run `minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>` and send the announcement metadata to a catalog maintainer, or run `minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>` for a direct local entry update.
 9. A catalog maintainer can run `minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...` to validate model/artifact/proof identity, deduplicate peer URLs, and write `peer_sources` without touching model bytes.
-10. The converter or maintainer can run `minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...` to merge one or more generated entries into a metadata-only catalog snapshot after Rust rejects artifact URLs, project-server byte/execution claims, duplicate model ids, peer-source count drift, and project-server peer hosts.
-11. MiniModel.org may list the resulting metadata with `source_huggingface_model_id`, artifact byte count, artifact SHA-256, manifest route, evidence routes, `peer_offer_route`, `peer_offer_sha256`, `peer_offer_merkle_root_sha256`, `peer_hint_status`, `peer_import_status`, and optional `peer_source_count` / `peer_sources` when a consenting direct peer is already known through a validated entry or announcement.
-12. P2P transfer may use the metadata and chunk/Merkle fields so later users can obtain verified `.slm` bytes from consenting peers instead of repeating a large source download and conversion.
+10. For many entries or many announcement files, a catalog maintainer can run `minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>...` to validate matching announcements and write the final metadata-only snapshot in one checked command.
+11. The converter or maintainer can run `minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...` to merge one or more generated entries into a metadata-only catalog snapshot after Rust rejects artifact URLs, project-server byte/execution claims, duplicate model ids, peer-source count drift, and project-server peer hosts.
+12. MiniModel.org may list the resulting metadata with `source_huggingface_model_id`, artifact byte count, artifact SHA-256, manifest route, evidence routes, `peer_offer_route`, `peer_offer_sha256`, `peer_offer_merkle_root_sha256`, `peer_hint_status`, `peer_import_status`, and optional `peer_source_count` / `peer_sources` when a consenting direct peer is already known through a validated entry or announcement.
+13. P2P transfer may use the metadata and chunk/Merkle fields so later users can obtain verified `.slm` bytes from consenting peers instead of repeating a large source download and conversion.
 
 Until that chain exists for a model, the honest status is `Rust conversion required`.
 
@@ -113,6 +114,7 @@ For catalog publication, a converter can publish a metadata-only peer-source ann
 ```text
 minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>
 minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...
+minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>...
 ```
 
 The announcement path lets a converter hand over a small JSON file instead of a rewritten catalog entry or model bytes. The apply command validates the announcement against the catalog entry and produces the P2P-ready entry used by `write-catalog-snapshot`.

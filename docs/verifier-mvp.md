@@ -39,6 +39,7 @@ minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-hugg
 minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-url>
 minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>
 minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...
+minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>...
 minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
 ```
 
@@ -67,6 +68,8 @@ minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
 `write-peer-source-announcement` is the portable availability step. It reads a validated catalog-entry JSON plus a consenting direct peer URL and writes `minimodel.peer_source_announcement` JSON. The announcement binds model id, artifact byte count, artifact SHA256, peer-offer SHA256, peer-offer Merkle root, the catalog entry checksum, and one validated `known-direct-http-peer-v0` row. It is metadata only and still does not upload, proxy, fetch, or serve model bytes.
 
 `apply-peer-source-announcements` is the catalog-maintainer merge step. It validates a proof-ready catalog entry, validates one or more peer-source announcements, rejects model/artifact/peer-offer drift, deduplicates peer URLs, writes `peer_sources`, revalidates `peer_source_count`, and produces a new catalog-entry JSON for the next `write-catalog-snapshot` run. This is the first durable "converted once, later users see P2P Import by default" publication path while keeping project servers out of the byte path.
+
+`write-catalog-snapshot-with-announcements` is the maintainer batch publication step. It validates one or more catalog-entry JSON files, validates one or more peer-source announcement JSON files, rejects unmatched announcement model ids, applies only announcements that match their entry, deduplicates peer URLs, and writes the final metadata-only `models.v0.json` snapshot directly. This is the easiest checked path when many converters have sent availability metadata.
 
 `write-catalog-snapshot` validates one or more catalog-entry JSON files and writes a metadata-only `minimodel.model_catalog` snapshot. It rejects duplicate `model_id` values, artifact/model/download URLs, project-server byte/execution claims, peer-source count drift, unsupported peer-source rows, and project-server peer hosts. This is the first Rust-owned publication step for "converted once, listed as P2P-ready later"; the snapshot can be loaded by TinyRustLM as metadata, while model bytes still come only from local files or consenting peers.
 
@@ -182,6 +185,7 @@ cargo run -p minimodel -- write-catalog-entry examples\tiny-test-model-q8.minimo
 cargo run -p minimodel -- add-peer-source examples\catalog-entry.v0.json examples\catalog-entry.later-peer.v0.json http://127.0.0.1:8123/
 cargo run -p minimodel -- write-peer-source-announcement examples\catalog-entry.v0.json examples\catalog-entry.peer-source-announcement.v0.json http://127.0.0.1:8123/
 cargo run -p minimodel -- apply-peer-source-announcements examples\catalog-entry.v0.json examples\catalog-entry.announced-peer.v0.json examples\catalog-entry.peer-source-announcement.v0.json
+cargo run -p minimodel -- write-catalog-snapshot-with-announcements .\models.v0.json examples\catalog-entry.v0.json --announcements examples\catalog-entry.peer-source-announcement.v0.json
 cargo run -p minimodel -- write-catalog-snapshot .\models.v0.json examples\catalog-entry.v0.json
 ```
 

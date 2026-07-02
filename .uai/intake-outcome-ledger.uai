@@ -8,7 +8,7 @@ latest_scan:
 latest_implementation_note:
   id: minimodel_peer_source_announcement_2026_07_02
   disposition: implemented
-  source_impact: Added portable `write-peer-source-announcement` metadata and maintainer-side `apply-peer-source-announcements` so converted-once availability can become P2P-ready catalog metadata after drift checks, without project servers hosting bytes.
+  source_impact: Added portable `write-peer-source-announcement` metadata, maintainer-side `apply-peer-source-announcements`, and batch `write-catalog-snapshot-with-announcements` so converted-once availability can become P2P-ready catalog metadata after drift checks, without project servers hosting bytes.
   memory_impact: Updated MiniModel.org workspace/short-term memory and routed the July 2 TinyRustLM/MiniModel intake synthesis into the verifier/catalog boundary.
   active_intake_after: placeholder_only
 previous_implementation_note:

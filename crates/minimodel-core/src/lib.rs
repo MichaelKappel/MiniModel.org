@@ -75,6 +75,16 @@ pub struct CatalogSnapshotReport {
 }
 
 #[derive(Debug, Clone)]
+pub struct CatalogSnapshotWithAnnouncementsReport {
+    pub catalog_path: String,
+    pub entry_count: usize,
+    pub announcement_count: usize,
+    pub applied_announcement_count: usize,
+    pub p2p_ready_count: usize,
+    pub peer_source_count: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct CatalogPeerSourceAttachment {
     pub catalog_entry_path: String,
     pub output_path: String,
@@ -482,6 +492,104 @@ pub fn write_catalog_snapshot_path(
     })
 }
 
+pub fn write_catalog_snapshot_with_announcements_path(
+    output_path: &Path,
+    entry_paths: &[std::path::PathBuf],
+    announcement_paths: &[std::path::PathBuf],
+) -> Result<CatalogSnapshotWithAnnouncementsReport, String> {
+    if entry_paths.is_empty() {
+        return Err("catalog snapshot requires at least one catalog-entry JSON".to_string());
+    }
+    if announcement_paths.is_empty() {
+        return Err(
+            "catalog snapshot with announcements requires at least one announcement JSON"
+                .to_string(),
+        );
+    }
+
+    let announcements: Vec<(String, PeerSourceAnnouncement)> = announcement_paths
+        .iter()
+        .map(|path| read_peer_source_announcement_path(path))
+        .collect::<Result<_, _>>()?;
+    let mut entry_values = Vec::with_capacity(entry_paths.len());
+    let mut model_ids = BTreeSet::new();
+
+    for entry_path in entry_paths {
+        let label = entry_path.display().to_string();
+        let text = fs::read_to_string(entry_path)
+            .map_err(|error| format!("failed to read catalog entry {label}: {error}"))?;
+        let value: Value = serde_json::from_str(&text)
+            .map_err(|error| format!("failed to parse catalog entry {label}: {error}"))?;
+        let summary = validate_catalog_entry_value(&value, &label)?;
+        if !model_ids.insert(summary.model_id.clone()) {
+            return Err(format!(
+                "duplicate catalog model_id {} in {label}",
+                summary.model_id
+            ));
+        }
+        entry_values.push((label, value, summary.model_id));
+    }
+
+    for (announcement_label, announcement) in &announcements {
+        if !model_ids.contains(&announcement.model_id) {
+            return Err(format!(
+                "{announcement_label} model_id {} did not match any catalog entry",
+                announcement.model_id
+            ));
+        }
+    }
+
+    let mut entries = Vec::with_capacity(entry_values.len());
+    let mut p2p_ready_count = 0usize;
+    let mut peer_source_count = 0usize;
+    let mut applied_announcement_count = 0usize;
+
+    for (label, value, model_id) in entry_values {
+        let matching: Vec<(String, PeerSourceAnnouncement)> = announcements
+            .iter()
+            .filter(|(_, announcement)| announcement.model_id == model_id)
+            .cloned()
+            .collect();
+        let (value, applied_count, final_peer_source_count) = if matching.is_empty() {
+            let summary = validate_catalog_entry_value(&value, &label)?;
+            (value, 0, summary.peer_source_count)
+        } else {
+            let output_label = format!("{label} with peer-source announcements");
+            let (value, _model_id, applied_count, final_peer_source_count) =
+                apply_peer_source_announcements_to_catalog_value(
+                    &label,
+                    value,
+                    &matching,
+                    &output_label,
+                )?;
+            (value, applied_count, final_peer_source_count)
+        };
+        if final_peer_source_count > 0 {
+            p2p_ready_count += 1;
+            peer_source_count += final_peer_source_count;
+        }
+        applied_announcement_count += applied_count;
+        entries.push(value);
+    }
+
+    let catalog = catalog_snapshot_value(entries)?;
+    let text = serde_json::to_string_pretty(&catalog)
+        .map_err(|error| format!("failed to format catalog snapshot JSON: {error}"))?
+        + "\n";
+    ensure_parent_dir(output_path, "catalog snapshot")?;
+    fs::write(output_path, text)
+        .map_err(|error| format!("failed to write catalog snapshot: {error}"))?;
+
+    Ok(CatalogSnapshotWithAnnouncementsReport {
+        catalog_path: output_path.display().to_string(),
+        entry_count: entry_paths.len(),
+        announcement_count: announcement_paths.len(),
+        applied_announcement_count,
+        p2p_ready_count,
+        peer_source_count,
+    })
+}
+
 pub fn add_peer_source_to_catalog_entry_path(
     catalog_entry_path: &Path,
     output_path: &Path,
@@ -654,95 +762,20 @@ pub fn apply_peer_source_announcements_path(
     let label = catalog_entry_path.display().to_string();
     let text = fs::read_to_string(catalog_entry_path)
         .map_err(|error| format!("failed to read catalog entry {label}: {error}"))?;
-    let mut value: Value = serde_json::from_str(&text)
+    let value: Value = serde_json::from_str(&text)
         .map_err(|error| format!("failed to parse catalog entry {label}: {error}"))?;
-    let summary = validate_catalog_entry_value(&value, &label)?;
-    let artifact_byte_count = json_required_usize(&value, "artifact_byte_count", &label)?;
-    let artifact_sha256 =
-        normalize_sha256(&json_required_string(&value, "artifact_sha256", &label)?)?;
-    let peer_offer_sha256 =
-        normalize_sha256(&json_required_string(&value, "peer_offer_sha256", &label)?)?;
-    let peer_offer_merkle_root_sha256 = normalize_sha256(&json_required_string(
-        &value,
-        "peer_offer_merkle_root_sha256",
-        &label,
-    )?)?;
-
-    let mut applied = Vec::new();
-    for path in announcement_paths {
-        let announcement_label = path.display().to_string();
-        let text = fs::read_to_string(path).map_err(|error| {
-            format!("failed to read peer source announcement {announcement_label}: {error}")
-        })?;
-        let announcement_value: Value = serde_json::from_str(&text).map_err(|error| {
-            format!("failed to parse peer source announcement {announcement_label}: {error}")
-        })?;
-        let announcement =
-            validate_peer_source_announcement_value(&announcement_value, &announcement_label)?;
-        if announcement.model_id != summary.model_id {
-            return Err(format!(
-                "{announcement_label} model_id {} did not match catalog model_id {}",
-                announcement.model_id, summary.model_id
-            ));
-        }
-        if announcement.artifact_byte_count != artifact_byte_count {
-            return Err(format!(
-                "{announcement_label} artifact_byte_count {} did not match catalog artifact_byte_count {}",
-                announcement.artifact_byte_count, artifact_byte_count
-            ));
-        }
-        require_normalized_equal(
-            "artifact_sha256",
-            &artifact_sha256,
-            &announcement.artifact_sha256,
-            &announcement_label,
-        )?;
-        require_normalized_equal(
-            "peer_offer_sha256",
-            &peer_offer_sha256,
-            &announcement.peer_offer_sha256,
-            &announcement_label,
-        )?;
-        require_normalized_equal(
-            "peer_offer_merkle_root_sha256",
-            &peer_offer_merkle_root_sha256,
-            &announcement.peer_offer_merkle_root_sha256,
-            &announcement_label,
-        )?;
-        applied.push(announcement);
-    }
-
-    let object = value
-        .as_object_mut()
-        .ok_or_else(|| format!("{label} catalog entry must be a JSON object"))?;
-    let mut peer_sources = match object.remove("peer_sources") {
-        Some(Value::Array(values)) => values,
-        Some(_) => return Err(format!("{label} peer_sources must be an array")),
-        None => Vec::new(),
-    };
-    let mut seen = BTreeSet::new();
-    for (index, peer_source) in peer_sources.iter().enumerate() {
-        let peer_label = format!("{label} peer_sources[{index}]");
-        seen.insert(validate_catalog_peer_source_value(
-            peer_source,
-            &peer_label,
-        )?);
-    }
-    let mut applied_count = 0usize;
-    for announcement in applied {
-        if seen.insert(announcement.peer_base_url.clone()) {
-            peer_sources.push(announcement.peer_source);
-            applied_count += 1;
-        }
-    }
-    object.insert(
-        "peer_source_count".to_string(),
-        Value::Number((peer_sources.len() as u64).into()),
-    );
-    object.insert("peer_sources".to_string(), Value::Array(peer_sources));
-
     let output_label = output_path.display().to_string();
-    let updated_summary = validate_catalog_entry_value(&value, &output_label)?;
+    let announcements: Vec<(String, PeerSourceAnnouncement)> = announcement_paths
+        .iter()
+        .map(|path| read_peer_source_announcement_path(path))
+        .collect::<Result<_, _>>()?;
+    let (value, model_id, applied_count, peer_source_count) =
+        apply_peer_source_announcements_to_catalog_value(
+            &label,
+            value,
+            &announcements,
+            &output_label,
+        )?;
     let text = serde_json::to_string_pretty(&value)
         .map_err(|error| format!("failed to format catalog entry JSON: {error}"))?
         + "\n";
@@ -753,9 +786,9 @@ pub fn apply_peer_source_announcements_path(
     Ok(PeerSourceAnnouncementMerge {
         catalog_entry_path: catalog_entry_path.display().to_string(),
         output_path: output_path.display().to_string(),
-        model_id: updated_summary.model_id,
+        model_id,
         applied_announcement_count: applied_count,
-        peer_source_count: updated_summary.peer_source_count,
+        peer_source_count,
     })
 }
 
@@ -1444,6 +1477,115 @@ fn validate_catalog_peer_source_value(value: &Value, label: &str) -> Result<Stri
     require_json_bool_false(value, "project_server_serves_model_bytes", label)?;
     require_json_bool_false(value, "project_server_runs_model_bytes", label)?;
     normalize_known_peer_base_url(&json_required_string(value, "peer_base_url", label)?)
+}
+
+fn read_peer_source_announcement_path(
+    path: &Path,
+) -> Result<(String, PeerSourceAnnouncement), String> {
+    let announcement_label = path.display().to_string();
+    let text = fs::read_to_string(path).map_err(|error| {
+        format!("failed to read peer source announcement {announcement_label}: {error}")
+    })?;
+    let announcement_value: Value = serde_json::from_str(&text).map_err(|error| {
+        format!("failed to parse peer source announcement {announcement_label}: {error}")
+    })?;
+    let announcement =
+        validate_peer_source_announcement_value(&announcement_value, &announcement_label)?;
+    Ok((announcement_label, announcement))
+}
+
+fn apply_peer_source_announcements_to_catalog_value(
+    label: &str,
+    mut value: Value,
+    announcements: &[(String, PeerSourceAnnouncement)],
+    output_label: &str,
+) -> Result<(Value, String, usize, usize), String> {
+    if announcements.is_empty() {
+        return Err("at least one peer source announcement is required".to_string());
+    }
+    let summary = validate_catalog_entry_value(&value, label)?;
+    let artifact_byte_count = json_required_usize(&value, "artifact_byte_count", label)?;
+    let artifact_sha256 =
+        normalize_sha256(&json_required_string(&value, "artifact_sha256", label)?)?;
+    let peer_offer_sha256 =
+        normalize_sha256(&json_required_string(&value, "peer_offer_sha256", label)?)?;
+    let peer_offer_merkle_root_sha256 = normalize_sha256(&json_required_string(
+        &value,
+        "peer_offer_merkle_root_sha256",
+        label,
+    )?)?;
+
+    let mut applied = Vec::with_capacity(announcements.len());
+    for (announcement_label, announcement) in announcements {
+        if announcement.model_id != summary.model_id {
+            return Err(format!(
+                "{announcement_label} model_id {} did not match catalog model_id {}",
+                announcement.model_id, summary.model_id
+            ));
+        }
+        if announcement.artifact_byte_count != artifact_byte_count {
+            return Err(format!(
+                "{announcement_label} artifact_byte_count {} did not match catalog artifact_byte_count {}",
+                announcement.artifact_byte_count, artifact_byte_count
+            ));
+        }
+        require_normalized_equal(
+            "artifact_sha256",
+            &artifact_sha256,
+            &announcement.artifact_sha256,
+            announcement_label,
+        )?;
+        require_normalized_equal(
+            "peer_offer_sha256",
+            &peer_offer_sha256,
+            &announcement.peer_offer_sha256,
+            announcement_label,
+        )?;
+        require_normalized_equal(
+            "peer_offer_merkle_root_sha256",
+            &peer_offer_merkle_root_sha256,
+            &announcement.peer_offer_merkle_root_sha256,
+            announcement_label,
+        )?;
+        applied.push(announcement.clone());
+    }
+
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| format!("{label} catalog entry must be a JSON object"))?;
+    let mut peer_sources = match object.remove("peer_sources") {
+        Some(Value::Array(values)) => values,
+        Some(_) => return Err(format!("{label} peer_sources must be an array")),
+        None => Vec::new(),
+    };
+    let mut seen = BTreeSet::new();
+    for (index, peer_source) in peer_sources.iter().enumerate() {
+        let peer_label = format!("{label} peer_sources[{index}]");
+        seen.insert(validate_catalog_peer_source_value(
+            peer_source,
+            &peer_label,
+        )?);
+    }
+    let mut applied_count = 0usize;
+    for announcement in applied {
+        if seen.insert(announcement.peer_base_url.clone()) {
+            peer_sources.push(announcement.peer_source);
+            applied_count += 1;
+        }
+    }
+    object.insert(
+        "peer_source_count".to_string(),
+        Value::Number((peer_sources.len() as u64).into()),
+    );
+    object.insert("peer_sources".to_string(), Value::Array(peer_sources));
+
+    let updated_summary = validate_catalog_entry_value(&value, output_label)?;
+    Ok((
+        value,
+        updated_summary.model_id,
+        applied_count,
+        updated_summary.peer_source_count,
+    ))
 }
 
 fn validate_peer_source_announcement_value(
@@ -3396,6 +3538,60 @@ mod tests {
     }
 
     #[test]
+    fn writes_catalog_snapshot_with_peer_source_announcements() {
+        let dir = unique_dir("peer-source-announcement-snapshot");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let announcement_a_path = dir.join("tiny-test-model-q8.peer-source-announcement-a.v0.json");
+        let announcement_b_path = dir.join("tiny-test-model-q8.peer-source-announcement-b.v0.json");
+        let catalog_snapshot_path = dir.join("models.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            Some("example-org/example-source"),
+            None,
+        )
+        .unwrap();
+        write_peer_source_announcement_path(
+            &catalog_entry_path,
+            &announcement_a_path,
+            "http://127.0.0.1:8123/peer-pieces",
+        )
+        .unwrap();
+        write_peer_source_announcement_path(
+            &catalog_entry_path,
+            &announcement_b_path,
+            "http://127.0.0.1:9123/peer-pieces",
+        )
+        .unwrap();
+
+        let report = write_catalog_snapshot_with_announcements_path(
+            &catalog_snapshot_path,
+            std::slice::from_ref(&catalog_entry_path),
+            &[announcement_a_path, announcement_b_path],
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(&catalog_snapshot_path).unwrap();
+
+        assert_eq!(report.entry_count, 1);
+        assert_eq!(report.announcement_count, 2);
+        assert_eq!(report.applied_announcement_count, 2);
+        assert_eq!(report.p2p_ready_count, 1);
+        assert_eq!(report.peer_source_count, 2);
+        assert!(text.contains("\"catalog_kind\": \"minimodel.model_catalog\""));
+        assert!(text.contains("\"peer_source_count\": 2"));
+        assert!(text.contains("\"peer_base_url\": \"http://127.0.0.1:8123/peer-pieces/\""));
+        assert!(text.contains("\"peer_base_url\": \"http://127.0.0.1:9123/peer-pieces/\""));
+        assert!(!text.contains("artifact_project_server_url\": \"http"));
+    }
+
+    #[test]
     fn rejects_peer_source_announcement_artifact_drift() {
         let dir = unique_dir("peer-source-announcement-drift");
         let _ = std::fs::remove_dir_all(&dir);
@@ -3446,6 +3642,56 @@ mod tests {
 
         assert!(error.contains("artifact_sha256 mismatch"));
         assert!(!merged_entry_path.exists());
+    }
+
+    #[test]
+    fn rejects_catalog_snapshot_with_unmatched_peer_source_announcement() {
+        let dir = unique_dir("peer-source-announcement-unmatched");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let announcement_path = dir.join("tiny-test-model-q8.peer-source-announcement.v0.json");
+        let catalog_snapshot_path = dir.join("models.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            None,
+            None,
+        )
+        .unwrap();
+        write_peer_source_announcement_path(
+            &catalog_entry_path,
+            &announcement_path,
+            "http://127.0.0.1:8123/peer-pieces",
+        )
+        .unwrap();
+
+        let mut value: Value =
+            serde_json::from_str(&std::fs::read_to_string(&announcement_path).unwrap()).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "model_id".to_string(),
+            Value::String("other/example-model".to_string()),
+        );
+        std::fs::write(
+            &announcement_path,
+            serde_json::to_string_pretty(&value).unwrap(),
+        )
+        .unwrap();
+
+        let error = write_catalog_snapshot_with_announcements_path(
+            &catalog_snapshot_path,
+            &[catalog_entry_path],
+            &[announcement_path],
+        )
+        .unwrap_err();
+
+        assert!(error.contains("did not match any catalog entry"));
+        assert!(!catalog_snapshot_path.exists());
     }
 
     #[test]

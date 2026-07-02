@@ -145,9 +145,10 @@ For catalog publication where a converter needs to hand peer availability to a m
 ```text
 minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>
 minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...
+minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>...
 ```
 
-The announcement binds the catalog entry checksum, model id, artifact byte count, artifact SHA256, peer-offer SHA256, Merkle root, and one validated consenting direct peer URL. The apply command rejects model/artifact/proof drift, deduplicates peer URLs, writes `peer_sources`, revalidates the entry, and leaves the next `write-catalog-snapshot` run to publish metadata only. This is the maintainable route for "converted once, then later users see P2P Import" without making project servers byte hosts.
+The announcement binds the catalog entry checksum, model id, artifact byte count, artifact SHA256, peer-offer SHA256, Merkle root, and one validated consenting direct peer URL. The apply command rejects model/artifact/proof drift, deduplicates peer URLs, writes `peer_sources`, revalidates the entry, and leaves the next `write-catalog-snapshot` run to publish metadata only. The batch snapshot command validates many entries and announcements together, rejects unmatched announcement model ids, and writes `models.v0.json` directly. This is the maintainable route for "converted once, then later users see P2P Import" without making project servers byte hosts.
 
 TinyRustLM may use a catalog-listed peer source to prefill the receiver request, but Rust still fetches, assembles, verifies, and writes a local import receipt before the user imports the `.slm` through the browser file picker.
 

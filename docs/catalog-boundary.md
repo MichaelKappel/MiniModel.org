@@ -35,11 +35,12 @@ A catalog entry may include:
 - model-card route
 - license route
 - source identity summary
+- upstream Hugging Face source id when the `.slm` came from a reviewed external checkpoint
 - artifact byte count and checksum
 - quantization, model shape, and tokenizer checksum
 - evidence status summaries
 - takedown/contact route
-- peer hint status, initially `disabled`
+- peer hint status, initially `disabled`, later `available` only after a converted `.slm` has admission evidence and peer-transfer metadata
 
 A catalog entry must not include a project-server artifact URL. The user can download or receive bytes only through a future consent-based peer app or through their own local file flow.
 
@@ -53,13 +54,25 @@ MiniModel.org and TinyRustLM should keep three source lanes distinct:
 
 Hugging Face `/resolve/` URLs, LFS/Xet/CAS transfers, Inference Providers, Inference Endpoints, and executable Spaces must not be represented as MiniModel.org-hosted bytes or MiniModel.org-run inference. Project servers do not proxy Hugging Face downloads. If a user obtains bytes from Hugging Face or another external source, they convert or import them locally and then select the verified `.slm` file in TinyRustLM.
 
+## Hugging Face To MiniModel Flow
+
+Hugging Face search results are source records, not runnable TinyRustLM model entries. A result becomes useful to TinyRustLM only after the conversion chain produces a checksum-bound `.slm` artifact:
+
+1. A user or converter worker selects a Hugging Face model id and saves a conversion request.
+2. Conversion happens outside project servers, using reviewed source bytes, config, tokenizer, license, and model-card metadata.
+3. The converter writes a local `.slm`, validates it with the Rust packer/verifier, and records runtime-smoke plus eval/admission evidence.
+4. MiniModel.org may list the resulting metadata with `source_huggingface_model_id`, artifact byte count, artifact SHA-256, manifest route, evidence routes, and `peer_hint_status`.
+5. Future P2P transfer may use the metadata and chunk/Merkle fields so later users can obtain verified `.slm` bytes from consenting peers instead of repeating a large source download and conversion.
+
+Until that chain exists for a model, the honest status is `conversion required`.
+
 ## TinyRustLM UI Mapping
 
 TinyRustLM should expose the same source lanes in plain language:
 
 - `Your Local Files`: first-class runnable path through the browser file picker.
 - `Hugging Face`: user-triggered metadata discovery, model-card review, source revision context, and API endpoint awareness only.
-- `P2P Exchange`: future MiniModel manifest and peer-transfer flow, still requiring local receipt and `.slm` verification before browser execution.
+- `P2P Exchange`: MiniModel metadata for converted `.slm` records now, future peer-transfer flow later, still requiring local receipt and `.slm` verification before browser execution.
 
 Advanced source details may show catalog URLs, Hugging Face search fields, checksums, manifests, evidence routes, and verifier status, but the first-load Chat mode should keep those behind progressive disclosure.
 

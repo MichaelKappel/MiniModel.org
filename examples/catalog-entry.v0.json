@@ -20,5 +20,8 @@
   "slm_model_shape": "tiny-fixture-bpe",
   "slm_quantization": "q8_0",
   "slm_tokenizer_checksum": "0x0000000000000000",
+  "source_kind": "huggingface-hub",
+  "source_huggingface_model_id": "example-org/example-source-model",
+  "source_revision": "unknown",
   "evidence_admission_status": "pending"
 }

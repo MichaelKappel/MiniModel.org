@@ -24,6 +24,8 @@ MiniModel.org should support three source lanes, all ending in local verificatio
 
 All source lanes must converge on a user-controlled local `.slm` artifact, a local verifier result or receipt, and a browser file-picker import into SLMComposer. Hugging Face Inference Providers, Inference Endpoints, and executable Spaces are remote execution products, not MiniModel or SLMComposer run paths.
 
+The Hugging Face lane should produce a local conversion request when no admitted `.slm` metadata exists yet. That request identifies the upstream model id, preferred `.slm` quantization targets, required review/conversion/eval gates, and the rule that project servers do not serve the resulting bytes. Once one user or converter completes the chain, MiniModel metadata can advertise the converted artifact by checksum and later peer hints so other users can obtain the admitted `.slm` through consent-based P2P instead of repeating a large source download and conversion.
+
 ## Manifest MVP
 
 Each model entry should bind:

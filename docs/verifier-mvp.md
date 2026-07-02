@@ -36,6 +36,7 @@ minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>
 minimodel import-peer-request <request-json> <manifest> <output-dir>
 minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]
 minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]
+minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
 ```
 
 `verify-manifest` checks schema, required fields, boundary fields, license/model-card routes, route shape, and signature placeholder rules.
@@ -57,6 +58,8 @@ minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-hugg
 `prepare-peer-share` is the sender-side one-command path after a user or converter has a local `.slm`. It validates the `.slm`, writes a MiniModel manifest, writes a `.minimodel-peer-offer` proof, exports `minimodel.peer_piece_set.v0` plus local piece files, and writes a catalog-entry JSON in one output directory. If `[known-peer-base-url]` is supplied, the generated catalog entry includes validated `peer_source_count` / `peer_sources` metadata; otherwise it is proof-ready and still requires a receiver to set one consenting peer URL. The command does not download from Hugging Face, does not upload model bytes, and does not make project servers serve or run the artifact.
 
 `write-catalog-entry` validates a MiniModel manifest and `.minimodel-peer-offer` proof against each other before writing JSON catalog metadata. It rejects artifact, SLM field, chunk count, chunk-list, Merkle root, evidence checksum, and per-chunk drift. The generated entry may advertise `peer_hint_status=peer-offer-ready-known-peer-needed` and `peer_import_status=request-script-ready`, which means TinyRustLM can save a peer-import request/script, not that MiniModel.org serves bytes. When `[known-peer-base-url]` is provided, it also validates a direct `http://` consenting peer URL, rejects project-server hosts, and writes `peer_source_count` / `peer_sources` metadata so the browser can offer `P2P Import` without a separate manual peer URL step.
+
+`write-catalog-snapshot` validates one or more catalog-entry JSON files and writes a metadata-only `minimodel.model_catalog` snapshot. It rejects duplicate `model_id` values, artifact/model/download URLs, project-server byte/execution claims, peer-source count drift, unsupported peer-source rows, and project-server peer hosts. This is the first Rust-owned publication step for "converted once, listed as P2P-ready later"; the snapshot can be loaded by TinyRustLM as metadata, while model bytes still come only from local files or consenting peers.
 
 ## Receipt Fields
 
@@ -167,6 +170,7 @@ cargo run -p minimodel -- import-peer-request .\tiny-test-model-q8.minimodel-pee
 cargo run -p minimodel -- prepare-peer-share ..\SLMComposer.com\tinyrustlm\models\tiny-test-model-q8.slm .\prepared-share\tiny-test-model-q8 tinyrustlm/prepared-tiny-test-model-q8 tinyrustlm/tiny-test-model-q8 http://127.0.0.1:8123/
 cargo run -p minimodel -- write-catalog-entry examples\tiny-test-model-q8.minimodel.manifest.v0 examples\tiny-test-model-q8.minimodel-peer-offer examples\catalog-entry.v0.json
 cargo run -p minimodel -- write-catalog-entry examples\tiny-test-model-q8.minimodel.manifest.v0 examples\tiny-test-model-q8.minimodel-peer-offer examples\catalog-entry.with-peer.v0.json tinyrustlm/tiny-test-model-q8 http://127.0.0.1:8123/
+cargo run -p minimodel -- write-catalog-snapshot .\models.v0.json examples\catalog-entry.v0.json
 ```
 
 The receipt stores the artifact basename only. It must not store private absolute paths, public model-byte URLs, or endorsement claims.

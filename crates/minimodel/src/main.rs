@@ -1,5 +1,5 @@
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 
 fn main() {
@@ -159,6 +159,10 @@ fn run() -> Result<(), String> {
             println!("catalog_entry: {}", report.catalog_entry_path);
             println!("peer_source_count: {}", report.peer_source_count);
             println!(
+                "catalog_snapshot_hint: minimodel write-catalog-snapshot models.v0.json \"{}\"",
+                report.catalog_entry_path
+            );
+            println!(
                 "serve_hint: minimodel serve-peer-pieces \"{}\" \"{}\" 127.0.0.1:8123",
                 report.manifest_path, report.piece_dir_path
             );
@@ -209,6 +213,17 @@ fn run() -> Result<(), String> {
             println!("peer_offer.sha256: {}", report.peer_offer_sha256);
             println!("catalog_entry: {}", report.catalog_entry_path);
         }
+        "write-catalog-snapshot" => {
+            let output_json = one_arg(&mut args, "output-json")?;
+            let entry_paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
+            let report =
+                minimodel_core::write_catalog_snapshot_path(Path::new(&output_json), &entry_paths)?;
+            println!("MiniModel catalog snapshot written: {output_json}");
+            println!("catalog: {}", report.catalog_path);
+            println!("entry_count: {}", report.entry_count);
+            println!("p2p_ready_count: {}", report.p2p_ready_count);
+            println!("peer_source_count: {}", report.peer_source_count);
+        }
         _ => {
             print_usage();
             return Err(format!("unsupported command {command}"));
@@ -247,6 +262,7 @@ fn print_usage() {
     eprintln!(
         "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]"
     );
+    eprintln!("  minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...");
 }
 
 fn split_catalog_entry_optional_args(

@@ -104,6 +104,14 @@ minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-hugg
 
 `prepare-peer-share` validates the local `.slm`, writes a MiniModel manifest, writes a matching peer-offer proof, exports local peer pieces, and writes a catalog-entry JSON. `[source-huggingface-model-id]` records the upstream Hub identity when the `.slm` came from a reviewed local conversion. `[known-peer-base-url]` is optional consenting-peer metadata; it never makes MiniModel.org a byte host.
 
+The generated catalog-entry JSON can be assembled into a metadata-only catalog snapshot with:
+
+```text
+minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
+```
+
+`write-catalog-snapshot` revalidates every entry before writing `minimodel.model_catalog` JSON. It rejects duplicate model ids, artifact/model/download URLs, project-server byte/execution claims, peer-source count drift, unsupported peer-source rows, and project-server peer hosts. A valid snapshot can make a converted model appear as proof-ready or P2P-ready metadata in TinyRustLM, but it still never contains or serves runnable model bytes.
+
 MiniModel can also write a catalog entry from an admitted manifest plus peer-offer proof:
 
 ```text

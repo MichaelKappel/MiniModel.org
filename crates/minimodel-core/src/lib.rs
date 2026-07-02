@@ -3,6 +3,7 @@ mod sha256;
 mod slm;
 
 use serde::Deserialize;
+use serde_json::{Map, Value};
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{Read, Write};
@@ -63,6 +64,14 @@ pub struct CatalogEntryReport {
     pub model_id: String,
     pub artifact_sha256: String,
     pub peer_offer_sha256: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct CatalogSnapshotReport {
+    pub catalog_path: String,
+    pub entry_count: usize,
+    pub p2p_ready_count: usize,
+    pub peer_source_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -146,10 +155,7 @@ pub fn write_import_receipt_path(
 ) -> Result<ArtifactVerification, String> {
     let report = verify_artifact_path(manifest_path, artifact_path)?;
     let receipt = import_receipt_text(&report, artifact_path)?;
-    if let Some(parent) = receipt_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create receipt directory: {error}"))?;
-    }
+    ensure_parent_dir(receipt_path, "receipt")?;
     fs::write(receipt_path, receipt)
         .map_err(|error| format!("failed to write import receipt: {error}"))?;
     Ok(report)
@@ -207,10 +213,7 @@ pub fn assemble_peer_pieces_path(
         .map_err(|error| format!("failed to read peer piece set: {error}"))?;
     let piece_set = Manifest::parse(&piece_set_text)?;
     validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
-    if let Some(parent) = output_artifact_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create output directory: {error}"))?;
-    }
+    ensure_parent_dir(output_artifact_path, "output")?;
     let temp_path = temp_output_path(output_artifact_path)?;
     if temp_path.exists() {
         return Err(format!(
@@ -259,10 +262,7 @@ pub fn fetch_peer_pieces_http_path(
             temp_dir.display()
         ));
     }
-    if let Some(parent) = output_dir.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create peer piece output parent: {error}"))?;
-    }
+    ensure_parent_dir(output_dir, "peer piece output parent")?;
     let result = fetch_peer_pieces_to_temp(&base_url, &piece_set, chunk_count, &temp_dir)
         .and_then(|_| {
             fs::write(
@@ -383,10 +383,7 @@ pub fn write_catalog_entry_path(
         source_huggingface_model_id.as_deref(),
         known_peer_base_url.as_deref(),
     )?;
-    if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create catalog entry directory: {error}"))?;
-    }
+    ensure_parent_dir(output_path, "catalog entry")?;
     fs::write(output_path, catalog_entry)
         .map_err(|error| format!("failed to write catalog entry: {error}"))?;
     Ok(CatalogEntryReport {
@@ -394,6 +391,55 @@ pub fn write_catalog_entry_path(
         model_id: bundle.manifest.require("model.id")?.to_string(),
         artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
         peer_offer_sha256,
+    })
+}
+
+pub fn write_catalog_snapshot_path(
+    output_path: &Path,
+    entry_paths: &[impl AsRef<Path>],
+) -> Result<CatalogSnapshotReport, String> {
+    if entry_paths.is_empty() {
+        return Err("catalog snapshot requires at least one catalog-entry JSON".to_string());
+    }
+    let mut entries = Vec::with_capacity(entry_paths.len());
+    let mut model_ids = BTreeSet::new();
+    let mut p2p_ready_count = 0usize;
+    let mut peer_source_count = 0usize;
+
+    for entry_path in entry_paths {
+        let path = entry_path.as_ref();
+        let label = path.display().to_string();
+        let text = fs::read_to_string(path)
+            .map_err(|error| format!("failed to read catalog entry {label}: {error}"))?;
+        let value: Value = serde_json::from_str(&text)
+            .map_err(|error| format!("failed to parse catalog entry {label}: {error}"))?;
+        let summary = validate_catalog_entry_value(&value, &label)?;
+        if !model_ids.insert(summary.model_id.clone()) {
+            return Err(format!(
+                "duplicate catalog model_id {} in {label}",
+                summary.model_id
+            ));
+        }
+        if summary.peer_source_count > 0 {
+            p2p_ready_count += 1;
+            peer_source_count += summary.peer_source_count;
+        }
+        entries.push(value);
+    }
+
+    let catalog = catalog_snapshot_value(entries)?;
+    let text = serde_json::to_string_pretty(&catalog)
+        .map_err(|error| format!("failed to format catalog snapshot JSON: {error}"))?
+        + "\n";
+    ensure_parent_dir(output_path, "catalog snapshot")?;
+    fs::write(output_path, text)
+        .map_err(|error| format!("failed to write catalog snapshot: {error}"))?;
+
+    Ok(CatalogSnapshotReport {
+        catalog_path: output_path.display().to_string(),
+        entry_count: entry_paths.len(),
+        p2p_ready_count,
+        peer_source_count,
     })
 }
 
@@ -944,6 +990,227 @@ fn catalog_entry_json(
     }
     text.push_str("}\n");
     Ok(text)
+}
+
+#[derive(Debug)]
+struct CatalogEntrySummary {
+    model_id: String,
+    peer_source_count: usize,
+}
+
+fn catalog_snapshot_value(entries: Vec<Value>) -> Result<Value, String> {
+    let mut object = Map::new();
+    object.insert("catalog_version".to_string(), Value::Number(0.into()));
+    object.insert(
+        "catalog_kind".to_string(),
+        Value::String("minimodel.model_catalog".to_string()),
+    );
+    object.insert(
+        "catalog_id".to_string(),
+        Value::String("minimodel-local-generated-v0".to_string()),
+    );
+    object.insert("generated_at".to_string(), Value::String(utc_now()?));
+    object.insert(
+        "publisher_id".to_string(),
+        Value::String("local-user".to_string()),
+    );
+    object.insert(
+        "publisher_key_id".to_string(),
+        Value::String("local-user-unsigned".to_string()),
+    );
+    object.insert(
+        "project_server_serves_model_bytes".to_string(),
+        Value::Bool(false),
+    );
+    object.insert(
+        "project_server_runs_model_bytes".to_string(),
+        Value::Bool(false),
+    );
+    object.insert("artifact_project_server_url".to_string(), Value::Null);
+    object.insert(
+        "execution_policy".to_string(),
+        Value::String("user-local-file-or-consenting-peer-only".to_string()),
+    );
+    object.insert("entries".to_string(), Value::Array(entries));
+    Ok(Value::Object(object))
+}
+
+fn validate_catalog_entry_value(value: &Value, label: &str) -> Result<CatalogEntrySummary, String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("{label} catalog entry must be a JSON object"))?;
+    require_json_u64_field(value, "catalog_version", label, 0)?;
+    require_json_string_field(value, "entry_kind", label, "minimodel.catalog_entry")?;
+    require_json_string_field(value, "artifact_kind", label, "slm")?;
+    require_json_bool_false(value, "project_server_serves_model_bytes", label)?;
+    require_json_bool_false(value, "project_server_runs_model_bytes", label)?;
+    reject_catalog_artifact_url_fields(object, label)?;
+
+    let model_id = json_required_string(value, "model_id", label)?;
+    validate_minimodel_model_id(&model_id)?;
+    let artifact_byte_count = json_required_usize(value, "artifact_byte_count", label)?;
+    if artifact_byte_count == 0 {
+        return Err(format!("{label} artifact_byte_count must be positive"));
+    }
+    normalize_sha256(&json_required_string(value, "artifact_sha256", label)?)?;
+
+    if json_optional_string(value, "peer_import_status").as_deref() == Some("request-script-ready")
+    {
+        json_required_string(value, "peer_offer_route", label)?;
+        normalize_sha256(&json_required_string(value, "peer_offer_sha256", label)?)?;
+    }
+
+    let declared_peer_source_count =
+        json_optional_usize(value, "peer_source_count", label)?.unwrap_or(0);
+    let actual_peer_source_count = validate_catalog_peer_sources(value, label)?;
+    if declared_peer_source_count != actual_peer_source_count {
+        return Err(format!(
+            "{label} peer_source_count {declared_peer_source_count} did not match peer_sources length {actual_peer_source_count}"
+        ));
+    }
+
+    Ok(CatalogEntrySummary {
+        model_id,
+        peer_source_count: declared_peer_source_count,
+    })
+}
+
+fn reject_catalog_artifact_url_fields(
+    object: &Map<String, Value>,
+    label: &str,
+) -> Result<(), String> {
+    for key in [
+        "artifact_project_server_url",
+        "artifact_url",
+        "model_url",
+        "download_url",
+        "resolve_url",
+    ] {
+        let Some(value) = object.get(key) else {
+            continue;
+        };
+        if value.is_null() {
+            continue;
+        }
+        if value.as_str().map(str::trim).unwrap_or("").is_empty() {
+            continue;
+        }
+        return Err(format!(
+            "{label} must not include {key}; catalog snapshots are metadata only"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_catalog_peer_sources(value: &Value, label: &str) -> Result<usize, String> {
+    let Some(peer_sources) = value.get("peer_sources") else {
+        return Ok(0);
+    };
+    let peer_sources = peer_sources
+        .as_array()
+        .ok_or_else(|| format!("{label} peer_sources must be an array"))?;
+    for (index, peer_source) in peer_sources.iter().enumerate() {
+        let peer_label = format!("{label} peer_sources[{index}]");
+        require_json_string_field(
+            peer_source,
+            "source_kind",
+            &peer_label,
+            "known-direct-http-peer-v0",
+        )?;
+        require_json_string_field(
+            peer_source,
+            "transport",
+            &peer_label,
+            "direct-http-piece-server-v0",
+        )?;
+        require_json_string_field(
+            peer_source,
+            "consent_status",
+            &peer_label,
+            "publisher-declared-consenting-peer",
+        )?;
+        require_json_bool_false(
+            peer_source,
+            "project_server_serves_model_bytes",
+            &peer_label,
+        )?;
+        require_json_bool_false(peer_source, "project_server_runs_model_bytes", &peer_label)?;
+        normalize_known_peer_base_url(&json_required_string(
+            peer_source,
+            "peer_base_url",
+            &peer_label,
+        )?)?;
+    }
+    Ok(peer_sources.len())
+}
+
+fn require_json_string_field(
+    value: &Value,
+    key: &str,
+    label: &str,
+    expected: &str,
+) -> Result<(), String> {
+    let actual = json_required_string(value, key, label)?;
+    if actual == expected {
+        return Ok(());
+    }
+    Err(format!("{label} {key} must be {expected}, got {actual}"))
+}
+
+fn require_json_u64_field(
+    value: &Value,
+    key: &str,
+    label: &str,
+    expected: u64,
+) -> Result<(), String> {
+    let actual = json_required_usize(value, key, label)? as u64;
+    if actual == expected {
+        return Ok(());
+    }
+    Err(format!("{label} {key} must be {expected}, got {actual}"))
+}
+
+fn require_json_bool_false(value: &Value, key: &str, label: &str) -> Result<(), String> {
+    match value.get(key).and_then(Value::as_bool) {
+        Some(false) => Ok(()),
+        Some(true) => Err(format!("{label} {key} must be false")),
+        None => Err(format!("{label} missing false {key}")),
+    }
+}
+
+fn json_required_string(value: &Value, key: &str, label: &str) -> Result<String, String> {
+    let text = value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .ok_or_else(|| format!("{label} missing string {key}"))?;
+    Ok(text.to_string())
+}
+
+fn json_optional_string(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn json_required_usize(value: &Value, key: &str, label: &str) -> Result<usize, String> {
+    json_optional_usize(value, key, label)?.ok_or_else(|| format!("{label} missing integer {key}"))
+}
+
+fn json_optional_usize(value: &Value, key: &str, label: &str) -> Result<Option<usize>, String> {
+    let Some(raw) = value.get(key) else {
+        return Ok(None);
+    };
+    let Some(number) = raw.as_u64() else {
+        return Err(format!("{label} {key} must be a non-negative integer"));
+    };
+    usize::try_from(number)
+        .map(Some)
+        .map_err(|_| format!("{label} {key} is too large for this platform"))
 }
 
 fn require_peer_offer_equal(
@@ -1727,6 +1994,17 @@ fn create_empty_dir(path: &Path) -> Result<(), String> {
             .map_err(|error| format!("failed to create peer piece output directory: {error}"))?;
     }
     Ok(())
+}
+
+fn ensure_parent_dir(path: &Path, label: &str) -> Result<(), String> {
+    let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    else {
+        return Ok(());
+    };
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("failed to create {label} directory: {error}"))
 }
 
 fn piece_file_name(index: usize) -> String {
@@ -2546,6 +2824,153 @@ mod tests {
         assert!(text.contains("\"consent_status\": \"publisher-declared-consenting-peer\""));
         assert!(text.contains("\"project_server_serves_model_bytes\": false"));
         assert!(!text.contains("artifact_project_server_url\": \"http"));
+    }
+
+    #[test]
+    fn writes_catalog_snapshot_from_verified_entries() {
+        let dir = unique_dir("catalog-snapshot");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let catalog_snapshot_path = dir.join("models.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            Some("example-org/example-source"),
+            Some("http://127.0.0.1:8123/peer-pieces"),
+        )
+        .unwrap();
+
+        let report =
+            write_catalog_snapshot_path(&catalog_snapshot_path, &[catalog_entry_path.clone()])
+                .unwrap();
+        let text = std::fs::read_to_string(&catalog_snapshot_path).unwrap();
+        let value: Value = serde_json::from_str(&text).unwrap();
+
+        assert_eq!(report.entry_count, 1);
+        assert_eq!(report.p2p_ready_count, 1);
+        assert_eq!(report.peer_source_count, 1);
+        assert_eq!(
+            value["catalog_kind"].as_str(),
+            Some("minimodel.model_catalog")
+        );
+        assert_eq!(value["entries"].as_array().unwrap().len(), 1);
+        assert!(text.contains("\"source_huggingface_model_id\": \"example-org/example-source\""));
+        assert!(text.contains("\"peer_base_url\": \"http://127.0.0.1:8123/peer-pieces/\""));
+        assert!(text.contains("\"project_server_serves_model_bytes\": false"));
+        assert!(!text.contains("artifact_project_server_url\": \"http"));
+    }
+
+    #[test]
+    fn rejects_catalog_snapshot_duplicate_model_id() {
+        let dir = unique_dir("catalog-snapshot-duplicate");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let error = write_catalog_snapshot_path(
+            &dir.join("models.v0.json"),
+            &[catalog_entry_path.clone(), catalog_entry_path],
+        )
+        .unwrap_err();
+
+        assert!(error.contains("duplicate catalog model_id"));
+        assert!(!dir.join("models.v0.json").exists());
+    }
+
+    #[test]
+    fn rejects_catalog_snapshot_artifact_url() {
+        let dir = unique_dir("catalog-snapshot-artifact-url");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            None,
+            None,
+        )
+        .unwrap();
+        let drifted = std::fs::read_to_string(&catalog_entry_path)
+            .unwrap()
+            .replace(
+                "\"artifact_project_server_url\": null",
+                "\"artifact_project_server_url\": \"https://MiniModel.org/models/tiny-test-model-q8.slm\"",
+            );
+        std::fs::write(&catalog_entry_path, drifted).unwrap();
+
+        let error = write_catalog_snapshot_path(&dir.join("models.v0.json"), &[catalog_entry_path])
+            .unwrap_err();
+
+        assert!(error.contains("artifact_project_server_url"));
+        assert!(error.contains("metadata only"));
+    }
+
+    #[test]
+    fn rejects_catalog_snapshot_project_server_peer_source() {
+        let dir = unique_dir("catalog-snapshot-project-peer");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            None,
+            Some("http://127.0.0.1:8123/peer-pieces"),
+        )
+        .unwrap();
+        let drifted = std::fs::read_to_string(&catalog_entry_path)
+            .unwrap()
+            .replace(
+                "\"peer_base_url\": \"http://127.0.0.1:8123/peer-pieces/\"",
+                "\"peer_base_url\": \"http://MiniModel.org/peer-pieces/\"",
+            );
+        std::fs::write(&catalog_entry_path, drifted).unwrap();
+
+        let error = write_catalog_snapshot_path(&dir.join("models.v0.json"), &[catalog_entry_path])
+            .unwrap_err();
+
+        assert!(error.contains("project server"));
+        assert!(error.contains("never serve model bytes"));
+    }
+
+    #[test]
+    fn parent_dir_helper_accepts_current_directory_outputs() {
+        let dir = unique_dir("parent-dir-helper");
+        let _ = std::fs::remove_dir_all(&dir);
+        let nested_output = dir.join("nested").join("models.v0.json");
+
+        ensure_parent_dir(Path::new("models.v0.json"), "catalog snapshot").unwrap();
+        ensure_parent_dir(&nested_output, "catalog snapshot").unwrap();
+
+        assert!(dir.join("nested").is_dir());
     }
 
     #[test]

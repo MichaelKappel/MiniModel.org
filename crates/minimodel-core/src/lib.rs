@@ -2,6 +2,7 @@ mod manifest;
 mod sha256;
 mod slm;
 
+use serde::Deserialize;
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{Read, Write};
@@ -58,6 +59,19 @@ pub struct CatalogEntryReport {
     pub model_id: String,
     pub artifact_sha256: String,
     pub peer_offer_sha256: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerImportRequestExecution {
+    pub request_path: String,
+    pub peer_base_url: String,
+    pub piece_dir_path: String,
+    pub output_artifact_path: String,
+    pub receipt_path: String,
+    pub piece_count: usize,
+    pub manifest_sha256: String,
+    pub artifact_sha256: String,
+    pub merkle_root_sha256: String,
 }
 
 pub fn verify_manifest_path(path: &Path) -> Result<Manifest, String> {
@@ -266,6 +280,35 @@ pub fn fetch_peer_pieces_http_path(
     }
 }
 
+pub fn execute_peer_import_request_path(
+    request_path: &Path,
+    manifest_path: &Path,
+    output_dir: &Path,
+) -> Result<PeerImportRequestExecution, String> {
+    let request = read_peer_import_request_path(request_path)?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    validate_peer_import_request_against_manifest(&request, &bundle.manifest)?;
+    create_empty_dir(output_dir)?;
+    let piece_dir = output_dir.join(&request.expected_piece_dir);
+    let output_artifact_path = output_dir.join(&request.assembled_output_slm);
+    let receipt_path = output_dir.join(receipt_file_name(&request.assembled_output_slm)?);
+    let fetch =
+        fetch_peer_pieces_http_path(manifest_path, &request.expected_peer_base_url, &piece_dir)?;
+    let artifact = assemble_peer_pieces_path(manifest_path, &piece_dir, &output_artifact_path)?;
+    write_import_receipt_path(manifest_path, &output_artifact_path, &receipt_path)?;
+    Ok(PeerImportRequestExecution {
+        request_path: request_path.display().to_string(),
+        peer_base_url: fetch.peer_base_url,
+        piece_dir_path: piece_dir.display().to_string(),
+        output_artifact_path: output_artifact_path.display().to_string(),
+        receipt_path: receipt_path.display().to_string(),
+        piece_count: fetch.piece_count,
+        manifest_sha256: artifact.manifest_sha256,
+        artifact_sha256: artifact.artifact_sha256,
+        merkle_root_sha256: fetch.merkle_root_sha256,
+    })
+}
+
 pub fn inspect_peer_piece_dir_path(
     manifest_path: &Path,
     piece_dir: &Path,
@@ -347,6 +390,82 @@ struct ValidManifest {
     manifest: Manifest,
 }
 
+#[derive(Debug, Clone)]
+struct PeerImportRequest {
+    request_kind: String,
+    request_version: u64,
+    model_id: String,
+    artifact_kind: String,
+    artifact_byte_count: u64,
+    artifact_sha256: String,
+    expected_piece_set_kind: String,
+    expected_peer_base_url: String,
+    expected_piece_dir: String,
+    assembled_output_slm: String,
+    project_server_serves_model_bytes: bool,
+    project_server_runs_model_bytes: bool,
+    project_server_proxies_huggingface_bytes: bool,
+    transfer_requires_user_consent_and_local_reverify: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct PeerImportRequestFile {
+    request_kind: String,
+    request_version: u64,
+    model: PeerImportRequestModel,
+    local_peer_piece_contract: PeerImportPieceContract,
+    boundary: PeerImportBoundary,
+}
+
+#[derive(Debug, Deserialize)]
+struct PeerImportRequestModel {
+    model_id: String,
+    artifact_kind: String,
+    artifact_byte_count: u64,
+    artifact_sha256: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PeerImportPieceContract {
+    expected_piece_set_kind: String,
+    expected_peer_base_url: String,
+    expected_piece_dir: String,
+    assembled_output_slm: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PeerImportBoundary {
+    project_server_serves_model_bytes: bool,
+    project_server_runs_model_bytes: bool,
+    project_server_proxies_huggingface_bytes: bool,
+    transfer_requires_user_consent_and_local_reverify: bool,
+}
+
+impl From<PeerImportRequestFile> for PeerImportRequest {
+    fn from(file: PeerImportRequestFile) -> Self {
+        Self {
+            request_kind: file.request_kind,
+            request_version: file.request_version,
+            model_id: file.model.model_id,
+            artifact_kind: file.model.artifact_kind,
+            artifact_byte_count: file.model.artifact_byte_count,
+            artifact_sha256: file.model.artifact_sha256,
+            expected_piece_set_kind: file.local_peer_piece_contract.expected_piece_set_kind,
+            expected_peer_base_url: file.local_peer_piece_contract.expected_peer_base_url,
+            expected_piece_dir: file.local_peer_piece_contract.expected_piece_dir,
+            assembled_output_slm: file.local_peer_piece_contract.assembled_output_slm,
+            project_server_serves_model_bytes: file.boundary.project_server_serves_model_bytes,
+            project_server_runs_model_bytes: file.boundary.project_server_runs_model_bytes,
+            project_server_proxies_huggingface_bytes: file
+                .boundary
+                .project_server_proxies_huggingface_bytes,
+            transfer_requires_user_consent_and_local_reverify: file
+                .boundary
+                .transfer_requires_user_consent_and_local_reverify,
+        }
+    }
+}
+
 fn read_valid_manifest_path(path: &Path) -> Result<ValidManifest, String> {
     let bytes = fs::read(path).map_err(|error| format!("failed to read manifest: {error}"))?;
     let text =
@@ -354,6 +473,95 @@ fn read_valid_manifest_path(path: &Path) -> Result<ValidManifest, String> {
     let manifest = Manifest::parse(text)?;
     manifest.validate()?;
     Ok(ValidManifest { bytes, manifest })
+}
+
+fn read_peer_import_request_path(path: &Path) -> Result<PeerImportRequest, String> {
+    let text = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read peer import request: {error}"))?;
+    let request_file: PeerImportRequestFile = serde_json::from_str(&text)
+        .map_err(|error| format!("failed to parse peer import request JSON: {error}"))?;
+    let request = PeerImportRequest::from(request_file);
+    validate_peer_import_request_static_fields(&request)?;
+    Ok(request)
+}
+
+fn validate_peer_import_request_static_fields(request: &PeerImportRequest) -> Result<(), String> {
+    if request.request_kind != "minimodel.peer_import_request.v0" {
+        return Err(format!(
+            "peer import request kind mismatch: expected minimodel.peer_import_request.v0, got {}",
+            request.request_kind
+        ));
+    }
+    if request.request_version != 0 {
+        return Err("peer import request version must be 0".to_string());
+    }
+    if request.artifact_kind != "slm" {
+        return Err(format!(
+            "peer import artifact kind mismatch: expected slm, got {}",
+            request.artifact_kind
+        ));
+    }
+    if request.expected_piece_set_kind != "minimodel.peer_piece_set.v0" {
+        return Err(format!(
+            "peer import expected piece set kind mismatch: expected minimodel.peer_piece_set.v0, got {}",
+            request.expected_piece_set_kind
+        ));
+    }
+    let peer_url = HttpUrl::parse(&request.expected_peer_base_url)?;
+    reject_project_server_peer_host(&peer_url.host)?;
+    require_safe_import_name(&request.expected_piece_dir, "expected_piece_dir")?;
+    require_safe_import_name(&request.assembled_output_slm, "assembled_output_slm")?;
+    if !request.assembled_output_slm.ends_with(".slm") {
+        return Err("assembled_output_slm must end with .slm".to_string());
+    }
+    if request.project_server_serves_model_bytes {
+        return Err("peer import request claims project servers serve model bytes".to_string());
+    }
+    if request.project_server_runs_model_bytes {
+        return Err("peer import request claims project servers run model bytes".to_string());
+    }
+    if request.project_server_proxies_huggingface_bytes {
+        return Err(
+            "peer import request claims project servers proxy Hugging Face bytes".to_string(),
+        );
+    }
+    if !request.transfer_requires_user_consent_and_local_reverify {
+        return Err(
+            "peer import request must require user consent and local reverification".to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn validate_peer_import_request_against_manifest(
+    request: &PeerImportRequest,
+    manifest: &Manifest,
+) -> Result<(), String> {
+    let manifest_model_id = manifest.require("model.id")?;
+    if request.model_id != manifest_model_id {
+        return Err(format!(
+            "peer import model_id mismatch: request {}, manifest {}",
+            request.model_id, manifest_model_id
+        ));
+    }
+    let expected_byte_count = manifest
+        .require("artifact.byte_count")?
+        .parse::<u64>()
+        .map_err(|_| "artifact.byte_count must be a decimal integer".to_string())?;
+    if request.artifact_byte_count != expected_byte_count {
+        return Err(format!(
+            "peer import artifact_byte_count mismatch: request {}, manifest {}",
+            request.artifact_byte_count, expected_byte_count
+        ));
+    }
+    require_normalized_equal(
+        "peer import artifact_sha256",
+        &normalize_sha256(manifest.require("artifact.sha256")?)?,
+        &normalize_sha256(&request.artifact_sha256)?,
+        "request",
+    )?;
+    require_fixed_chunk_mode(manifest)?;
+    Ok(())
 }
 
 pub fn import_receipt_text(
@@ -1176,6 +1384,26 @@ fn require_safe_piece_file_name(file_name: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn require_safe_import_name(name: &str, label: &str) -> Result<(), String> {
+    require_safe_piece_file_name(name).map_err(|_| {
+        format!("peer import request {label} must be a safe single file or directory name")
+    })?;
+    if name.contains(':') || name.starts_with('.') {
+        return Err(format!(
+            "peer import request {label} must be a safe relative name"
+        ));
+    }
+    Ok(())
+}
+
+fn receipt_file_name(assembled_output_slm: &str) -> Result<String, String> {
+    require_safe_import_name(assembled_output_slm, "assembled_output_slm")?;
+    let stem = assembled_output_slm
+        .strip_suffix(".slm")
+        .ok_or_else(|| "assembled_output_slm must end with .slm".to_string())?;
+    Ok(format!("{stem}.minimodel-receipt"))
+}
+
 fn temp_output_path(output_artifact_path: &Path) -> Result<std::path::PathBuf, String> {
     let file_name = output_artifact_path
         .file_name()
@@ -1536,6 +1764,8 @@ mod tests {
         include_str!("../../../examples/tiny-test-model-q8.minimodel.manifest.v0");
     const REAL_Q8_PEER_OFFER: &str =
         include_str!("../../../examples/tiny-test-model-q8.minimodel-peer-offer");
+    const REAL_Q8_PEER_IMPORT_REQUEST: &str =
+        include_str!("../../../examples/tiny-test-model-q8.minimodel-peer-import-request.json");
 
     #[test]
     fn formats_unix_epoch_utc() {
@@ -1737,6 +1967,70 @@ mod tests {
     }
 
     #[test]
+    fn executes_peer_import_request_over_local_http_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer import request test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-import-request");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        let served_piece_dir = dir.join("served-pieces");
+        export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
+        let peer_url = start_peer_piece_server(served_piece_dir, 2);
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
+        let output_dir = dir.join("imported");
+
+        let report =
+            execute_peer_import_request_path(&request_path, &manifest_path, &output_dir).unwrap();
+
+        assert_eq!(report.peer_base_url, peer_url);
+        assert_eq!(report.piece_count, 1);
+        assert!(Path::new(&report.piece_dir_path).exists());
+        assert!(Path::new(&report.output_artifact_path).exists());
+        assert!(Path::new(&report.receipt_path).exists());
+        assert_eq!(
+            std::fs::read(&report.output_artifact_path).unwrap(),
+            std::fs::read(artifact_path).unwrap()
+        );
+        let receipt = std::fs::read_to_string(&report.receipt_path).unwrap();
+        assert!(receipt.contains("slm.validation_status=passed"));
+        assert!(receipt.contains("artifact.local_path_hint=tiny-test-model-q8.slm"));
+    }
+
+    #[test]
+    fn rejects_peer_import_request_artifact_drift_before_fetch_when_fixture_present() {
+        let Some(_artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer import request drift test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-import-request-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        std::fs::write(
+            &request_path,
+            peer_import_request_json("http://127.0.0.1:9/").replace(
+                "sha256:6af985853325eaa6d3eaaa8aadd3511da9596eb542fb2d03a9bc9dc1f4377adf",
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
+        )
+        .unwrap();
+        let output_dir = dir.join("imported");
+
+        let error = execute_peer_import_request_path(&request_path, &manifest_path, &output_dir)
+            .unwrap_err();
+
+        assert!(error.contains("peer import artifact_sha256"));
+        assert!(!output_dir.exists());
+    }
+
+    #[test]
     fn rejects_http_peer_piece_payload_drift_when_fixture_present() {
         let Some(artifact_path) = sibling_q8_fixture() else {
             eprintln!("skipping HTTP peer drift test; TinyRustLM fixture not present");
@@ -1783,6 +2077,75 @@ mod tests {
         let url = HttpUrl::parse(&format!("{peer_url}unlisted-model-bytes.slm")).unwrap();
         let error = http_get_bytes(&url, 1024).unwrap_err();
         assert!(error.contains("404 Not Found"));
+    }
+
+    #[test]
+    fn rejects_project_server_peer_import_host_before_manifest_read() {
+        let dir = unique_dir("peer-import-project-host");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        std::fs::write(
+            &request_path,
+            peer_import_request_json("http://MiniModel.org/peer-pieces/"),
+        )
+        .unwrap();
+        let error = execute_peer_import_request_path(
+            &request_path,
+            Path::new("missing-manifest"),
+            &dir.join("imported"),
+        )
+        .unwrap_err();
+        assert!(error.contains("project server"));
+        assert!(error.contains("never serve model bytes"));
+    }
+
+    #[test]
+    fn rejects_peer_import_request_missing_nested_model_field_before_manifest_read() {
+        let dir = unique_dir("peer-import-missing-field");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        std::fs::write(
+            &request_path,
+            peer_import_request_json("http://127.0.0.1:8123/").replace(
+                "    \"artifact_sha256\": \"sha256:6af985853325eaa6d3eaaa8aadd3511da9596eb542fb2d03a9bc9dc1f4377adf\",\n",
+                "",
+            ),
+        )
+        .unwrap();
+        let error = execute_peer_import_request_path(
+            &request_path,
+            Path::new("missing-manifest"),
+            &dir.join("imported"),
+        )
+        .unwrap_err();
+        assert!(error.contains("artifact_sha256"));
+        assert!(!dir.join("imported").exists());
+    }
+
+    #[test]
+    fn rejects_peer_import_request_wrong_piece_set_kind_before_manifest_read() {
+        let dir = unique_dir("peer-import-piece-set-kind");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        std::fs::write(
+            &request_path,
+            peer_import_request_json("http://127.0.0.1:8123/").replace(
+                "minimodel.peer_piece_set.v0",
+                "minimodel.unsupported_piece_set.v0",
+            ),
+        )
+        .unwrap();
+        let error = execute_peer_import_request_path(
+            &request_path,
+            Path::new("missing-manifest"),
+            &dir.join("imported"),
+        )
+        .unwrap_err();
+        assert!(error.contains("piece set kind"));
+        assert!(!dir.join("imported").exists());
     }
 
     #[test]
@@ -1861,6 +2224,10 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.contains("http://"));
+    }
+
+    fn peer_import_request_json(peer_url: &str) -> String {
+        REAL_Q8_PEER_IMPORT_REQUEST.replace("http://127.0.0.1:8123/", peer_url)
     }
 
     fn sibling_q8_fixture() -> Option<PathBuf> {

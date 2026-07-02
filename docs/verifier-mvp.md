@@ -4,9 +4,9 @@ The first implementation target is a local Rust verifier. It proves manifest and
 
 ## Current Implementation
 
-MiniModel.org now contains the first standard-library Rust verifier workspace:
+MiniModel.org now contains the first Rust verifier workspace:
 
-- `crates/minimodel-core`: parser, boundary checks, SHA256, chunk/Merkle verification, TinyRustLM `.slm` structural validation, peer-piece export/fetch/reassembly, and receipt writing.
+- `crates/minimodel-core`: line-oriented manifest parser, `serde_json` parser for TinyRustLM peer-import request JSON, boundary checks, SHA256, chunk/Merkle verification, TinyRustLM `.slm` structural validation, peer-piece export/fetch/reassembly, and receipt writing.
 - `crates/minimodel`: CLI wrapper for local developer use.
 - `examples/tiny-test-model-q8.minimodel.manifest.v0`: checksum-bound manifest for the TinyRustLM q8 fixture.
 - `examples/catalog-entry.v0.json`: catalog metadata generated from the fixture manifest plus `.minimodel-peer-offer`, not hand-authored placeholder checksums.
@@ -19,9 +19,9 @@ The verifier does not download model bytes. `verify-artifact` only opens the art
 | --- | --- |
 | `minimodel-core` | Parser, normalized manifest model, checksum routines, artifact checks, chunk checks, evidence checks, and receipt writer. |
 | `minimodel` | CLI wrapper around `minimodel-core`. |
-| `minimodel-tests` | Fixture manifests, drift cases, and receipt round trips. |
+| `minimodel-core` unit tests | Fixture manifests, drift cases, request parser failures, peer host rejection, HTTP piece transfer, and receipt round trips. |
 
-The first pass should prefer standard-library Rust and line-oriented parsing. Networking, DHTs, relays, desktop UI, and peer identity exchange are later phases.
+The first pass keeps manifests and peer-piece sidecars line-oriented where possible. Structured browser handoff JSON is parsed as JSON with `serde_json` so the receiver does not rely on string scanning. Networking, DHTs, relays, desktop UI, and peer identity exchange are later phases.
 
 ## Commands
 
@@ -33,6 +33,7 @@ minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>
 minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>
 minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>
 minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>
+minimodel import-peer-request <request-json> <manifest> <output-dir>
 minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id]
 ```
 
@@ -49,6 +50,8 @@ minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-hugg
 `fetch-peer-pieces` is the first live transfer-shaped prototype. It pulls `minimodel.peer_piece_set.v0` plus each listed chunk from a user-provided `http://` peer base URL, rejects project-server hostnames, verifies the piece-set against the manifest, verifies every downloaded piece SHA256 before writing it, and leaves final artifact acceptance to `assemble-peer-pieces`.
 
 `assemble-peer-pieces` reads a local `minimodel.peer_piece_set.v0`, verifies each local piece, assembles a temporary `.slm`, runs the full artifact verifier again, and moves the output into place only after verification passes. This is the first transport-shaped primitive; it is not live peer networking.
+
+`import-peer-request` is the receiver-side one-command path for a TinyRustLM `minimodel.peer_import_request.v0` file. It parses the request, rejects project-server or Hugging Face byte-source claims, checks the request's model id, byte count, artifact SHA-256, safe local output names, and known peer URL against the supplied manifest, then runs the same fetch, assemble, full artifact verification, and receipt-writing chain into the chosen output directory. This is the first "select a proof-ready model, enter peer URL, run one Rust verifier command" path; it still requires a consenting direct peer and never fetches model bytes from MiniModel.org.
 
 `write-catalog-entry` validates a MiniModel manifest and `.minimodel-peer-offer` proof against each other before writing JSON catalog metadata. It rejects artifact, SLM field, chunk count, chunk-list, Merkle root, evidence checksum, and per-chunk drift. The generated entry may advertise `peer_hint_status=peer-offer-ready-known-peer-needed` and `peer_import_status=request-script-ready`, which means TinyRustLM can save a peer-import request/script, not that MiniModel.org serves bytes.
 
@@ -156,6 +159,7 @@ cargo run -p minimodel -- export-peer-pieces examples\tiny-test-model-q8.minimod
 cargo run -p minimodel -- serve-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 .\peer-pieces\tiny-test-model-q8 127.0.0.1:8123
 cargo run -p minimodel -- fetch-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 http://127.0.0.1:8123/ .\peer-pieces-fetched\tiny-test-model-q8
 cargo run -p minimodel -- assemble-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 .\peer-pieces\tiny-test-model-q8 .\tiny-test-model-q8.from-pieces.slm
+cargo run -p minimodel -- import-peer-request .\tiny-test-model-q8.minimodel-peer-import-request.json examples\tiny-test-model-q8.minimodel.manifest.v0 .\tiny-test-model-q8-peer-import
 cargo run -p minimodel -- write-catalog-entry examples\tiny-test-model-q8.minimodel.manifest.v0 examples\tiny-test-model-q8.minimodel-peer-offer examples\catalog-entry.v0.json
 ```
 

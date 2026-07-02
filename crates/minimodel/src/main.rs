@@ -112,6 +112,27 @@ fn run() -> Result<(), String> {
             println!("artifact.sha256: {}", report.artifact_sha256);
             println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
         }
+        "import-peer-request" => {
+            let request_json = one_arg(&mut args, "request-json")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            let output_dir = one_arg(&mut args, "output-dir")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::execute_peer_import_request_path(
+                Path::new(&request_json),
+                Path::new(&manifest),
+                Path::new(&output_dir),
+            )?;
+            println!("MiniModel peer import request executed: {request_json}");
+            println!("output_dir: {output_dir}");
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("piece_dir: {}", report.piece_dir_path);
+            println!("piece_count: {}", report.piece_count);
+            println!("artifact: {}", report.output_artifact_path);
+            println!("receipt: {}", report.receipt_path);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+        }
         "serve-peer-pieces" => {
             let manifest = one_arg(&mut args, "manifest")?;
             let piece_dir = one_arg(&mut args, "piece-dir")?;
@@ -184,6 +205,7 @@ fn print_usage() {
     eprintln!("  minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>");
     eprintln!("  minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>");
     eprintln!("  minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>");
+    eprintln!("  minimodel import-peer-request <request-json> <manifest> <output-dir>");
     eprintln!("  minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>");
     eprintln!(
         "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id]"

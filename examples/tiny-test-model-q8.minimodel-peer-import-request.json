@@ -1,0 +1,51 @@
+{
+  "request_kind": "minimodel.peer_import_request.v0",
+  "request_version": 0,
+  "created_by": "MiniModel example fixture",
+  "model": {
+    "model_id": "tinyrustlm/tiny-test-model-q8",
+    "display_name": "TinyRustLM q8 fixture",
+    "artifact_kind": "slm",
+    "artifact_file_name": "tiny-test-model-q8.slm",
+    "artifact_byte_count": 8832,
+    "artifact_sha256": "sha256:6af985853325eaa6d3eaaa8aadd3511da9596eb542fb2d03a9bc9dc1f4377adf",
+    "slm_model_shape": "vocab=260,hidden=8,layers=1,heads=2,kv_heads=2,head_dim=4,ffn=16,context=16",
+    "quantization": "q8_0"
+  },
+  "source": {
+    "kind": "tinyrustlm-fixture",
+    "identity": "tinyrustlm/tiny-test-model-q8",
+    "model_card_route": "../docs/catalog-boundary.md",
+    "license_route": "../LICENSE.txt"
+  },
+  "minimodel_metadata": {
+    "manifest_route": "tiny-test-model-q8.minimodel.manifest.v0",
+    "peer_offer_route": "tiny-test-model-q8.minimodel-peer-offer",
+    "peer_offer_sha256": "sha256:9da5ada1eb8dd9bb77b8e46cea624f380808aee82568f555b6420fd59fa8d642",
+    "peer_offer_chunk_count": 1,
+    "peer_offer_merkle_root_sha256": "sha256:6af985853325eaa6d3eaaa8aadd3511da9596eb542fb2d03a9bc9dc1f4377adf",
+    "peer_hint_status": "peer-offer-ready-known-peer-needed",
+    "admission_status": "metadata-only",
+    "required_next_gate": "known-consenting-peer-fetch-assemble-rust-reverify-before-browser-import"
+  },
+  "local_peer_piece_contract": {
+    "expected_piece_set_kind": "minimodel.peer_piece_set.v0",
+    "expected_peer_base_url": "http://127.0.0.1:8123/",
+    "expected_piece_dir": "tiny-test-model-q8-peer-pieces",
+    "assembled_output_slm": "tiny-test-model-q8.slm",
+    "peer_side_commands": [
+      "minimodel export-peer-pieces <manifest> <artifact.slm> <piece-dir>",
+      "minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>"
+    ],
+    "rust_commands": [
+      "minimodel import-peer-request <request-json> <manifest> <output-dir>"
+    ]
+  },
+  "boundary": {
+    "project_server_serves_model_bytes": false,
+    "project_server_runs_model_bytes": false,
+    "project_server_proxies_huggingface_bytes": false,
+    "browser_runs_after_rust_wasm_local_slm_validation": true,
+    "transfer_requires_user_consent_and_local_reverify": true
+  }
+}

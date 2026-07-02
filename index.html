@@ -121,11 +121,11 @@
         </a>
         <a href="docs/catalog-boundary.md">
           <h3>Hugging Face</h3>
-          <p>User-triggered external discovery can route model cards, API metadata, file hints, source revisions, endpoint context, conversion-request JSON, and local Rust conversion-script handoffs without project-server proxying, downloads, or inference.</p>
+          <p>User-triggered external discovery can route model cards, API metadata, file hints, source revisions, endpoint context, conversion-request JSON, and local Rust conversion-script handoffs without project-server proxying, downloads, or inference. The script can produce both a converted `.slm` and a `.minimodel-peer-offer` proof.</p>
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>P2P</h3>
-          <p>Today TinyRustLM can save checksum-bound share metadata from a verified local `.slm`; future peer transfer uses that shape with consent, chunk/Merkle verification, local receipts, and TinyRustLM handoff.</p>
+          <p>Today TinyRustLM can save checksum-bound share metadata from a verified local `.slm`, and the Rust packer can write peer-offer proof manifests; future peer transfer uses that shape with consent, chunk/Merkle verification, local receipts, and TinyRustLM handoff.</p>
         </a>
       </div>
     </section>
@@ -154,7 +154,11 @@
         </a>
         <a href="examples/share-metadata.v0.json">
           <h3>Share metadata example</h3>
-          <p>Example local bundle for a verified `.slm` with catalog-entry candidate, peer-offer metadata, chunk hashes, and live transfer explicitly disabled.</p>
+          <p>Example local bundle and peer-offer proof for a verified `.slm` with catalog-entry candidate, chunk hashes, and live transfer explicitly disabled.</p>
+        </a>
+        <a href="examples/tiny-test-model-q8.minimodel-peer-offer">
+          <h3>Peer offer example</h3>
+          <p>Rust-generated text proof binding an admitted `.slm` to artifact SHA-256, chunk SHA-256 rows, and a Merkle root while transfer remains disabled.</p>
         </a>
       </div>
     </section>

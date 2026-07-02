@@ -96,7 +96,7 @@
         <li>
           <span class="step">05</span>
           <h3>Peer App</h3>
-          <p>Build a Rust desktop peer app for discovery, chunk transfer, resume, checksum validation, and local handoff to TinyRustLM.</p>
+          <p>Use the first direct peer-piece fetch prototype for known consenting HTTP peers, then build toward a Rust peer app for discovery, resume, checksum validation, and local handoff to TinyRustLM.</p>
         </li>
         <li>
           <span class="step">06</span>
@@ -125,7 +125,7 @@
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>P2P</h3>
-          <p>Today TinyRustLM can save checksum-bound share metadata from a verified local `.slm`, and the Rust packer can write peer-offer proof manifests; future peer transfer uses that shape with consent, chunk/Merkle verification, local receipts, and TinyRustLM handoff.</p>
+          <p>Today Rust can export, fetch from a known direct HTTP peer, and reassemble local peer pieces from a verified `.slm`; broader peer discovery comes later, with consent and re-verification still required.</p>
         </a>
       </div>
     </section>
@@ -142,7 +142,7 @@
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>Rust verifier</h3>
-          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, TinyRustLM compatibility, and import receipts.</p>
+          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, direct peer-piece fetch, peer-piece export/reassembly, TinyRustLM compatibility, and import receipts.</p>
         </a>
         <a href="examples/tiny-test-model-q8.minimodel.manifest.v0">
           <h3>Fixture manifest</h3>

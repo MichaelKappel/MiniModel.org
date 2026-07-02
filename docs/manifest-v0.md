@@ -96,6 +96,8 @@ The peer-offer output is a text manifest, usually named `.minimodel-peer-offer`,
 
 After a user imports a verified local `.slm`, TinyRustLM may save a `minimodel.local_slm_share_metadata.v0` JSON bundle. That bundle contains a catalog-entry candidate and a `minimodel.peer_offer.v0` metadata block with real artifact SHA-256, chunk SHA-256 entries, chunk-list SHA-256, and a Merkle root. It must keep `peer_transfer_implemented=false` and `network_transfer_available=false` until a real consent-based peer app exists.
 
+The MiniModel verifier can also turn a verified local `.slm` into local peer pieces with `export-peer-pieces`. The output directory contains chunk files plus `minimodel.peer_piece_set.v0`. `fetch-peer-pieces` can retrieve that sidecar and its listed chunks from a user-provided direct `http://` peer endpoint, rejects project-server hostnames, and verifies every chunk SHA-256 before writing the local piece directory. `assemble-peer-pieces` verifies each local chunk again, assembles a temporary `.slm`, and then applies the full manifest/artifact/`.slm` verifier before writing the accepted output file. This tests the byte contract a future P2P transport must preserve while still keeping project servers out of the model-byte path.
+
 ## Chunk Fields
 
 Chunk fields are reserved for the later peer-transfer phase. The local-only verifier must still parse and validate them when present.

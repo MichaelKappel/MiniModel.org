@@ -9,7 +9,7 @@ Project servers never run user models and never serve user model bytes. They may
 ## Architecture
 
 1. `minimodel-core`: Rust verification library for manifests, checksums, chunks, identities, and import receipts.
-2. `minimodel` CLI: local verifier for `.slm` artifacts, license/model-card fields, evidence routes, and TinyRustLM import readiness.
+2. `minimodel` CLI: local verifier for `.slm` artifacts, license/model-card fields, evidence routes, direct peer-piece fetch, peer-piece export/reassembly, and TinyRustLM import readiness.
 3. Static catalog: metadata-only listings and peer hints, with no model weights.
 4. Peer app: later Rust desktop app for consent-based discovery, resumable transfer, NAT traversal, local quotas, and checksum validation.
 5. TinyRustLM handoff: verified local `.slm` files open in the browser-local Rust/WASM runtime.
@@ -20,7 +20,7 @@ MiniModel.org should support three source lanes, all ending in local verificatio
 
 - User-owned local files and lists: users bring `.slm` files and optional local JSON metadata lists from their own machine.
 - Hugging Face discovery: users may search or inspect external Hugging Face metadata, model cards, file hints, and source revisions, but project servers do not proxy `/resolve/` downloads and do not use project-owned tokens.
-- MiniModel P2P: future consenting peers exchange chunks that are verified by checksum and Merkle data before import.
+- MiniModel P2P: consenting peers exchange chunks that are verified by checksum and Merkle data before import. The first prototype is a direct `http://` peer-piece fetch from a user-provided peer endpoint; discovery, identity exchange, relays, and NAT traversal remain later.
 
 All source lanes must converge on a user-controlled local `.slm` artifact, a local verifier result or receipt, and a browser file-picker import into TinyRustLM. Hugging Face Inference Providers, Inference Endpoints, and executable Spaces are remote execution products, not MiniModel or TinyRustLM run paths.
 
@@ -43,7 +43,7 @@ The first concrete schema draft is [docs/manifest-v0.md](docs/manifest-v0.md). I
 
 ## Verifier MVP
 
-The first implementation target is a local Rust verifier, not a network. The initial `minimodel-core` and `minimodel` crates now parse manifests, reject server-byte and server-execution claims, verify a user-supplied local `.slm` artifact, check TinyRustLM compatibility fields, validate chunk/Merkle metadata when present, and write a local import receipt.
+The first implementation target is a local Rust verifier plus the smallest possible direct peer-piece transfer prototype. The initial `minimodel-core` and `minimodel` crates now parse manifests, reject server-byte and server-execution claims, verify a user-supplied local `.slm` artifact, check TinyRustLM compatibility fields, validate chunk/Merkle metadata when present, export local peer pieces, fetch peer pieces from a consenting direct HTTP peer endpoint, reassemble those pieces with full re-verification, and write a local import receipt.
 
 Verifier planning lives in [docs/verifier-mvp.md](docs/verifier-mvp.md).
 
@@ -68,7 +68,7 @@ Model creation and import should follow the TinyRustLM evidence chain: safetenso
 3. Write local import receipts for verified `.slm` files.
 4. Publish metadata-only static catalog prototypes.
 5. Export local share-metadata bundles from verified `.slm` imports, including chunk hashes and Merkle roots.
-6. Prototype peer transfer with chunk/Merkle verification.
+6. Prototype peer transfer using the existing peer-piece sidecar, direct peer HTTP fetch, and chunk/Merkle verification.
 7. Build a desktop peer app with consent, local cache controls, and TinyRustLM handoff.
 
 ## Examples

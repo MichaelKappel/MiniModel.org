@@ -1,17 +1,22 @@
 profile: minimodel.intake-outcome-ledger.v1
-updated_utc: 2026-07-02T06:15:00Z
+updated_utc: 2026-07-02T15:23:00Z
 site: MiniModel.org
 latest_scan:
   content_non_placeholder_files: 0
   improvement_non_placeholder_files: 0
   outcome: placeholder_only
 latest_implementation_note:
-  id: minimodel_local_verifier_mvp_2026_07_02
+  id: minimodel_direct_peer_piece_fetch_2026_07_02
   disposition: implemented
-  source_impact: Added `minimodel-core` and `minimodel` Rust verifier crates plus a real q8 manifest example without adding model bytes.
-  memory_impact: Updated workspace and short-term memory routes to the implemented verifier.
+  source_impact: Added direct HTTP peer-piece fetch on top of local peer-piece export/reassembly without adding model bytes to the repo or public servers.
+  memory_impact: Updated workspace and short-term memory routes to the direct known-peer fetch bridge.
   active_intake_after: placeholder_only
 records:
+  - id: minimodel_peer_piece_mvp_2026_07_02
+    disposition: implemented
+    source_impact: Added local peer-piece export/reassembly on top of the verifier without adding model bytes to the repo or public servers.
+    memory_impact: Updated workspace and short-term memory routes to the implemented peer-piece bridge.
+    active_intake_after: placeholder_only
   - id: initial_file_handoff_setup_2026_07_01
     disposition: setup_complete
     source_impact: Created independent MiniModel.org File Handoff buckets for future content and improvement intake.

@@ -1,9 +1,10 @@
-profile: minimodel.short-term-memory.v3
-updated_utc: 2026-07-02T06:15:00Z
+profile: minimodel.short-term-memory.v4
+updated_utc: 2026-07-02T15:23:00Z
 current_state:
   - MiniModel.org is a Rust-first metadata, verifier, and future peer-to-peer tiny model package exchange workspace.
-  - Source options are user-owned local files/lists, user-triggered Hugging Face metadata discovery/conversion handoff, and future consent-based P2P transfer.
-  - First local verifier implementation exists in `crates/minimodel-core` and `crates/minimodel`: manifest parse, boundary rejection, local artifact byte/SHA256 checks, TinyRustLM `.slm` validation, chunk/Merkle verification, and import receipt writing.
+  - Source options are user-owned local files/lists, user-triggered Hugging Face metadata discovery/conversion handoff, direct known-peer HTTP piece fetch, and future broader P2P discovery/relay.
+  - First local verifier implementation exists in `crates/minimodel-core` and `crates/minimodel`: manifest parse, boundary rejection, local artifact byte/SHA256 checks, TinyRustLM `.slm` validation, chunk/Merkle verification, peer-piece export, direct HTTP peer-piece fetch, peer-piece reassembly, and import receipt writing.
+  - Local peer pieces are the first transfer bridge: `export-peer-pieces` writes `minimodel.peer_piece_set.v0` plus local chunk files from a verified `.slm`, `fetch-peer-pieces` retrieves a piece set and chunks from a consenting direct `http://` peer while rejecting project-server hosts and checksum drift, and `assemble-peer-pieces` reassembles only after piece SHA256 checks plus full artifact verification.
   - Real non-hosted q8 fixture metadata lives at `examples/tiny-test-model-q8.minimodel.manifest.v0`; the `.slm` artifact remains outside MiniModel.org.
   - It references MiRust.com as a one-way talisman source.
   - File Handoff setup is initialized with placeholder-only active intake.

@@ -80,6 +80,16 @@ TinyRustLM may export `minimodel.local_slm_share_metadata.v0` after a user impor
 
 The Rust packer can also write `.minimodel-peer-offer` with `tinyrustlm-slm-pack peer-offer <input.slm> <output.peer-offer>` and validate it with `validate-peer-offer`. Catalog entries may reference that text manifest with `peer_offer_route`, `peer_offer_sha256`, `peer_offer_chunk_count`, and `peer_offer_merkle_root_sha256`, but a peer-offer route is not a model download route and does not mean project servers serve bytes.
 
+The MiniModel verifier can now export local peer pieces after verification:
+
+```text
+minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>
+minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>
+minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>
+```
+
+This creates, fetches, and consumes a local `minimodel.peer_piece_set.v0` sidecar plus chunk files. `fetch-peer-pieces` is a narrow direct-peer prototype: it downloads the sidecar and listed chunks from a user-provided `http://` peer endpoint, rejects project-server hostnames, and verifies every piece checksum before writing the local output directory. The sidecar proves what a peer transport should carry, and `assemble-peer-pieces` re-runs full Rust artifact verification before writing the accepted `.slm`. The chunk files are model bytes and must not be uploaded to MiniModel.org.
+
 The bundle may be submitted for review or used by future peer software, but it is not an endorsement and not an execution grant. TinyRustLM still runs only a user-selected local `.slm` after Rust/WASM validation.
 
 ## TinyRustLM UI Mapping
@@ -88,7 +98,7 @@ TinyRustLM should expose the same source lanes in plain language:
 
 - `Your Local Files`: first-class runnable path through the browser file picker.
 - `Hugging Face`: user-triggered metadata discovery, model-card review, source revision context, API endpoint awareness, conversion-request JSON, and optional local Rust conversion-script handoff only.
-- `P2P Exchange`: MiniModel metadata and peer-offer proof for converted `.slm` records now, future peer-transfer flow later, still requiring local receipt and `.slm` verification before browser execution.
+- `P2P Exchange`: MiniModel metadata, peer-offer proof, direct peer-piece fetch, and local peer-piece export/reassembly for converted `.slm` records now; broader peer discovery and relay flow later, still requiring local receipt and `.slm` verification before browser execution.
 
 Advanced source details may show catalog URLs, Hugging Face search fields, checksums, manifests, evidence routes, and verifier status, but the first-load Chat mode should keep those behind progressive disclosure.
 
@@ -125,13 +135,14 @@ The first implementation remains Rust-first:
 
 ## First Public Deliverable
 
-The first public deliverable is not a network. It is a stable documentation set:
+The first public deliverable is not a hosted model network. It is a stable documentation and local-verifier set:
 
 - manifest schema
 - verifier plan
+- local peer-piece export, direct peer fetch, and reassembly
 - metadata-only catalog rules
 - example manifest
 - example catalog entry
 - takedown/contact route language
 
-Only after those pieces are stable should peer transfer be prototyped.
+Only after those pieces are stable should broader peer discovery, identity exchange, relay, and cache behavior be prototyped.

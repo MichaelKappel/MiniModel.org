@@ -61,6 +61,57 @@ fn run() -> Result<(), String> {
             println!("manifest.sha256: {}", report.manifest_sha256);
             println!("artifact.sha256: {}", report.artifact_sha256);
         }
+        "export-peer-pieces" => {
+            let manifest = one_arg(&mut args, "manifest")?;
+            let artifact = one_arg(&mut args, "artifact.slm")?;
+            let output_dir = one_arg(&mut args, "output-dir")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::export_peer_pieces_path(
+                Path::new(&manifest),
+                Path::new(&artifact),
+                Path::new(&output_dir),
+            )?;
+            println!("MiniModel peer pieces exported: {output_dir}");
+            println!("piece_set: {}", report.piece_set_path);
+            println!("piece_count: {}", report.piece_count);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+        }
+        "assemble-peer-pieces" => {
+            let manifest = one_arg(&mut args, "manifest")?;
+            let piece_dir = one_arg(&mut args, "piece-dir")?;
+            let output_artifact = one_arg(&mut args, "output.slm")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::assemble_peer_pieces_path(
+                Path::new(&manifest),
+                Path::new(&piece_dir),
+                Path::new(&output_artifact),
+            )?;
+            println!("MiniModel peer pieces assembled and verified: {output_artifact}");
+            println!("bytes: {}", report.artifact_byte_count);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("slm.model_shape: {}", report.slm.model_shape);
+            println!("slm.quantization: {}", report.slm.quantization);
+        }
+        "fetch-peer-pieces" => {
+            let manifest = one_arg(&mut args, "manifest")?;
+            let peer_base_url = one_arg(&mut args, "http-peer-base-url")?;
+            let output_dir = one_arg(&mut args, "output-dir")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::fetch_peer_pieces_http_path(
+                Path::new(&manifest),
+                &peer_base_url,
+                Path::new(&output_dir),
+            )?;
+            println!("MiniModel peer pieces fetched and verified: {output_dir}");
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("piece_set: {}", report.piece_set_path);
+            println!("piece_count: {}", report.piece_count);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+        }
         _ => {
             print_usage();
             return Err(format!("unsupported command {command}"));
@@ -88,4 +139,7 @@ fn print_usage() {
     eprintln!(
         "  minimodel write-import-receipt <manifest> <artifact.slm> <receipt.minimodel-receipt>"
     );
+    eprintln!("  minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>");
+    eprintln!("  minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>");
+    eprintln!("  minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>");
 }

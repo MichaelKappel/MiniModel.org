@@ -96,6 +96,14 @@ The peer-offer output is a text manifest, usually named `.minimodel-peer-offer`,
 
 After a user imports a verified local `.slm`, TinyRustLM may save a `minimodel.local_slm_share_metadata.v0` JSON bundle. That bundle contains a catalog-entry candidate and a `minimodel.peer_offer.v0` metadata block with real artifact SHA-256, chunk SHA-256 entries, chunk-list SHA-256, and a Merkle root. It must keep `peer_transfer_implemented=false` and `network_transfer_available=false` until a real consent-based peer app exists.
 
+MiniModel can also write a catalog entry from an admitted manifest plus peer-offer proof:
+
+```text
+minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id]
+```
+
+The command validates that the peer-offer artifact fields, `.slm` fields, chunk count, chunk-list SHA-256, Merkle root, admission checksum, and per-chunk rows match the manifest before JSON is written. A generated catalog row may use `peer_hint_status=peer-offer-ready-known-peer-needed` and `peer_import_status=request-script-ready`. Those fields mean the UI can save a P2P import request and Rust fetch/assemble/reverify script once the user supplies a consenting peer URL; they do not authorize TinyRustLM or MiniModel.org to fetch model bytes from project servers.
+
 The MiniModel verifier can also turn a verified local `.slm` into local peer pieces with `export-peer-pieces`. The output directory contains chunk files plus `minimodel.peer_piece_set.v0`. `serve-peer-pieces` validates that directory, starts a user-controlled local HTTP listener, and serves only the declared sidecar plus declared piece file names. `fetch-peer-pieces` can retrieve that sidecar and its listed chunks from a user-provided direct `http://` peer endpoint, rejects project-server hostnames, and verifies every chunk SHA-256 before writing the local piece directory. `assemble-peer-pieces` verifies each local chunk again, assembles a temporary `.slm`, and then applies the full manifest/artifact/`.slm` verifier before writing the accepted output file. This tests the byte contract a future P2P transport must preserve while still keeping project servers out of the model-byte path.
 
 ## Chunk Fields

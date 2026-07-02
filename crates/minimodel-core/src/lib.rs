@@ -52,28 +52,26 @@ pub struct PeerPieceServe {
     pub merkle_root_sha256: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct CatalogEntryReport {
+    pub catalog_entry_path: String,
+    pub model_id: String,
+    pub artifact_sha256: String,
+    pub peer_offer_sha256: String,
+}
+
 pub fn verify_manifest_path(path: &Path) -> Result<Manifest, String> {
-    let bytes = fs::read(path).map_err(|error| format!("failed to read manifest: {error}"))?;
-    let text =
-        std::str::from_utf8(&bytes).map_err(|_| "manifest must be valid UTF-8".to_string())?;
-    let manifest = Manifest::parse(text)?;
-    manifest.validate()?;
-    Ok(manifest)
+    Ok(read_valid_manifest_path(path)?.manifest)
 }
 
 pub fn verify_artifact_path(
     manifest_path: &Path,
     artifact_path: &Path,
 ) -> Result<ArtifactVerification, String> {
-    let manifest_bytes =
-        fs::read(manifest_path).map_err(|error| format!("failed to read manifest: {error}"))?;
-    let manifest_text = std::str::from_utf8(&manifest_bytes)
-        .map_err(|_| "manifest must be valid UTF-8".to_string())?;
-    let manifest = Manifest::parse(manifest_text)?;
-    manifest.validate()?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
     let artifact_bytes =
         fs::read(artifact_path).map_err(|error| format!("failed to read artifact: {error}"))?;
-    verify_artifact_bytes(&manifest, &manifest_bytes, &artifact_bytes)
+    verify_artifact_bytes(&bundle.manifest, &bundle.bytes, &artifact_bytes)
 }
 
 pub fn verify_artifact_bytes(
@@ -132,20 +130,15 @@ pub fn export_peer_pieces_path(
     artifact_path: &Path,
     output_dir: &Path,
 ) -> Result<PeerPieceExport, String> {
-    let manifest_bytes =
-        fs::read(manifest_path).map_err(|error| format!("failed to read manifest: {error}"))?;
-    let manifest_text = std::str::from_utf8(&manifest_bytes)
-        .map_err(|_| "manifest must be valid UTF-8".to_string())?;
-    let manifest = Manifest::parse(manifest_text)?;
-    manifest.validate()?;
-    require_fixed_chunk_mode(&manifest)?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    require_fixed_chunk_mode(&bundle.manifest)?;
     let artifact_bytes =
         fs::read(artifact_path).map_err(|error| format!("failed to read artifact: {error}"))?;
-    let report = verify_artifact_bytes(&manifest, &manifest_bytes, &artifact_bytes)?;
+    let report = verify_artifact_bytes(&bundle.manifest, &bundle.bytes, &artifact_bytes)?;
     create_empty_dir(output_dir)?;
-    let chunk_size = parse_usize(manifest.require("chunks.size")?, "chunks.size")?;
+    let chunk_size = parse_usize(bundle.manifest.require("chunks.size")?, "chunks.size")?;
     let chunks = chunk_proofs(&artifact_bytes, chunk_size)?;
-    let piece_set_text = peer_piece_set_text(&manifest, &report, &chunks)?;
+    let piece_set_text = peer_piece_set_text(&bundle.manifest, &report, &chunks)?;
     for (index, chunk) in chunks.iter().enumerate() {
         let start = chunk.offset;
         let end = start
@@ -177,18 +170,13 @@ pub fn assemble_peer_pieces_path(
     if output_artifact_path.exists() {
         return Err("output artifact path already exists".to_string());
     }
-    let manifest_bytes =
-        fs::read(manifest_path).map_err(|error| format!("failed to read manifest: {error}"))?;
-    let manifest_text = std::str::from_utf8(&manifest_bytes)
-        .map_err(|_| "manifest must be valid UTF-8".to_string())?;
-    let manifest = Manifest::parse(manifest_text)?;
-    manifest.validate()?;
-    require_fixed_chunk_mode(&manifest)?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    require_fixed_chunk_mode(&bundle.manifest)?;
     let piece_set_path = piece_dir.join("minimodel.peer_piece_set.v0");
     let piece_set_text = fs::read_to_string(&piece_set_path)
         .map_err(|error| format!("failed to read peer piece set: {error}"))?;
     let piece_set = Manifest::parse(&piece_set_text)?;
-    validate_piece_set(&manifest, &manifest_bytes, &piece_set)?;
+    validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
     if let Some(parent) = output_artifact_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|error| format!("failed to create output directory: {error}"))?;
@@ -225,19 +213,14 @@ pub fn fetch_peer_pieces_http_path(
     if output_dir.exists() {
         return Err("peer piece fetch output directory must not already exist".to_string());
     }
-    let manifest_bytes =
-        fs::read(manifest_path).map_err(|error| format!("failed to read manifest: {error}"))?;
-    let manifest_text = std::str::from_utf8(&manifest_bytes)
-        .map_err(|_| "manifest must be valid UTF-8".to_string())?;
-    let manifest = Manifest::parse(manifest_text)?;
-    manifest.validate()?;
-    require_fixed_chunk_mode(&manifest)?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    require_fixed_chunk_mode(&bundle.manifest)?;
     let piece_set_url = base_url.join_file("minimodel.peer_piece_set.v0")?;
     let piece_set_bytes = http_get_bytes(&piece_set_url, 1_048_576)?;
     let piece_set_text = std::str::from_utf8(&piece_set_bytes)
         .map_err(|_| "peer piece set must be valid UTF-8".to_string())?;
     let piece_set = Manifest::parse(piece_set_text)?;
-    validate_piece_set(&manifest, &manifest_bytes, &piece_set)?;
+    validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
     let chunk_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
     let temp_dir = temp_download_dir(output_dir)?;
     if temp_dir.exists() {
@@ -269,9 +252,11 @@ pub fn fetch_peer_pieces_http_path(
                 .display()
                 .to_string(),
             piece_count: chunk_count,
-            manifest_sha256: sha256_prefixed(&manifest_bytes),
-            artifact_sha256: normalize_sha256(manifest.require("artifact.sha256")?)?,
-            merkle_root_sha256: normalize_sha256(manifest.require("chunks.merkle_root_sha256")?)?,
+            manifest_sha256: sha256_prefixed(&bundle.bytes),
+            artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
+            merkle_root_sha256: normalize_sha256(
+                bundle.manifest.require("chunks.merkle_root_sha256")?,
+            )?,
             peer_base_url: base_url.to_string(),
         }),
         Err(error) => {
@@ -285,25 +270,65 @@ pub fn inspect_peer_piece_dir_path(
     manifest_path: &Path,
     piece_dir: &Path,
 ) -> Result<PeerPieceServe, String> {
-    let manifest_bytes =
-        fs::read(manifest_path).map_err(|error| format!("failed to read manifest: {error}"))?;
-    let manifest_text = std::str::from_utf8(&manifest_bytes)
-        .map_err(|_| "manifest must be valid UTF-8".to_string())?;
-    let manifest = Manifest::parse(manifest_text)?;
-    manifest.validate()?;
-    require_fixed_chunk_mode(&manifest)?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    require_fixed_chunk_mode(&bundle.manifest)?;
     let piece_set_path = piece_dir.join("minimodel.peer_piece_set.v0");
     let piece_set_text = fs::read_to_string(&piece_set_path)
         .map_err(|error| format!("failed to read peer piece set: {error}"))?;
     let piece_set = Manifest::parse(&piece_set_text)?;
-    validate_piece_set(&manifest, &manifest_bytes, &piece_set)?;
+    validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
     let chunk_count = validate_peer_piece_files(&piece_set, piece_dir)?;
     Ok(PeerPieceServe {
         piece_set_path: piece_set_path.display().to_string(),
         piece_count: chunk_count,
-        manifest_sha256: sha256_prefixed(&manifest_bytes),
-        artifact_sha256: normalize_sha256(manifest.require("artifact.sha256")?)?,
-        merkle_root_sha256: normalize_sha256(manifest.require("chunks.merkle_root_sha256")?)?,
+        manifest_sha256: sha256_prefixed(&bundle.bytes),
+        artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
+        merkle_root_sha256: normalize_sha256(
+            bundle.manifest.require("chunks.merkle_root_sha256")?,
+        )?,
+    })
+}
+
+pub fn write_catalog_entry_path(
+    manifest_path: &Path,
+    peer_offer_path: &Path,
+    output_path: &Path,
+    source_huggingface_model_id: Option<&str>,
+) -> Result<CatalogEntryReport, String> {
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    require_fixed_chunk_mode(&bundle.manifest)?;
+    let peer_offer_bytes = fs::read(peer_offer_path)
+        .map_err(|error| format!("failed to read peer offer proof: {error}"))?;
+    let peer_offer_text = std::str::from_utf8(&peer_offer_bytes)
+        .map_err(|_| "peer offer proof must be valid UTF-8".to_string())?;
+    let peer_offer = Manifest::parse(peer_offer_text)?;
+    let peer_offer_sha256 = sha256_prefixed(&peer_offer_bytes);
+    validate_peer_offer_against_manifest(&bundle.manifest, &peer_offer, &peer_offer_sha256)?;
+    let manifest_route = file_name_for_route(manifest_path, "manifest")?;
+    let peer_offer_route = file_name_for_route(peer_offer_path, "peer offer")?;
+    let source_huggingface_model_id = match source_huggingface_model_id {
+        Some(value) if !value.trim().is_empty() => Some(validate_huggingface_model_id(value)?),
+        _ => None,
+    };
+    let catalog_entry = catalog_entry_json(
+        &bundle.manifest,
+        &peer_offer,
+        &manifest_route,
+        &peer_offer_route,
+        &peer_offer_sha256,
+        source_huggingface_model_id.as_deref(),
+    )?;
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create catalog entry directory: {error}"))?;
+    }
+    fs::write(output_path, catalog_entry)
+        .map_err(|error| format!("failed to write catalog entry: {error}"))?;
+    Ok(CatalogEntryReport {
+        catalog_entry_path: output_path.display().to_string(),
+        model_id: bundle.manifest.require("model.id")?.to_string(),
+        artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
+        peer_offer_sha256,
     })
 }
 
@@ -315,6 +340,20 @@ pub fn serve_peer_pieces_http_path(
     let report = inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
     serve_peer_piece_dir_http_path(piece_dir, bind_addr, None)?;
     Ok(report)
+}
+
+struct ValidManifest {
+    bytes: Vec<u8>,
+    manifest: Manifest,
+}
+
+fn read_valid_manifest_path(path: &Path) -> Result<ValidManifest, String> {
+    let bytes = fs::read(path).map_err(|error| format!("failed to read manifest: {error}"))?;
+    let text =
+        std::str::from_utf8(&bytes).map_err(|_| "manifest must be valid UTF-8".to_string())?;
+    let manifest = Manifest::parse(text)?;
+    manifest.validate()?;
+    Ok(ValidManifest { bytes, manifest })
 }
 
 pub fn import_receipt_text(
@@ -349,6 +388,351 @@ pub fn import_receipt_text(
         "user-selected-tinyrustlm-local-file-open",
     );
     Ok(text)
+}
+
+fn validate_peer_offer_against_manifest(
+    manifest: &Manifest,
+    peer_offer: &Manifest,
+    peer_offer_sha256: &str,
+) -> Result<(), String> {
+    require_peer_offer_equal(peer_offer, "minimodel_peer_offer_version", "0")?;
+    require_peer_offer_equal(peer_offer, "offer_kind", "minimodel.peer_offer.v0")?;
+    require_peer_offer_equal(peer_offer, "artifact_kind", "slm")?;
+    require_safe_piece_file_name(peer_offer.require("artifact_file_name")?)?;
+    require_peer_offer_equal(
+        peer_offer,
+        "artifact_byte_count",
+        manifest.require("artifact.byte_count")?,
+    )?;
+    require_peer_offer_equal(
+        peer_offer,
+        "artifact_sha256",
+        &normalize_sha256(manifest.require("artifact.sha256")?)?,
+    )?;
+    require_peer_offer_equal(
+        peer_offer,
+        "slm_version",
+        manifest.require("slm.format_version")?,
+    )?;
+    if let Some(expected) = manifest.get("slm.checksum") {
+        require_peer_offer_equal(peer_offer, "slm_checksum", expected)?;
+    }
+    require_peer_offer_equal(
+        peer_offer,
+        "slm_model_shape",
+        manifest.require("slm.model_shape")?,
+    )?;
+    require_peer_offer_equal(
+        peer_offer,
+        "slm_quantization",
+        manifest.require("slm.quantization")?,
+    )?;
+    require_peer_offer_equal(
+        peer_offer,
+        "slm_tokenizer_checksum",
+        manifest.require("slm.tokenizer_checksum")?,
+    )?;
+    require_peer_offer_equal(
+        peer_offer,
+        "slm_tensor_layout_checksum",
+        manifest.require("slm.tensor_layout_checksum")?,
+    )?;
+    require_peer_offer_equal(peer_offer, "chunk_algorithm", "sha256-merkle-v0")?;
+    require_peer_offer_equal(peer_offer, "chunk_size", manifest.require("chunks.size")?)?;
+    require_peer_offer_equal(peer_offer, "chunk_count", manifest.require("chunks.count")?)?;
+    require_peer_offer_equal(
+        peer_offer,
+        "chunk_list_sha256",
+        &normalize_sha256(manifest.require("chunks.list.sha256")?)?,
+    )?;
+    require_peer_offer_equal(
+        peer_offer,
+        "merkle_root_sha256",
+        &normalize_sha256(manifest.require("chunks.merkle_root_sha256")?)?,
+    )?;
+    require_peer_offer_equal(peer_offer, "project_server_serves_model_bytes", "false")?;
+    require_peer_offer_equal(peer_offer, "project_server_runs_model_bytes", "false")?;
+    if let Some(value) = peer_offer.get("transfer_network_available") {
+        require_value_member(value, "transfer_network_available", &["false"])?;
+    }
+    if let Some(expected) = manifest.get("evidence.admission.sha256") {
+        require_normalized_equal(
+            "evidence.admission.sha256",
+            &normalize_sha256(expected)?,
+            peer_offer_sha256,
+            "peer offer proof",
+        )?;
+    }
+    let chunk_count = parse_usize(manifest.require("chunks.count")?, "chunks.count")?;
+    for index in 0..chunk_count {
+        let manifest_prefix = format!("chunk.{index}");
+        let peer_prefix = format!("chunk.{index}");
+        require_peer_offer_equal(
+            peer_offer,
+            &format!("{peer_prefix}.offset"),
+            manifest.require(&format!("{manifest_prefix}.offset"))?,
+        )?;
+        require_peer_offer_equal(
+            peer_offer,
+            &format!("{peer_prefix}.byte_count"),
+            manifest.require(&format!("{manifest_prefix}.byte_count"))?,
+        )?;
+        require_peer_offer_equal(
+            peer_offer,
+            &format!("{peer_prefix}.sha256"),
+            &normalize_sha256(manifest.require(&format!("{manifest_prefix}.sha256"))?)?,
+        )?;
+    }
+    Ok(())
+}
+
+fn catalog_entry_json(
+    manifest: &Manifest,
+    peer_offer: &Manifest,
+    manifest_route: &str,
+    peer_offer_route: &str,
+    peer_offer_sha256: &str,
+    source_huggingface_model_id: Option<&str>,
+) -> Result<String, String> {
+    let mut fields = Vec::new();
+    fields.push(json_number_field("catalog_version", "0"));
+    fields.push(json_string_field("entry_kind", "minimodel.catalog_entry"));
+    fields.push(json_string_field("model_id", manifest.require("model.id")?));
+    fields.push(json_string_field(
+        "display_name",
+        manifest.require("model.id")?,
+    ));
+    fields.push(json_string_field(
+        "publisher_id",
+        manifest.require("publisher.id")?,
+    ));
+    fields.push(json_string_field(
+        "publisher_key_id",
+        manifest.require("publisher.key_id")?,
+    ));
+    fields.push(json_string_field("manifest_route", manifest_route));
+    fields.push(json_string_field(
+        "model_card_route",
+        manifest.require("model_card.route")?,
+    ));
+    fields.push(json_string_field(
+        "license_route",
+        manifest.require("license.route")?,
+    ));
+    fields.push(json_string_field("artifact_kind", "slm"));
+    fields.push(json_string_field(
+        "artifact_file_name",
+        peer_offer.require("artifact_file_name")?,
+    ));
+    fields.push(json_string_field(
+        "local_file_name_hint",
+        peer_offer.require("artifact_file_name")?,
+    ));
+    fields.push(json_number_field(
+        "artifact_byte_count",
+        manifest.require("artifact.byte_count")?,
+    ));
+    fields.push(json_string_field(
+        "artifact_sha256",
+        &normalize_sha256(manifest.require("artifact.sha256")?)?,
+    ));
+    fields.push(json_null_field("artifact_project_server_url"));
+    fields.push(json_bool_field("project_server_serves_model_bytes", false));
+    fields.push(json_bool_field("project_server_runs_model_bytes", false));
+    fields.push(json_string_field(
+        "peer_hint_status",
+        "peer-offer-ready-known-peer-needed",
+    ));
+    fields.push(json_string_field(
+        "peer_import_status",
+        "request-script-ready",
+    ));
+    fields.push(json_string_field("peer_offer_route", peer_offer_route));
+    fields.push(json_string_field("peer_offer_sha256", peer_offer_sha256));
+    fields.push(json_string_field(
+        "peer_offer_kind",
+        "minimodel.peer_offer.v0",
+    ));
+    fields.push(json_string_field(
+        "peer_offer_chunk_algorithm",
+        "sha256-merkle-v0",
+    ));
+    fields.push(json_number_field(
+        "peer_offer_chunk_size",
+        manifest.require("chunks.size")?,
+    ));
+    fields.push(json_number_field(
+        "peer_offer_chunk_count",
+        manifest.require("chunks.count")?,
+    ));
+    fields.push(json_string_field(
+        "peer_offer_merkle_root_sha256",
+        &normalize_sha256(manifest.require("chunks.merkle_root_sha256")?)?,
+    ));
+    fields.push(json_string_field(
+        "execution_policy",
+        "user-local-file-only",
+    ));
+    fields.push(json_string_field(
+        "source_kind",
+        manifest.require("source.kind")?,
+    ));
+    fields.push(json_string_field(
+        "source_identity",
+        manifest.require("source.id")?,
+    ));
+    fields.push(json_string_field(
+        "source_revision",
+        manifest.require("source.revision")?,
+    ));
+    if let Some(model_id) = source_huggingface_model_id {
+        fields.push(json_string_field("source_huggingface_model_id", model_id));
+    }
+    fields.push(json_string_field(
+        "slm_model_shape",
+        manifest.require("slm.model_shape")?,
+    ));
+    fields.push(json_string_field(
+        "slm_quantization",
+        manifest.require("slm.quantization")?,
+    ));
+    if let Some(value) = manifest.get("slm.checksum") {
+        fields.push(json_string_field("slm_checksum", value));
+    }
+    fields.push(json_string_field(
+        "slm_tokenizer_checksum",
+        manifest.require("slm.tokenizer_checksum")?,
+    ));
+    fields.push(json_string_field(
+        "slm_tensor_layout_checksum",
+        manifest.require("slm.tensor_layout_checksum")?,
+    ));
+    if let Some(value) = manifest.get("source.config.sha256") {
+        fields.push(json_string_field("slm_config_checksum", value));
+    }
+    fields.push(json_string_field(
+        "quality_claim",
+        "not-endorsed-by-project",
+    ));
+    fields.push(json_string_field("trained_quality_claim", "not-claimed"));
+    fields.push(json_string_field(
+        "evidence_admission_status",
+        manifest.require("evidence.admission.status")?,
+    ));
+    fields.push(json_string_field(
+        "required_next_gate",
+        "known-consenting-peer-fetch-assemble-rust-reverify-before-browser-import",
+    ));
+    let mut text = String::new();
+    text.push_str("{\n");
+    for (index, field) in fields.iter().enumerate() {
+        text.push_str("  ");
+        text.push_str(field);
+        if index + 1 != fields.len() {
+            text.push(',');
+        }
+        text.push('\n');
+    }
+    text.push_str("}\n");
+    Ok(text)
+}
+
+fn require_peer_offer_equal(
+    peer_offer: &Manifest,
+    key: &str,
+    expected: &str,
+) -> Result<(), String> {
+    let actual = peer_offer.require(key)?;
+    if actual.eq_ignore_ascii_case(expected) {
+        return Ok(());
+    }
+    Err(format!(
+        "peer offer {key} mismatch: expected {expected}, got {actual}"
+    ))
+}
+
+fn require_normalized_equal(
+    field: &str,
+    expected: &str,
+    actual: &str,
+    actual_label: &str,
+) -> Result<(), String> {
+    if expected.eq_ignore_ascii_case(actual) {
+        return Ok(());
+    }
+    Err(format!(
+        "{field} mismatch: expected {expected}, {actual_label} had {actual}"
+    ))
+}
+
+fn require_value_member(value: &str, key: &str, allowed: &[&str]) -> Result<(), String> {
+    if allowed.contains(&value) {
+        return Ok(());
+    }
+    Err(format!("{key} has unsupported value {value}"))
+}
+
+fn file_name_for_route(path: &Path, label: &str) -> Result<String, String> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| format!("{label} path must include a file name"))?;
+    require_safe_piece_file_name(file_name)?;
+    Ok(file_name.to_string())
+}
+
+fn validate_huggingface_model_id(value: &str) -> Result<String, String> {
+    let text = value.trim();
+    let bytes = text.as_bytes();
+    if bytes.len() < 2
+        || bytes.len() > 180
+        || !bytes[0].is_ascii_alphanumeric()
+        || !bytes
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/'))
+    {
+        return Err("source Hugging Face model id must be route-safe ASCII".to_string());
+    }
+    Ok(text.to_string())
+}
+
+fn json_string_field(key: &str, value: &str) -> String {
+    format!("{}: {}", json_string(key), json_string(value))
+}
+
+fn json_number_field(key: &str, value: &str) -> String {
+    format!("{}: {}", json_string(key), value)
+}
+
+fn json_bool_field(key: &str, value: bool) -> String {
+    format!(
+        "{}: {}",
+        json_string(key),
+        if value { "true" } else { "false" }
+    )
+}
+
+fn json_null_field(key: &str) -> String {
+    format!("{}: null", json_string(key))
+}
+
+fn json_string(value: &str) -> String {
+    let mut out = String::new();
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch < ' ' => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
 }
 
 fn peer_piece_set_text(
@@ -1150,6 +1534,8 @@ mod tests {
 
     const REAL_Q8_MANIFEST: &str =
         include_str!("../../../examples/tiny-test-model-q8.minimodel.manifest.v0");
+    const REAL_Q8_PEER_OFFER: &str =
+        include_str!("../../../examples/tiny-test-model-q8.minimodel-peer-offer");
 
     #[test]
     fn formats_unix_epoch_utc() {
@@ -1397,6 +1783,61 @@ mod tests {
         let url = HttpUrl::parse(&format!("{peer_url}unlisted-model-bytes.slm")).unwrap();
         let error = http_get_bytes(&url, 1024).unwrap_err();
         assert!(error.contains("404 Not Found"));
+    }
+
+    #[test]
+    fn writes_catalog_entry_from_manifest_and_peer_offer() {
+        let dir = unique_dir("catalog-entry");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+
+        let report = write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_path,
+            Some("example-org/example-source"),
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(&catalog_path).unwrap();
+
+        assert_eq!(report.model_id, "tinyrustlm/tiny-test-model-q8");
+        assert_eq!(
+            report.artifact_sha256,
+            "sha256:6af985853325eaa6d3eaaa8aadd3511da9596eb542fb2d03a9bc9dc1f4377adf"
+        );
+        assert!(text.contains("\"entry_kind\": \"minimodel.catalog_entry\""));
+        assert!(text.contains("\"peer_hint_status\": \"peer-offer-ready-known-peer-needed\""));
+        assert!(text.contains("\"peer_import_status\": \"request-script-ready\""));
+        assert!(text.contains("\"source_huggingface_model_id\": \"example-org/example-source\""));
+        assert!(text.contains("\"project_server_serves_model_bytes\": false"));
+        assert!(!text.contains("artifact_project_server_url\": \"http"));
+    }
+
+    #[test]
+    fn rejects_catalog_entry_peer_offer_drift() {
+        let dir = unique_dir("catalog-entry-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(
+            &peer_offer_path,
+            REAL_Q8_PEER_OFFER.replace("chunk_count=1", "chunk_count=2"),
+        )
+        .unwrap();
+
+        let error = write_catalog_entry_path(&manifest_path, &peer_offer_path, &catalog_path, None)
+            .unwrap_err();
+
+        assert!(error.contains("peer offer chunk_count mismatch"));
+        assert!(!catalog_path.exists());
     }
 
     #[test]

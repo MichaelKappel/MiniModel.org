@@ -86,7 +86,7 @@
         <li>
           <span class="step">03</span>
           <h3>Catalog</h3>
-          <p>Publish static catalog metadata and signed index snapshots. The catalog routes users to sources and peers without serving model weights.</p>
+          <p>Publish static catalog metadata and signed index snapshots. `write-catalog-entry` validates manifest plus peer-offer proof before metadata can advertise proof-ready P2P import requests.</p>
         </li>
         <li>
           <span class="step">04</span>
@@ -142,7 +142,7 @@
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>Rust verifier</h3>
-          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, direct peer-piece serve/fetch, peer-piece export/reassembly, TinyRustLM compatibility, and import receipts.</p>
+          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, generated catalog entries, direct peer-piece serve/fetch, peer-piece export/reassembly, TinyRustLM compatibility, and import receipts.</p>
         </a>
         <a href="examples/tiny-test-model-q8.minimodel.manifest.v0">
           <h3>Fixture manifest</h3>
@@ -159,6 +159,10 @@
         <a href="examples/share-metadata.v0.json">
           <h3>Share metadata example</h3>
           <p>Example local bundle and peer-offer proof for a verified `.slm` with catalog-entry candidate, chunk hashes, and live transfer explicitly disabled.</p>
+        </a>
+        <a href="examples/catalog-entry.v0.json">
+          <h3>Generated catalog entry</h3>
+          <p>Real fixture catalog metadata written by `write-catalog-entry` from an admitted manifest plus peer-offer proof, with no hosted model bytes.</p>
         </a>
         <a href="examples/tiny-test-model-q8.minimodel-peer-offer">
           <h3>Peer offer example</h3>

@@ -136,6 +136,24 @@ fn run() -> Result<(), String> {
                 &bind_addr,
             )?;
         }
+        "write-catalog-entry" => {
+            let manifest = one_arg(&mut args, "manifest")?;
+            let peer_offer = one_arg(&mut args, "peer-offer")?;
+            let output_json = one_arg(&mut args, "output-json")?;
+            let source_huggingface_model_id = args.next();
+            no_more_args(&mut args)?;
+            let report = minimodel_core::write_catalog_entry_path(
+                Path::new(&manifest),
+                Path::new(&peer_offer),
+                Path::new(&output_json),
+                source_huggingface_model_id.as_deref(),
+            )?;
+            println!("MiniModel catalog entry written: {output_json}");
+            println!("model.id: {}", report.model_id);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("peer_offer.sha256: {}", report.peer_offer_sha256);
+            println!("catalog_entry: {}", report.catalog_entry_path);
+        }
         _ => {
             print_usage();
             return Err(format!("unsupported command {command}"));
@@ -167,4 +185,7 @@ fn print_usage() {
     eprintln!("  minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>");
     eprintln!("  minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>");
     eprintln!("  minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>");
+    eprintln!(
+        "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id]"
+    );
 }

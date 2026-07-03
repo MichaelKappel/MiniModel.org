@@ -13,7 +13,7 @@ The current exchange path stays:
 1. A converter or user creates a verified `.slm`.
 2. MiniModel `prepare-peer-share` writes a manifest, peer-offer proof, local peer pieces, and catalog-entry metadata.
 3. Metadata-only catalog entries or peer-source announcements make availability discoverable.
-4. A receiver uses Rust `import-peer-request` or equivalent verifier logic to fetch from a consenting direct peer, assemble pieces, verify the `.slm`, and write a receipt.
+4. A receiver uses Rust `preflight-peer-import-request` to verify the peer metadata first, then `import-peer-request` or equivalent verifier logic to fetch from a consenting direct peer, assemble pieces, verify the `.slm`, and write a receipt.
 
 The companion exists to make step 2 through step 4 understandable for power users without weakening the browser-local boundary.
 
@@ -104,15 +104,17 @@ P2P import must still end in local Rust verification.
 Current CLI-equivalent receiver chain:
 
 ```text
+minimodel preflight-peer-import-request <request-json> <manifest> <output.preflight>
 minimodel import-peer-request <request-json> <manifest> <output-dir>
 ```
 
-The companion may wrap that command with progress, logs, retry controls, and cache policy, but the acceptance criteria stay the same:
+The companion may wrap those commands with progress, logs, retry controls, and cache policy, but the acceptance criteria stay the same:
 
 - request model id matches manifest model id
 - artifact byte count matches
 - artifact SHA-256 matches
 - peer-offer proof matches
+- peer preflight fetched only `minimodel.peer_piece_set.v0` metadata before any piece bytes
 - peer URL is a consenting direct peer and is not a project server
 - chunks match declared SHA-256 rows
 - chunk list and Merkle root match when present

@@ -146,6 +146,18 @@ pub struct PeerImportRequestExecution {
 }
 
 #[derive(Debug, Clone)]
+pub struct PeerImportPreflight {
+    pub request_path: String,
+    pub preflight_path: String,
+    pub peer_base_url: String,
+    pub piece_set_url: String,
+    pub piece_count: usize,
+    pub manifest_sha256: String,
+    pub artifact_sha256: String,
+    pub merkle_root_sha256: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct PeerSharePreparation {
     pub manifest_path: String,
     pub peer_offer_path: String,
@@ -392,6 +404,42 @@ pub fn execute_peer_import_request_path(
         artifact_sha256: artifact.artifact_sha256,
         merkle_root_sha256: fetch.merkle_root_sha256,
     })
+}
+
+pub fn preflight_peer_import_request_path(
+    request_path: &Path,
+    manifest_path: &Path,
+    preflight_path: &Path,
+) -> Result<PeerImportPreflight, String> {
+    let request = read_peer_import_request_path(request_path)?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    validate_peer_import_request_against_manifest(&request, &bundle.manifest)?;
+    let base_url = HttpUrl::parse(&request.expected_peer_base_url)?;
+    reject_project_server_peer_host(&base_url.host)?;
+    let piece_set_url = base_url.join_file("minimodel.peer_piece_set.v0")?;
+    let piece_set_bytes = http_get_bytes(&piece_set_url, 1_048_576)?;
+    let piece_set_text = std::str::from_utf8(&piece_set_bytes)
+        .map_err(|_| "peer piece set must be valid UTF-8".to_string())?;
+    let piece_set = Manifest::parse(piece_set_text)?;
+    validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
+    let piece_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
+    let report = PeerImportPreflight {
+        request_path: request_path.display().to_string(),
+        preflight_path: preflight_path.display().to_string(),
+        peer_base_url: base_url.to_string(),
+        piece_set_url: piece_set_url.to_string(),
+        piece_count,
+        manifest_sha256: sha256_prefixed(&bundle.bytes),
+        artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
+        merkle_root_sha256: normalize_sha256(
+            bundle.manifest.require("chunks.merkle_root_sha256")?,
+        )?,
+    };
+    let text = peer_import_preflight_text(&report, &request, &bundle.manifest)?;
+    ensure_parent_dir(preflight_path, "peer import preflight")?;
+    fs::write(preflight_path, text)
+        .map_err(|error| format!("failed to write peer import preflight: {error}"))?;
+    Ok(report)
 }
 
 pub fn inspect_peer_piece_dir_path(
@@ -1248,6 +1296,63 @@ pub fn import_receipt_text(
         &mut text,
         "import.next_gate",
         "user-selected-tinyrustlm-local-file-open",
+    );
+    Ok(text)
+}
+
+fn peer_import_preflight_text(
+    report: &PeerImportPreflight,
+    request: &PeerImportRequest,
+    manifest: &Manifest,
+) -> Result<String, String> {
+    let mut text = String::new();
+    push_line(&mut text, "preflight.version", "0");
+    push_line(
+        &mut text,
+        "preflight.kind",
+        "minimodel.peer_import_preflight",
+    );
+    push_line(&mut text, "preflight.created_utc", &utc_now()?);
+    push_line(&mut text, "request.path", &report.request_path);
+    push_line(&mut text, "request.kind", &request.request_kind);
+    push_line(&mut text, "manifest.sha256", &report.manifest_sha256);
+    push_line(
+        &mut text,
+        "manifest.model_id",
+        manifest.require("model.id")?,
+    );
+    push_line(&mut text, "peer.base_url", &report.peer_base_url);
+    push_line(&mut text, "peer.piece_set_url", &report.piece_set_url);
+    push_line(&mut text, "piece_set.kind", "minimodel.peer_piece_set.v0");
+    push_line(&mut text, "piece_set.validation_status", "passed");
+    push_line(&mut text, "artifact.kind", &request.artifact_kind);
+    push_line(
+        &mut text,
+        "artifact.byte_count",
+        &request.artifact_byte_count.to_string(),
+    );
+    push_line(&mut text, "artifact.sha256", &report.artifact_sha256);
+    push_line(&mut text, "chunks.mode", "fixed-size-merkle-v0");
+    push_line(&mut text, "chunks.count", &report.piece_count.to_string());
+    push_line(
+        &mut text,
+        "chunks.merkle_root_sha256",
+        &report.merkle_root_sha256,
+    );
+    push_line(&mut text, "peer_piece_set_metadata_fetched", "true");
+    push_line(&mut text, "peer_piece_bytes_fetched", "false");
+    push_line(&mut text, "artifact_bytes_fetched", "false");
+    push_line(&mut text, "project_server_serves_model_bytes", "false");
+    push_line(&mut text, "project_server_runs_model_bytes", "false");
+    push_line(
+        &mut text,
+        "project_server_proxies_huggingface_bytes",
+        "false",
+    );
+    push_line(
+        &mut text,
+        "required_next_gate",
+        "run-import-peer-request-fetch-pieces-assemble-rust-reverify",
     );
     Ok(text)
 }
@@ -3445,6 +3550,43 @@ mod tests {
     }
 
     #[test]
+    fn preflights_peer_import_request_metadata_only_over_local_http_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer import preflight test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-import-preflight");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        let served_piece_dir = dir.join("served-pieces");
+        export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
+        let peer_url = start_peer_piece_server(served_piece_dir, 1);
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
+        let preflight_path = dir.join("tiny-test-model-q8.peer-import.preflight");
+
+        let report =
+            preflight_peer_import_request_path(&request_path, &manifest_path, &preflight_path)
+                .unwrap();
+
+        assert_eq!(report.peer_base_url, peer_url);
+        assert_eq!(report.piece_count, 1);
+        assert!(preflight_path.exists());
+        let preflight = std::fs::read_to_string(&preflight_path).unwrap();
+        assert!(preflight.contains("preflight.kind=minimodel.peer_import_preflight"));
+        assert!(preflight.contains("piece_set.validation_status=passed"));
+        assert!(preflight.contains("peer_piece_set_metadata_fetched=true"));
+        assert!(preflight.contains("peer_piece_bytes_fetched=false"));
+        assert!(preflight.contains("artifact_bytes_fetched=false"));
+        assert!(preflight.contains("project_server_serves_model_bytes=false"));
+        assert!(preflight.contains(
+            "required_next_gate=run-import-peer-request-fetch-pieces-assemble-rust-reverify"
+        ));
+    }
+
+    #[test]
     fn rejects_peer_import_request_artifact_drift_before_fetch_when_fixture_present() {
         let Some(_artifact_path) = sibling_q8_fixture() else {
             eprintln!("skipping peer import request drift test; TinyRustLM fixture not present");
@@ -3541,6 +3683,29 @@ mod tests {
         .unwrap_err();
         assert!(error.contains("project server"));
         assert!(error.contains("never serve model bytes"));
+    }
+
+    #[test]
+    fn rejects_project_server_peer_import_preflight_host_before_manifest_read() {
+        let dir = unique_dir("peer-import-preflight-project-host");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        let preflight_path = dir.join("tiny-test-model-q8.peer-import.preflight");
+        std::fs::write(
+            &request_path,
+            peer_import_request_json("http://MiniModel.org/peer-pieces/"),
+        )
+        .unwrap();
+        let error = preflight_peer_import_request_path(
+            &request_path,
+            Path::new("missing-manifest"),
+            &preflight_path,
+        )
+        .unwrap_err();
+        assert!(error.contains("project server"));
+        assert!(error.contains("never serve model bytes"));
+        assert!(!preflight_path.exists());
     }
 
     #[test]

@@ -133,6 +133,28 @@ fn run() -> Result<(), String> {
             println!("artifact.sha256: {}", report.artifact_sha256);
             println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
         }
+        "preflight-peer-import-request" => {
+            let request_json = one_arg(&mut args, "request-json")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            let output_preflight = one_arg(&mut args, "output.preflight")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::preflight_peer_import_request_path(
+                Path::new(&request_json),
+                Path::new(&manifest),
+                Path::new(&output_preflight),
+            )?;
+            println!("MiniModel peer import preflight: PASS");
+            println!("request: {request_json}");
+            println!("manifest: {manifest}");
+            println!("preflight: {output_preflight}");
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("piece_set_url: {}", report.piece_set_url);
+            println!("piece_count: {}", report.piece_count);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+            println!("peer_piece_bytes_fetched: false");
+        }
         "prepare-peer-share" => {
             let artifact = one_arg(&mut args, "artifact.slm")?;
             let output_dir = one_arg(&mut args, "output-dir")?;
@@ -384,6 +406,9 @@ fn print_usage() {
     eprintln!("  minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>");
     eprintln!("  minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>");
     eprintln!("  minimodel import-peer-request <request-json> <manifest> <output-dir>");
+    eprintln!(
+        "  minimodel preflight-peer-import-request <request-json> <manifest> <output.preflight>"
+    );
     eprintln!(
         "  minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]"
     );

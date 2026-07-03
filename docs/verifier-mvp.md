@@ -33,6 +33,7 @@ minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>
 minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>
 minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>
 minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>
+minimodel preflight-peer-import-request <request-json> <manifest> <output.preflight>
 minimodel import-peer-request <request-json> <manifest> <output-dir>
 minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]
 minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]
@@ -58,6 +59,8 @@ minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
 `fetch-peer-pieces` is the first live transfer-shaped prototype. It pulls `minimodel.peer_piece_set.v0` plus each listed chunk from a user-provided `http://` peer base URL, rejects project-server hostnames, verifies the piece-set against the manifest, verifies every downloaded piece SHA256 before writing it, and leaves final artifact acceptance to `assemble-peer-pieces`.
 
 `assemble-peer-pieces` reads a local `minimodel.peer_piece_set.v0`, verifies each local piece, assembles a temporary `.slm`, runs the full artifact verifier again, and moves the output into place only after verification passes. This is the first transport-shaped primitive; it is not live peer networking.
+
+`preflight-peer-import-request` is the receiver-side metadata preflight for a TinyRustLM `minimodel.peer_import_request.v0` file. It parses the request, validates it against the supplied manifest, rejects project-server and Hugging Face byte-source claims, fetches only the peer's small `minimodel.peer_piece_set.v0` metadata file, validates that piece-set contract against the manifest, and writes a `.preflight` report with `peer_piece_bytes_fetched=false` and `artifact_bytes_fetched=false`. This proves the consenting peer endpoint is advertising the expected model before the full piece transfer starts.
 
 `import-peer-request` is the receiver-side one-command path for a TinyRustLM `minimodel.peer_import_request.v0` file. It parses the request, rejects project-server or Hugging Face byte-source claims, checks the request's model id, byte count, artifact SHA-256, safe local output names, and known peer URL against the supplied manifest, then runs the same fetch, assemble, full artifact verification, and receipt-writing chain into the chosen output directory. This is the first "select a proof-ready model, enter peer URL, run one Rust verifier command" path; it still requires a consenting direct peer and never fetches model bytes from MiniModel.org.
 
@@ -184,6 +187,7 @@ cargo run -p minimodel -- export-peer-pieces examples\tiny-test-model-q8.minimod
 cargo run -p minimodel -- serve-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 .\peer-pieces\tiny-test-model-q8 127.0.0.1:8123
 cargo run -p minimodel -- fetch-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 http://127.0.0.1:8123/ .\peer-pieces-fetched\tiny-test-model-q8
 cargo run -p minimodel -- assemble-peer-pieces examples\tiny-test-model-q8.minimodel.manifest.v0 .\peer-pieces\tiny-test-model-q8 .\tiny-test-model-q8.from-pieces.slm
+cargo run -p minimodel -- preflight-peer-import-request .\tiny-test-model-q8.minimodel-peer-import-request.json examples\tiny-test-model-q8.minimodel.manifest.v0 .\tiny-test-model-q8.peer-import.preflight
 cargo run -p minimodel -- import-peer-request .\tiny-test-model-q8.minimodel-peer-import-request.json examples\tiny-test-model-q8.minimodel.manifest.v0 .\tiny-test-model-q8-peer-import
 cargo run -p minimodel -- prepare-peer-share ..\SLMComposer.com\tinyrustlm\models\tiny-test-model-q8.slm .\prepared-share\tiny-test-model-q8 tinyrustlm/prepared-tiny-test-model-q8 tinyrustlm/tiny-test-model-q8 http://127.0.0.1:8123/
 cargo run -p minimodel -- write-catalog-entry examples\tiny-test-model-q8.minimodel.manifest.v0 examples\tiny-test-model-q8.minimodel-peer-offer examples\catalog-entry.v0.json

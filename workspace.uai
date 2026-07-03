@@ -1,5 +1,5 @@
-profile: minimodel.workspace.v17
-updated_utc: 2026-07-03T16:10:00Z
+profile: minimodel.workspace.v18
+updated_utc: 2026-07-03T23:40:00Z
 site: MiniModel.org
 workspace_root: E:\Source\Rust\MiniModel.org
 coordinator: E:\Source\Rust\workspace.uai
@@ -36,5 +36,6 @@ current_state:
   - The July 2 TinyRustLM/MiniModel intake synthesis is routed as a durable constraint: Hugging Face rows are metadata only until local Rust conversion or P2P import, proof-ready rows are not called runnable, and converted-once availability is published through peer-source metadata without project servers hosting bytes.
   - The July 3 desktop/P2P intake synthesis is routed as a durable constraint: an optional MiniModel Peer Companion may later manage local peer identity, piece stores, cache quotas, consent prompts, direct serve/fetch controls, and receipts, but it remains user-run software and does not make project servers host, proxy, cache, run, or serve user model bytes.
   - `docs/peer-companion.md` is the detailed future companion design and completion gate; it preserves local-only source lanes, shared Rust verifier contracts, consent gates, piece-store rules, test expectations, and the no-server-byte boundary.
+  - `docs/peer-companion.md` now includes July 3 report triage: accepted engineering guidance includes multi-crate Rust boundaries, strict Tauri IPC/capabilities, actor/message-passing network workers, OS secure storage, local metadata stores, signed/checksummed releases, and domain-first tests; deferred lanes include WebTransport, WebRTC, mDNS, DHT/bootstrap, UPnP/NAT-PMP, Iroh/QUIC, Rust-libp2p, BitTorrent-style chunking, Pear, Bare, and Hypercore; rejected current-product lanes include project-operated STUN/TURN, relay, rendezvous, signaling, bootstrap, or DHT infrastructure as a default dependency and any project-server model-byte proxy/cache/serve/run path.
   - The live public-safe export is verified.
   - Direct public .uai and agent-file-handoff access is denied.

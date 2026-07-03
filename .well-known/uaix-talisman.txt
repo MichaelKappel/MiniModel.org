@@ -2,7 +2,7 @@ UAIX Talisman Public Export
 site: MiniModel.org
 role: talisman-client
 source: MiRust.com
-updated_utc: 2026-07-03T12:45:00Z
+updated_utc: 2026-07-03T23:40:00Z
 
 Purpose
 MiniModel.org is a planned Rust-first peer-to-peer tiny model package catalog and exchange. This file is a public orientation export only.
@@ -13,6 +13,7 @@ Public Anchors
 - Local verification before TinyRustLM import.
 - Clear separation between catalog metadata, peer transfer, and local execution.
 - Optional future MiniModel Peer Companion work remains user-run local software, not project-hosted byte infrastructure.
+- Project-operated relay, STUN/TURN, rendezvous, signaling, bootstrap, or DHT infrastructure is not part of the current product boundary.
 
 Public Boundaries
 - MiniModel.org does not run model inference on its servers.

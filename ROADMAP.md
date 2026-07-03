@@ -38,6 +38,8 @@ The companion must reuse the same Rust verifier crates and command semantics as 
 
 Protocol choices remain research lanes. Direct known-peer HTTP is the current proof vehicle; Iroh/QUIC, Rust-libp2p, WebRTC, WebTransport, mDNS, Kademlia DHTs, BitTorrent-style chunking, and Pear/Bare/Hypercore can be evaluated only after they preserve manifest-bound chunks, local receipts, consent gates, and project-server byte rejection. The companion is still user infrastructure, not MiniModel.org infrastructure.
 
+The July 3 intake also included infrastructure-assisted designs such as STUN/TURN, relays, rendezvous services, signaling servers, bootstrap nodes, and DHT entry points. Those are not part of the current product. Any project-operated discovery or relay service would be a separate legal, operational, and product decision after direct known-peer transfer and the local companion wrapper are proven, and it still could not host, proxy, cache, run, or serve model bytes.
+
 The first durable companion specification is [docs/peer-companion.md](docs/peer-companion.md). It defines the local-only boundary, source lanes, Rust-owned command contracts, local state, piece-store rules, consent gates, transport phases, UI requirements, tests, and completion gate for a future prototype.
 
 ## Manifest MVP

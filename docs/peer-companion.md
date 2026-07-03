@@ -141,6 +141,20 @@ transport/storage adapters -> application use cases -> verifier/domain
 
 The verifier/domain layer must not depend on the UI shell.
 
+## Runtime Concurrency Pattern
+
+If the companion adds a long-running network worker, treat that worker as an actor rather than shared mutable UI state. The UI should send typed commands to the worker and receive typed status events back. The worker owns peer sessions, serve sessions, fetch sessions, retries, cancellation, and shutdown.
+
+Rules:
+
+- do not share a transport swarm or local server through broad `Mutex` state
+- use message passing between presentation, application use cases, and transport workers
+- keep cancellation explicit for every serve or fetch session
+- make shutdown drain logs and receipts before sockets or local stores close
+- test worker use cases without the presentation shell
+
+This keeps direct HTTP, future Iroh/QUIC, future libp2p, or future WebRTC/WebTransport adapters behind the same application contract.
+
 ## Tauri Boundary If Used
 
 Tauri v2 is plausible only as a shell around Rust-owned commands. If selected later:
@@ -298,6 +312,39 @@ Selection criteria:
 - dependency risk
 - packaging and update burden
 
+## July 3 Intake Triage
+
+The desktop/P2P reports are useful, but their recommendations do not all fit the current product boundary.
+
+Accepted for the companion roadmap:
+
+- multi-crate Rust architecture with verifier/domain code isolated from presentation
+- strict Tauri capability and IPC boundaries if a WebView shell is used
+- message-passing or actor-style network workers instead of shared global transport state
+- OS secure storage for private peer identity keys or external credentials
+- local SQLite or equivalent only for metadata, receipts, peer identities, transfer logs, and cache indexes
+- signed releases, published checksums, and platform-appropriate packaging before broad distribution
+- domain tests before UI tests, with drift rejection and consent gates as the first test surface
+
+Deferred research lanes:
+
+- WebTransport with certificate-hash pinning
+- WebRTC Direct or manual out-of-band SDP exchange
+- mDNS and local network discovery
+- DHT routing or bootstrap strategies
+- UPnP/NAT-PMP port mapping
+- Iroh/QUIC, Rust-libp2p, BitTorrent-style chunking, Pear, Bare, and Hypercore
+
+Rejected for the current product:
+
+- project-operated STUN/TURN, relay, rendezvous, signaling, bootstrap, or DHT infrastructure as a default dependency
+- project-server proxying, caching, or serving of `.slm`, `.safetensors`, GGUF, ONNX, tokenizer, adapter, or peer-piece bytes
+- project-run remote inference or distributed inference
+- browser JavaScript or Service Worker code becoming the verifier or model-byte assembly authority
+- automatic background serving before explicit user consent
+
+Any future project-operated discovery or relay service would be a separate legal, operational, and product decision after direct known-peer transfer and the local companion wrapper are proven. It still must preserve checksum-bound manifests, local receipts, explicit consent, and the no-server-byte rule.
+
 ## UI Requirements
 
 The companion is for advanced users, but it should still be understandable.
@@ -382,6 +429,21 @@ Before a companion release exists, docs must say "optional future companion" or 
 - how to verify a receipt
 - how to report takedown or abuse concerns
 - that MiniModel.org still does not host model bytes
+
+## Release And Update Gate
+
+A companion release is not credible until distribution is boring and verifiable.
+
+Required before broad release:
+
+- signed binaries or installers for supported platforms
+- published SHA-256 checksums for release artifacts
+- Windows signing plan
+- macOS signing and notarization plan
+- Linux package integrity plan
+- rollback plan for broken updates
+- no long-lived signing or service credentials in the repository
+- reproducible domain-level test run for verifier, transfer, receipt, and unsafe-path rejection
 
 ## Open Questions
 

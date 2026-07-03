@@ -40,6 +40,8 @@ minimodel add-peer-source <catalog-entry-json> <output-json> <known-peer-base-ur
 minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>
 minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...
 minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>...
+minimodel write-peer-source-announcement-feed <output-json> <announcement-json>...
+minimodel write-catalog-snapshot-with-announcement-feed <output-json> <feed-route> <announcement-feed-json> <catalog-entry-json>...
 minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
 ```
 
@@ -70,6 +72,10 @@ minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
 `apply-peer-source-announcements` is the catalog-maintainer merge step. It validates a proof-ready catalog entry, validates one or more peer-source announcements, rejects model/artifact/peer-offer drift, deduplicates peer URLs, writes `peer_sources`, revalidates `peer_source_count`, and produces a new catalog-entry JSON for the next `write-catalog-snapshot` run. This is the first durable "converted once, later users see P2P Import by default" publication path while keeping project servers out of the byte path.
 
 `write-catalog-snapshot-with-announcements` is the maintainer batch publication step. It validates one or more catalog-entry JSON files, validates one or more peer-source announcement JSON files, rejects unmatched announcement model ids, applies only announcements that match their entry, deduplicates peer URLs, and writes the final metadata-only `models.v0.json` snapshot directly. This is the easiest checked path when many converters have sent availability metadata.
+
+`write-peer-source-announcement-feed` is the maintainer feed step. It validates one or more `minimodel.peer_source_announcement` JSON files and writes a metadata-only `minimodel.peer_source_announcement_catalog` feed with server-byte, server-run, and server-proxy flags set to `false`. The feed is small JSON metadata: it can say which consenting direct peers claim availability, but it does not contain `.slm` bytes and does not authorize project infrastructure to fetch them.
+
+`write-catalog-snapshot-with-announcement-feed` is the checksum-binding publication step. It validates the announcement feed, verifies that every feed model id exists in the supplied catalog entries, rejects unsafe URL-like feed routes, computes the feed SHA-256 from the exact JSON bytes, and writes a `models.v0.json` snapshot with `peer_source_announcement_routes`. TinyRustLM can then fetch that same-origin route, verify the declared SHA-256, and apply matching announcements before showing `P2P Import`. The catalog entries remain proof-ready metadata; model bytes still come only from local files or consenting peers through Rust `import-peer-request`.
 
 `write-catalog-snapshot` validates one or more catalog-entry JSON files and writes a metadata-only `minimodel.model_catalog` snapshot. It rejects duplicate `model_id` values, artifact/model/download URLs, project-server byte/execution claims, peer-source count drift, unsupported peer-source rows, and project-server peer hosts. This is the first Rust-owned publication step for "converted once, listed as P2P-ready later"; the snapshot can be loaded by TinyRustLM as metadata, while model bytes still come only from local files or consenting peers.
 
@@ -186,6 +192,8 @@ cargo run -p minimodel -- add-peer-source examples\catalog-entry.v0.json example
 cargo run -p minimodel -- write-peer-source-announcement examples\catalog-entry.v0.json examples\catalog-entry.peer-source-announcement.v0.json http://127.0.0.1:8123/
 cargo run -p minimodel -- apply-peer-source-announcements examples\catalog-entry.v0.json examples\catalog-entry.announced-peer.v0.json examples\catalog-entry.peer-source-announcement.v0.json
 cargo run -p minimodel -- write-catalog-snapshot-with-announcements .\models.v0.json examples\catalog-entry.v0.json --announcements examples\catalog-entry.peer-source-announcement.v0.json
+cargo run -p minimodel -- write-peer-source-announcement-feed .\peer-source-announcements.v0.json examples\catalog-entry.peer-source-announcement.v0.json
+cargo run -p minimodel -- write-catalog-snapshot-with-announcement-feed .\models.v0.json peer-source-announcements.v0.json .\peer-source-announcements.v0.json examples\catalog-entry.v0.json
 cargo run -p minimodel -- write-catalog-snapshot .\models.v0.json examples\catalog-entry.v0.json
 ```
 

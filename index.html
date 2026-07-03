@@ -86,7 +86,7 @@
         <li>
           <span class="step">03</span>
           <h3>Catalog</h3>
-          <p>Publish static catalog metadata and signed index snapshots. `write-catalog-entry` validates manifest plus peer-offer proof before metadata can advertise proof-ready P2P import requests.</p>
+          <p>Publish static catalog metadata and signed index snapshots. `write-catalog-entry` validates manifest plus peer-offer proof, and announcement-feed snapshots can bind same-origin peer availability metadata by SHA-256 without hosting model bytes.</p>
         </li>
         <li>
           <span class="step">04</span>
@@ -150,7 +150,7 @@
         </a>
         <a href="docs/catalog-boundary.md">
           <h3>Catalog boundary</h3>
-          <p>Metadata-only catalog rules, consent gates, legal posture, takedown routes, and ecosystem tradeoff staging.</p>
+          <p>Metadata-only catalog rules, checksum-bound announcement feeds, consent gates, legal posture, takedown routes, and ecosystem tradeoff staging.</p>
         </a>
         <a href="catalog/models.v0.json">
           <h3>Catalog endpoint</h3>

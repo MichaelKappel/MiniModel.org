@@ -306,6 +306,53 @@ fn run() -> Result<(), String> {
             println!("p2p_ready_count: {}", report.p2p_ready_count);
             println!("peer_source_count: {}", report.peer_source_count);
         }
+        "write-peer-source-announcement-feed" => {
+            let output_json = one_arg(&mut args, "output-json")?;
+            let announcement_paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
+            let report = minimodel_core::write_peer_source_announcement_feed_path(
+                Path::new(&output_json),
+                &announcement_paths,
+            )?;
+            println!("MiniModel peer source announcement feed written: {output_json}");
+            println!("feed: {}", report.feed_path);
+            println!("announcement_count: {}", report.announcement_count);
+            println!("model_count: {}", report.model_count);
+            println!("feed.sha256: {}", report.feed_sha256);
+            println!(
+                "catalog_route_hint: minimodel write-catalog-snapshot-with-announcement-feed models.v0.json peer-source-announcements.v0.json \"{}\" <catalog-entry-json>...",
+                report.feed_path
+            );
+        }
+        "write-catalog-snapshot-with-announcement-feed" => {
+            let output_json = one_arg(&mut args, "output-json")?;
+            let feed_route = one_arg(&mut args, "feed-route")?;
+            let feed_json = one_arg(&mut args, "announcement-feed-json")?;
+            let entry_paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
+            let report = minimodel_core::write_catalog_snapshot_with_announcement_feed_path(
+                Path::new(&output_json),
+                &feed_route,
+                Path::new(&feed_json),
+                &entry_paths,
+            )?;
+            println!("MiniModel catalog snapshot written with announcement feed: {output_json}");
+            println!("catalog: {}", report.catalog_path);
+            println!("entry_count: {}", report.entry_count);
+            println!("announcement_count: {}", report.announcement_count);
+            println!(
+                "announcement_model_count: {}",
+                report.announcement_model_count
+            );
+            println!(
+                "announcement_feed_route: {}",
+                report.announcement_feed_route
+            );
+            println!(
+                "announcement_feed_sha256: {}",
+                report.announcement_feed_sha256
+            );
+            println!("p2p_ready_count: {}", report.p2p_ready_count);
+            println!("peer_source_count: {}", report.peer_source_count);
+        }
         _ => {
             print_usage();
             return Err(format!("unsupported command {command}"));
@@ -356,6 +403,12 @@ fn print_usage() {
     eprintln!("  minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...");
     eprintln!(
         "  minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>..."
+    );
+    eprintln!(
+        "  minimodel write-peer-source-announcement-feed <output-json> <announcement-json>..."
+    );
+    eprintln!(
+        "  minimodel write-catalog-snapshot-with-announcement-feed <output-json> <feed-route> <announcement-feed-json> <catalog-entry-json>..."
     );
 }
 

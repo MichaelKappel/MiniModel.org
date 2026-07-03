@@ -70,6 +70,7 @@ The user provides a local `.slm`. The companion can call the same Rust verificat
 minimodel verify-manifest <manifest>
 minimodel verify-artifact <manifest> <artifact.slm>
 minimodel write-import-receipt <manifest> <artifact.slm> <receipt>
+minimodel write-peer-companion-state <manifest> <piece-dir> <state-json> <known-peer-base-url>
 ```
 
 The output is a local receipt. The model still enters TinyRustLM through the browser file picker.
@@ -183,6 +184,7 @@ Acceptable local state:
 - manifest paths and hashes
 - catalog snapshot hashes
 - peer-source announcement hashes
+- peer companion state hashes
 - receipt paths and hashes
 - transfer logs
 - cache index
@@ -255,6 +257,7 @@ Implemented by the CLI:
 - `fetch-peer-pieces`
 - `assemble-peer-pieces`
 - `import-peer-request`
+- `write-peer-companion-state`
 - `add-peer-source`
 - `write-peer-source-announcement`
 - `apply-peer-source-announcements`
@@ -264,6 +267,8 @@ Implemented by the CLI:
 - `write-catalog-snapshot`
 
 The companion should wrap this before adding broader discovery.
+
+`write-peer-companion-state` is the first CLI artifact shaped for that wrapper. It validates a prepared share directory, binds a consenting direct peer URL, and writes metadata-only JSON with manifest/artifact/piece-set checksums, piece count, Merkle root, command hints, and no-project-server-byte flags. A future UI can read that state without parsing model bytes or inventing a separate verifier path.
 
 ### Phase 1: Local Companion Wrapper
 

@@ -169,6 +169,18 @@ pub struct PeerSharePreparation {
     pub peer_source_count: usize,
 }
 
+/// Summary returned after writing a local companion-readable share state file.
+#[derive(Debug, Clone)]
+pub struct PeerCompanionStateReport {
+    pub state_path: String,
+    pub model_id: String,
+    pub peer_base_url: String,
+    pub piece_count: usize,
+    pub manifest_sha256: String,
+    pub artifact_sha256: String,
+    pub merkle_root_sha256: String,
+}
+
 #[derive(Debug, Clone)]
 struct PeerSourceAnnouncement {
     model_id: String,
@@ -462,6 +474,75 @@ pub fn inspect_peer_piece_dir_path(
         merkle_root_sha256: normalize_sha256(
             bundle.manifest.require("chunks.merkle_root_sha256")?,
         )?,
+    })
+}
+
+/// Validate a prepared peer-piece directory and write local state for a future companion UI.
+pub fn write_peer_companion_state_path(
+    manifest_path: &Path,
+    piece_dir: &Path,
+    output_path: &Path,
+    known_peer_base_url: &str,
+) -> Result<PeerCompanionStateReport, String> {
+    let peer_base_url = normalize_known_peer_base_url(known_peer_base_url)?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    let share = inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
+    let piece_set_path = piece_dir.join("minimodel.peer_piece_set.v0");
+    let piece_set_bytes = fs::read(&piece_set_path)
+        .map_err(|error| format!("failed to read peer piece set for companion state: {error}"))?;
+    let model_id = bundle.manifest.require("model.id")?.to_string();
+    let manifest_hint = local_file_hint(manifest_path, "manifest")?;
+    let piece_dir_hint = local_file_hint(piece_dir, "piece directory")?;
+    let state = serde_json::json!({
+        "state_kind": "minimodel.peer_companion_state",
+        "state_version": 0,
+        "created_utc": utc_now()?,
+        "model_id": model_id,
+        "share_status": "ready-to-serve",
+        "transfer_protocol": "direct-http-piece-server-v0",
+        "peer_base_url": peer_base_url,
+        "consent_status": "operator-reviewed-consenting-peer",
+        "manifest": {
+            "path_hint": manifest_hint,
+            "sha256": share.manifest_sha256,
+        },
+        "artifact": {
+            "sha256": share.artifact_sha256,
+        },
+        "pieces": {
+            "directory_hint": piece_dir_hint,
+            "piece_set_path_hint": "minimodel.peer_piece_set.v0",
+            "piece_set_sha256": sha256_prefixed(&piece_set_bytes),
+            "piece_count": share.piece_count,
+            "merkle_root_sha256": share.merkle_root_sha256,
+        },
+        "commands": {
+            "serve_peer_pieces": "minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>",
+            "write_peer_source_announcement": "minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>",
+        },
+        "boundary": {
+            "user_run_local_software": true,
+            "peer_piece_bytes_in_state": false,
+            "project_server_serves_model_bytes": false,
+            "project_server_runs_model_bytes": false,
+            "project_server_proxies_model_bytes": false,
+            "tinyrustlm_import_gate": "user-selected-local-slm-after-rust-receipt",
+        }
+    });
+    let state_text = serde_json::to_string_pretty(&state)
+        .map_err(|error| format!("failed to encode companion state JSON: {error}"))?
+        + "\n";
+    ensure_parent_dir(output_path, "peer companion state")?;
+    fs::write(output_path, state_text)
+        .map_err(|error| format!("failed to write peer companion state: {error}"))?;
+    Ok(PeerCompanionStateReport {
+        state_path: output_path.display().to_string(),
+        model_id,
+        peer_base_url,
+        piece_count: share.piece_count,
+        manifest_sha256: share.manifest_sha256,
+        artifact_sha256: share.artifact_sha256,
+        merkle_root_sha256: share.merkle_root_sha256,
     })
 }
 
@@ -2184,6 +2265,18 @@ fn artifact_file_name_for_share(path: &Path) -> Result<String, String> {
     Ok(file_name.to_string())
 }
 
+fn local_file_hint(path: &Path, label: &str) -> Result<String, String> {
+    let hint = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{label} path must include a local name"))?;
+    if hint.contains('/') || hint.contains('\\') || hint.contains("..") || !hint.is_ascii() {
+        return Err(format!("{label} path hint must be safe ASCII"));
+    }
+    Ok(hint.to_string())
+}
+
 fn artifact_stem_for_share(file_name: &str) -> Result<String, String> {
     let stem = file_name
         .strip_suffix(".slm")
@@ -3584,6 +3677,81 @@ mod tests {
         assert!(preflight.contains(
             "required_next_gate=run-import-peer-request-fetch-pieces-assemble-rust-reverify"
         ));
+    }
+
+    #[test]
+    fn writes_peer_companion_state_for_verified_share_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer companion state test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-companion-state");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let piece_dir = dir.join("tiny-test-model-q8.peer-pieces");
+        let state_path = dir.join("tiny-test-model-q8.peer-companion-state.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        export_peer_pieces_path(&manifest_path, &artifact_path, &piece_dir).unwrap();
+
+        let report = write_peer_companion_state_path(
+            &manifest_path,
+            &piece_dir,
+            &state_path,
+            "http://127.0.0.1:8123/peer-pieces",
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(&state_path).unwrap();
+        let value: Value = serde_json::from_str(&text).unwrap();
+
+        assert_eq!(report.model_id, "tinyrustlm/tiny-test-model-q8");
+        assert_eq!(report.peer_base_url, "http://127.0.0.1:8123/peer-pieces/");
+        assert_eq!(report.piece_count, 1);
+        assert_eq!(
+            value["state_kind"].as_str(),
+            Some("minimodel.peer_companion_state")
+        );
+        assert_eq!(value["share_status"].as_str(), Some("ready-to-serve"));
+        assert_eq!(
+            value["consent_status"].as_str(),
+            Some("operator-reviewed-consenting-peer")
+        );
+        assert_eq!(
+            value["manifest"]["sha256"].as_str(),
+            Some(report.manifest_sha256.as_str())
+        );
+        assert_eq!(
+            value["pieces"]["merkle_root_sha256"].as_str(),
+            Some(report.merkle_root_sha256.as_str())
+        );
+        assert_eq!(
+            value["boundary"]["peer_piece_bytes_in_state"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            value["boundary"]["project_server_serves_model_bytes"].as_bool(),
+            Some(false)
+        );
+        assert!(!text.contains("artifact_project_server_url\": \"http"));
+        assert!(!text.contains(&artifact_path.display().to_string()));
+    }
+
+    #[test]
+    fn rejects_peer_companion_state_project_server_peer_before_output() {
+        let dir = unique_dir("peer-companion-state-project-host");
+        let _ = std::fs::remove_dir_all(&dir);
+        let state_path = dir.join("state.json");
+
+        let error = write_peer_companion_state_path(
+            Path::new("missing-manifest"),
+            Path::new("missing-pieces"),
+            &state_path,
+            "http://MiniModel.org/peer-pieces",
+        )
+        .unwrap_err();
+
+        assert!(error.contains("project server"));
+        assert!(!state_path.exists());
     }
 
     #[test]

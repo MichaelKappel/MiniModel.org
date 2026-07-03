@@ -143,7 +143,7 @@
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>Rust verifier</h3>
-          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, generated catalog entries, direct peer-piece serve/fetch, peer-piece export/reassembly, one-command peer import requests, TinyRustLM compatibility, and import receipts.</p>
+          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, generated catalog entries, companion-readable peer-share state, direct peer-piece serve/fetch, peer-piece export/reassembly, one-command peer import requests, TinyRustLM compatibility, and import receipts.</p>
         </a>
         <a href="examples/tiny-test-model-q8.minimodel.manifest.v0">
           <h3>Fixture manifest</h3>
@@ -180,6 +180,10 @@
         <a href="examples/tiny-test-model-q8.minimodel-peer-import-request.json">
           <h3>Peer import request</h3>
           <p>Example TinyRustLM request JSON consumed by `minimodel import-peer-request` after a user supplies a consenting known peer URL.</p>
+        </a>
+        <a href="docs/peer-companion.md">
+          <h3>Companion state</h3>
+          <p>`write-peer-companion-state` validates a prepared share and writes local metadata for future peer companion UI without embedding model bytes.</p>
         </a>
       </div>
     </section>

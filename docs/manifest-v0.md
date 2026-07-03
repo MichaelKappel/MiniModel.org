@@ -100,9 +100,12 @@ MiniModel can prepare the normal post-conversion share package in one local comm
 
 ```text
 minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]
+minimodel write-peer-companion-state <manifest> <piece-dir> <output-json> <known-peer-base-url>
 ```
 
 `prepare-peer-share` validates the local `.slm`, writes a MiniModel manifest, writes a matching peer-offer proof, exports local peer pieces, and writes a catalog-entry JSON. `[source-huggingface-model-id]` records the upstream Hub identity when the `.slm` came from a reviewed local conversion. `[known-peer-base-url]` is optional consenting-peer metadata; it never makes MiniModel.org a byte host.
+
+`write-peer-companion-state` validates an already prepared share and writes metadata-only `minimodel.peer_companion_state` JSON for a future local companion UI. It binds manifest, artifact, piece-set, piece-count, Merkle-root, command-hint, consent, and no-project-server-byte fields without embedding `.slm` bytes or peer-piece payloads.
 
 The generated catalog-entry JSON can be assembled into a metadata-only catalog snapshot with:
 

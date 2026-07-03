@@ -213,6 +213,26 @@ fn run() -> Result<(), String> {
                 &bind_addr,
             )?;
         }
+        "write-peer-companion-state" => {
+            let manifest = one_arg(&mut args, "manifest")?;
+            let piece_dir = one_arg(&mut args, "piece-dir")?;
+            let output_json = one_arg(&mut args, "output-json")?;
+            let known_peer_base_url = one_arg(&mut args, "known-peer-base-url")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::write_peer_companion_state_path(
+                Path::new(&manifest),
+                Path::new(&piece_dir),
+                Path::new(&output_json),
+                &known_peer_base_url,
+            )?;
+            println!("MiniModel peer companion state written: {output_json}");
+            println!("model.id: {}", report.model_id);
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("piece_count: {}", report.piece_count);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+        }
         "write-catalog-entry" => {
             let manifest = one_arg(&mut args, "manifest")?;
             let peer_offer = one_arg(&mut args, "peer-offer")?;
@@ -413,6 +433,9 @@ fn print_usage() {
         "  minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]"
     );
     eprintln!("  minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>");
+    eprintln!(
+        "  minimodel write-peer-companion-state <manifest> <piece-dir> <output-json> <known-peer-base-url>"
+    );
     eprintln!(
         "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]"
     );

@@ -11,7 +11,7 @@ Project servers never run user models and never serve user model bytes. They may
 1. `minimodel-core`: Rust verification library for manifests, checksums, chunks, identities, and import receipts.
 2. `minimodel` CLI: local verifier for `.slm` artifacts, license/model-card fields, evidence routes, one-command peer-share preparation after conversion, metadata-only catalog snapshot writing, direct known-peer piece serve/fetch, peer-piece export/reassembly, catalog-entry writing from manifest plus peer-offer proof, one-command TinyRustLM peer-import request execution, and TinyRustLM import readiness.
 3. Static catalog: metadata-only listings and peer hints, with no model weights.
-4. Peer app: later Rust desktop app for consent-based discovery, resumable transfer, NAT traversal, local quotas, and checksum validation.
+4. Optional peer companion: later user-run Rust desktop app for consent-based discovery, local peer identity, local piece stores, resumable transfer, NAT traversal, local quotas, and checksum validation.
 5. TinyRustLM handoff: verified local `.slm` files open in the browser-local Rust/WASM runtime.
 
 ## Source Options
@@ -29,6 +29,14 @@ The Hugging Face lane should produce local handoff files when no admitted `.slm`
 Once one user or converter completes the chain, TinyRustLM can export a `minimodel.local_slm_share_metadata.v0` bundle with artifact SHA-256, chunk hashes, and a Merkle root, and MiniModel can now run `prepare-peer-share` to produce the local manifest, deterministic `.minimodel-peer-offer` text manifest, peer-piece directory, and catalog entry in one output directory. If a consenting direct peer is already known, the same command can validate and publish `peer_source_count` / `peer_sources` metadata for that peer without making MiniModel.org a byte host. If peer availability becomes known later, `add-peer-source` can attach a validated consenting peer URL directly, or `write-peer-source-announcement` can produce portable availability metadata that a catalog maintainer validates with `apply-peer-source-announcements` before the next metadata-only snapshot. For many entries and announcement files, `write-catalog-snapshot-with-announcements` validates everything together, rejects unmatched announcement model ids, and writes the final metadata-only `models.v0.json` snapshot directly. For browser-visible late availability without rewriting catalog entries, `write-peer-source-announcement-feed` validates portable announcements into a metadata feed and `write-catalog-snapshot-with-announcement-feed` binds that same-origin feed route into `models.v0.json` by SHA-256. `write-catalog-snapshot` still revalidates generated entries, rejects artifact/model/download URLs and project-server peer hosts, and writes a metadata-only catalog snapshot that TinyRustLM can later search. TinyRustLM treats proof-ready rows as a P2P import-request path: when a catalog peer source exists from a validated entry or announcement feed, it can save the request/script immediately; otherwise the receiver supplies one consenting peer URL first. Rust `import-peer-request` then validates the request against the manifest, fetches pieces, assembles the `.slm`, verifies it again, and writes a receipt in one output directory. The MiniModel CLI can already prepare peer shares, attach later peer-source metadata, write and apply peer-source announcements, publish checksum-bound announcement feeds, batch-publish snapshots from announcements or feed routes, write catalog snapshots, export, serve, fetch, assemble, reverify peer pieces, and execute TinyRustLM peer-import requests for known consenting peers; broader discovery and availability still remain later. That is the durable bridge toward users obtaining the admitted `.slm` through P2P instead of repeating a large source download and conversion.
 
 TinyRustLM can also follow catalog-declared, same-origin peer-source announcement feed routes when the catalog binds those routes to SHA-256 checksums. That browser fetch is only for small JSON metadata; it applies the same announcement validation rules and never requests MiniModel-hosted, TinyRustLM-hosted, or Hugging Face-hosted model bytes.
+
+## Optional Peer Companion
+
+The July 3 desktop/P2P research batch points to an optional MiniModel Peer Companion as a later phase, not as a replacement for the browser app. The companion would run on the user's machine and make advanced peer work easier: local piece storage, peer identity, serve/fetch controls, cache quotas, explicit consent prompts, import receipts, and local logs.
+
+The companion must reuse the same Rust verifier crates and command semantics as the CLI. It should not create a second trust path in JavaScript or a privileged WebView. If the UI uses Tauri v2 later, the Rust backend must own file access, peer transfer, manifest verification, and receipt writing through narrow commands and strict capabilities. Pure Rust UI options such as Iced, Slint, egui, or Dioxus remain open until the product shape requires a desktop shell.
+
+Protocol choices remain research lanes. Direct known-peer HTTP is the current proof vehicle; Iroh/QUIC, Rust-libp2p, WebRTC, WebTransport, mDNS, Kademlia DHTs, BitTorrent-style chunking, and Pear/Bare/Hypercore can be evaluated only after they preserve manifest-bound chunks, local receipts, consent gates, and project-server byte rejection. The companion is still user infrastructure, not MiniModel.org infrastructure.
 
 ## Manifest MVP
 
@@ -73,7 +81,8 @@ Model creation and import should follow the TinyRustLM evidence chain: safetenso
 6. Generate catalog entries from admitted manifests plus peer-offer proofs, rejecting drift before metadata is published.
 7. Generate metadata-only catalog snapshots from verified catalog entries, rejecting byte-hosting claims and unsafe peer sources before publication.
 8. Prototype peer transfer using the existing peer-piece sidecar, direct peer HTTP serve/fetch, and chunk/Merkle verification.
-9. Build a desktop peer app with discovery, identity exchange, consent, local cache controls, and TinyRustLM handoff.
+9. Design the optional MiniModel Peer Companion around shared Rust crates, local piece stores, peer identity, consent gates, cache controls, receipts, and TinyRustLM handoff.
+10. Evaluate broader peer discovery and NAT traversal transports only after the companion preserves the verifier and no-server-byte boundary.
 
 ## Examples
 

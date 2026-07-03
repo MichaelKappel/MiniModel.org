@@ -21,7 +21,7 @@ The verifier does not download model bytes. `verify-artifact` only opens the art
 | `minimodel` | CLI wrapper around `minimodel-core`. |
 | `minimodel-core` unit tests | Fixture manifests, drift cases, request parser failures, peer host rejection, HTTP piece transfer, and receipt round trips. |
 
-The first pass keeps manifests and peer-piece sidecars line-oriented where possible. Structured browser handoff JSON is parsed as JSON with `serde_json` so the receiver does not rely on string scanning. Networking, DHTs, relays, desktop UI, and peer identity exchange are later phases.
+The first pass keeps manifests and peer-piece sidecars line-oriented where possible. Structured browser handoff JSON is parsed as JSON with `serde_json` so the receiver does not rely on string scanning. Networking, DHTs, relays, the optional user-run MiniModel Peer Companion, and peer identity exchange are later phases.
 
 ## Commands
 

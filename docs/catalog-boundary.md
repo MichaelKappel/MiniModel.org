@@ -94,6 +94,8 @@ minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-hugg
 
 That command writes the MiniModel manifest, `.minimodel-peer-offer`, local peer pieces, and catalog entry together after validating the `.slm`. Catalog entries may reference the peer-offer text manifest with `peer_offer_route`, `peer_offer_sha256`, `peer_offer_chunk_count`, and `peer_offer_merkle_root_sha256`, but a peer-offer route is not a model download route and does not mean project servers serve bytes.
 
+TinyRustLM may also save a local `.minimodel-share-kit.ps1` beside the metadata bundle after a verified `.slm` import. The script is a convenience wrapper around the same MiniModel verifier commands: it resolves `MINIMODEL_WORKSPACE` and `TINYRUSTLM_LOCAL_SLM`, verifies expected artifact byte count and SHA-256 before running, calls `prepare-peer-share`, optionally writes peer-source announcement/feed metadata, writes metadata-only catalog snapshots, and prints the sender-side `serve-peer-pieces` command. It does not upload `.slm` bytes or peer pieces to MiniModel.org, TinyRustLM.com, or any project server.
+
 MiniModel can turn an admitted manifest plus peer-offer proof into metadata with:
 
 ```text
@@ -166,6 +168,12 @@ The product flow needs two separate consent moments:
 2. Execution consent: the user chooses to open a verified local `.slm` file in TinyRustLM.
 
 The metadata catalog must not collapse either step into an automatic action.
+
+## Optional Peer Companion Boundary
+
+The optional MiniModel Peer Companion is a later user-run desktop app for advanced peer duties, not a hosted MiniModel.org service. Its useful jobs are local peer identity, local piece storage, explicit serve/fetch controls, cache quotas, consent prompts, import receipts, and local logs. It should reuse the Rust verifier crates and command contracts instead of duplicating trust decisions in a UI shell.
+
+Tauri v2, Iced, Slint, egui, Dioxus, Iroh/QUIC, Rust-libp2p, WebRTC, WebTransport, BitTorrent-style chunking, Pear, Bare, and Hypercore remain evaluation lanes. None of them changes the core rule: project servers may publish metadata and docs, but model bytes move only through user-owned local files or consenting direct peers and are reverified locally before TinyRustLM import.
 
 ## Legal And Liability Posture
 

@@ -405,7 +405,7 @@ fn print_usage() {
         "  minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>..."
     );
     eprintln!(
-        "  minimodel write-peer-source-announcement-feed <output-json> <announcement-json>..."
+        "  minimodel write-peer-source-announcement-feed <output-json> [announcement-json...]"
     );
     eprintln!(
         "  minimodel write-catalog-snapshot-with-announcement-feed <output-json> <feed-route> <announcement-feed-json> <catalog-entry-json>..."

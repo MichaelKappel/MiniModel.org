@@ -2,7 +2,7 @@
   "catalog_version": 0,
   "catalog_kind": "minimodel.model_catalog",
   "catalog_id": "minimodel-default-proof-ready-v0",
-  "generated_at": "2026-07-02T19:00:00Z",
+  "generated_at": "2026-07-03T16:00:00Z",
   "publisher_id": "minimodel.org",
   "publisher_key_id": "minimodel-development-key-v0",
   "project_server_serves_model_bytes": false,
@@ -10,6 +10,13 @@
   "artifact_project_server_url": null,
   "execution_policy": "user-local-file-only",
   "takedown_contact_route": "../docs/catalog-boundary.md#contact-and-takedown-route",
+  "peer_source_announcement_routes": [
+    {
+      "route": "peer-source-announcements.v0.json",
+      "sha256": "sha256:bf403331e481759980dfcec9af73a14cd36a8e48e8b261441560e51178ef228f",
+      "route_kind": "minimodel.peer_source_announcement_catalog"
+    }
+  ],
   "entries": [
     {
       "catalog_version": 0,

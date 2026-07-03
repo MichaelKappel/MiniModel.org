@@ -1,0 +1,11 @@
+{
+  "announcement_catalog_version": 0,
+  "announcement_catalog_kind": "minimodel.peer_source_announcement_catalog",
+  "generated_at": "2026-07-03T16:00:00Z",
+  "publisher_id": "minimodel.org",
+  "publisher_key_id": "minimodel-development-key-v0",
+  "project_server_serves_model_bytes": false,
+  "project_server_runs_model_bytes": false,
+  "project_server_proxies_model_bytes": false,
+  "announcements": []
+}

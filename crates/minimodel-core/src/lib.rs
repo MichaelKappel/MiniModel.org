@@ -614,12 +614,6 @@ pub fn write_peer_source_announcement_feed_path(
     output_path: &Path,
     announcement_paths: &[std::path::PathBuf],
 ) -> Result<PeerSourceAnnouncementFeedReport, String> {
-    if announcement_paths.is_empty() {
-        return Err(
-            "peer-source announcement feed requires at least one announcement JSON".to_string(),
-        );
-    }
-
     let mut announcement_values = Vec::with_capacity(announcement_paths.len());
     for path in announcement_paths {
         let (_label, value, _announcement) = read_peer_source_announcement_value_path(path)?;
@@ -1747,11 +1741,6 @@ fn validate_peer_source_announcement_feed_value(
         .get("announcements")
         .and_then(Value::as_array)
         .ok_or_else(|| format!("{label} missing array announcements"))?;
-    if raw_announcements.is_empty() {
-        return Err(format!(
-            "{label} peer-source announcement feed must include at least one announcement"
-        ));
-    }
     if raw_announcements.len() > 1024 {
         return Err(format!(
             "{label} peer-source announcement feed exceeded 1024 announcements"
@@ -3947,6 +3936,58 @@ mod tests {
         assert!(snapshot_text.contains("\"peer_source_count\": 0"));
         assert!(!snapshot_text.contains("\"peer_sources\": ["));
         assert!(!snapshot_text.contains("artifact_project_server_url\": \"http"));
+    }
+
+    #[test]
+    fn writes_empty_peer_source_announcement_feed_and_catalog_route() {
+        let dir = unique_dir("empty-peer-source-announcement-feed");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let feed_path = dir.join("peer-source-announcements.v0.json");
+        let catalog_snapshot_path = dir.join("models.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            Some("example-org/example-source"),
+            None,
+        )
+        .unwrap();
+
+        let feed_report = write_peer_source_announcement_feed_path(&feed_path, &[]).unwrap();
+        let feed_text = std::fs::read_to_string(&feed_path).unwrap();
+        assert_eq!(feed_report.announcement_count, 0);
+        assert_eq!(feed_report.model_count, 0);
+        assert_eq!(
+            feed_report.feed_sha256,
+            sha256_prefixed(feed_text.as_bytes())
+        );
+        assert!(feed_text.contains("\"announcements\": []"));
+
+        let snapshot_report = write_catalog_snapshot_with_announcement_feed_path(
+            &catalog_snapshot_path,
+            "peer-source-announcements.v0.json",
+            &feed_path,
+            std::slice::from_ref(&catalog_entry_path),
+        )
+        .unwrap();
+        let snapshot_text = std::fs::read_to_string(&catalog_snapshot_path).unwrap();
+
+        assert_eq!(snapshot_report.entry_count, 1);
+        assert_eq!(snapshot_report.announcement_count, 0);
+        assert_eq!(snapshot_report.announcement_model_count, 0);
+        assert_eq!(snapshot_report.p2p_ready_count, 0);
+        assert_eq!(snapshot_report.peer_source_count, 0);
+        assert!(snapshot_text.contains("\"peer_source_announcement_routes\""));
+        assert!(snapshot_text.contains("\"route\": \"peer-source-announcements.v0.json\""));
+        assert!(snapshot_text.contains(&format!("\"sha256\": \"{}\"", feed_report.feed_sha256)));
+        assert!(snapshot_text.contains("\"peer_source_count\": 0"));
+        assert!(!snapshot_text.contains("\"peer_sources\": ["));
     }
 
     #[test]

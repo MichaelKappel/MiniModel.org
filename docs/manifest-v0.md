@@ -146,13 +146,13 @@ For catalog publication where a converter needs to hand peer availability to a m
 minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>
 minimodel apply-peer-source-announcements <catalog-entry-json> <output-json> <announcement-json>...
 minimodel write-catalog-snapshot-with-announcements <output-json> <catalog-entry-json>... --announcements <announcement-json>...
-minimodel write-peer-source-announcement-feed <output-json> <announcement-json>...
+minimodel write-peer-source-announcement-feed <output-json> [announcement-json...]
 minimodel write-catalog-snapshot-with-announcement-feed <output-json> <feed-route> <announcement-feed-json> <catalog-entry-json>...
 ```
 
 The announcement binds the catalog entry checksum, model id, artifact byte count, artifact SHA256, peer-offer SHA256, Merkle root, and one validated consenting direct peer URL. The apply command rejects model/artifact/proof drift, deduplicates peer URLs, writes `peer_sources`, revalidates the entry, and leaves the next `write-catalog-snapshot` run to publish metadata only. The batch snapshot command validates many entries and announcements together, rejects unmatched announcement model ids, and writes `models.v0.json` directly. This is the maintainable route for "converted once, then later users see P2P Import" without making project servers byte hosts.
 
-`write-peer-source-announcement-feed` validates many portable announcement JSON files into one `minimodel.peer_source_announcement_catalog` metadata feed. `write-catalog-snapshot-with-announcement-feed` validates the feed, confirms every feed model id exists in the catalog entries, computes the feed body SHA-256, rejects URL-like or unsafe feed routes, and writes the checksum-bound feed route into `models.v0.json`.
+`write-peer-source-announcement-feed` validates zero or more portable announcement JSON files into one `minimodel.peer_source_announcement_catalog` metadata feed. An empty feed is valid and means no consenting peer sources are currently published. `write-catalog-snapshot-with-announcement-feed` validates the feed, confirms every feed model id exists in the catalog entries, computes the feed body SHA-256, rejects URL-like or unsafe feed routes, and writes the checksum-bound feed route into `models.v0.json`.
 
 Catalog snapshots may expose announcement feeds as metadata routes, not byte routes. A snapshot can carry `peer_source_announcement_route` with `peer_source_announcement_sha256`, or `peer_source_announcement_routes` / `peer_source_announcement_feeds` arrays with route and SHA-256 fields. TinyRustLM accepts only HTTP(S) routes that resolve on the same origin as the catalog, checks the feed body against the declared SHA-256, then applies valid announcements to proof-ready entries. The feed must not contain `.slm` bytes, artifact URLs, Hugging Face `/resolve/` URLs, project-server peer hosts, or execution claims.
 

@@ -4,11 +4,11 @@ mod slm;
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use manifest::Manifest;
@@ -19,6 +19,9 @@ use sha256::{bytes_to_hex, normalize_sha256, parse_sha256_hex, sha256, sha256_pr
 const MINIMODEL_MANIFEST_SCHEMA_CHECKSUM: &str =
     "sha256:05d9dbd4f31ba6affeb9b4b70672636c296f9d584056f7add9ccc0fc02153cf4";
 const DEFAULT_PEER_CHUNK_SIZE: usize = 1_048_576;
+const PEER_STATUS_ROUTE: &str = "minimodel.peer_status.v0.json";
+const PEER_PIECE_SET_ROUTE: &str = "minimodel.peer_piece_set.v0";
+const PEER_COMPANION_STATE_ROUTE: &str = "minimodel.peer_companion_state.v0.json";
 
 #[derive(Debug, Clone)]
 pub struct ArtifactVerification {
@@ -42,16 +45,22 @@ pub struct PeerPieceExport {
 #[derive(Debug, Clone)]
 pub struct PeerPieceFetch {
     pub piece_set_path: String,
+    pub piece_set_sha256: String,
     pub piece_count: usize,
     pub manifest_sha256: String,
     pub artifact_sha256: String,
     pub merkle_root_sha256: String,
     pub peer_base_url: String,
+    pub companion_state_url: String,
+    pub companion_state_status: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct PeerPieceServe {
     pub piece_set_path: String,
+    pub piece_set_sha256: String,
+    pub model_id: String,
+    pub artifact_byte_count: u64,
     pub piece_count: usize,
     pub manifest_sha256: String,
     pub artifact_sha256: String,
@@ -72,6 +81,16 @@ pub struct CatalogSnapshotReport {
     pub entry_count: usize,
     pub p2p_ready_count: usize,
     pub peer_source_count: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct CatalogSnapshotInspectionReport {
+    pub catalog_path: String,
+    pub entry_count: usize,
+    pub p2p_ready_count: usize,
+    pub peer_source_count: usize,
+    pub announcement_route_count: usize,
+    pub catalog_sha256: String,
 }
 
 #[derive(Debug, Clone)]
@@ -136,7 +155,10 @@ pub struct PeerSourceAnnouncementMerge {
 pub struct PeerImportRequestExecution {
     pub request_path: String,
     pub peer_base_url: String,
+    pub companion_state_url: String,
+    pub companion_state_status: String,
     pub piece_dir_path: String,
+    pub piece_set_sha256: String,
     pub output_artifact_path: String,
     pub receipt_path: String,
     pub piece_count: usize,
@@ -146,12 +168,143 @@ pub struct PeerImportRequestExecution {
 }
 
 #[derive(Debug, Clone)]
+pub struct PeerImportRequestInspection {
+    pub request_path: String,
+    pub request_sha256: String,
+    pub manifest_sha256: String,
+    pub model_id: String,
+    pub artifact_byte_count: u64,
+    pub artifact_sha256: String,
+    pub expected_peer_base_url: String,
+    pub expected_piece_dir: String,
+    pub assembled_output_slm: String,
+    pub metadata_routes_status: String,
+    pub peer_status_route: String,
+    pub peer_piece_set_route: String,
+    pub peer_companion_state_route: String,
+    pub receiver_validation_contract_status: String,
+    pub check_peer_status_before_piece_fetch: bool,
+    pub preflight_fetches_piece_set_before_pieces: bool,
+    pub validate_advertised_companion_state_before_piece_fetch: bool,
+    pub import_receipt_required_before_browser_load: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportReceiptInspection {
+    pub receipt_path: String,
+    pub receipt_sha256: String,
+    pub manifest_sha256: String,
+    pub model_id: String,
+    pub artifact_path: String,
+    pub artifact_byte_count: u64,
+    pub artifact_sha256: String,
+    pub slm_model_shape: String,
+    pub slm_quantization: String,
+    pub peer_import: bool,
+    pub peer_base_url: Option<String>,
+    pub companion_state_status: Option<String>,
+    pub piece_count: Option<usize>,
+    pub merkle_root_sha256: Option<String>,
+    pub peer_piece_bytes_fetched: bool,
+    pub artifact_assembled_from_peer_pieces: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerImportReceiptInspection {
+    pub receipt_path: String,
+    pub receipt_sha256: String,
+    pub request_path: String,
+    pub request_sha256: String,
+    pub preflight_path: String,
+    pub preflight_sha256: String,
+    pub manifest_sha256: String,
+    pub model_id: String,
+    pub artifact_path: String,
+    pub artifact_sha256: String,
+    pub peer_base_url: String,
+    pub companion_state_url: String,
+    pub companion_state_status: String,
+    pub piece_set_sha256: String,
+    pub piece_count: usize,
+    pub merkle_root_sha256: String,
+    pub peer_piece_set_metadata_fetched: bool,
+    pub peer_companion_state_metadata_fetched: bool,
+    pub peer_piece_bytes_fetched: bool,
+    pub artifact_assembled_from_peer_pieces: bool,
+    pub project_server_serves_model_bytes: bool,
+    pub project_server_runs_model_bytes: bool,
+    pub project_server_proxies_huggingface_bytes: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct PeerImportPreflight {
     pub request_path: String,
     pub preflight_path: String,
     pub peer_base_url: String,
     pub piece_set_url: String,
+    pub piece_set_sha256: String,
+    pub companion_state_url: String,
+    pub companion_state_status: String,
+    pub metadata_routes_status: String,
+    pub peer_status_route: String,
+    pub peer_piece_set_route: String,
+    pub peer_companion_state_route: String,
+    pub receiver_validation_contract_status: String,
+    pub check_peer_status_before_piece_fetch: bool,
+    pub preflight_fetches_piece_set_before_pieces: bool,
+    pub validate_advertised_companion_state_before_piece_fetch: bool,
+    pub import_receipt_required_before_browser_load: bool,
     pub piece_count: usize,
+    pub manifest_sha256: String,
+    pub artifact_sha256: String,
+    pub merkle_root_sha256: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerImportPreflightInspection {
+    pub preflight_path: String,
+    pub preflight_sha256: String,
+    pub request_path: String,
+    pub request_sha256: String,
+    pub manifest_sha256: String,
+    pub model_id: String,
+    pub peer_base_url: String,
+    pub piece_set_url: String,
+    pub piece_set_sha256: String,
+    pub companion_state_url: String,
+    pub companion_state_status: String,
+    pub metadata_routes_status: String,
+    pub peer_status_route: String,
+    pub peer_piece_set_route: String,
+    pub peer_companion_state_route: String,
+    pub receiver_validation_contract_status: String,
+    pub check_peer_status_before_piece_fetch: bool,
+    pub preflight_fetches_piece_set_before_pieces: bool,
+    pub validate_advertised_companion_state_before_piece_fetch: bool,
+    pub import_receipt_required_before_browser_load: bool,
+    pub peer_piece_set_metadata_fetched: bool,
+    pub peer_companion_state_metadata_fetched: bool,
+    pub peer_piece_bytes_fetched: bool,
+    pub artifact_bytes_fetched: bool,
+    pub project_server_serves_model_bytes: bool,
+    pub project_server_runs_model_bytes: bool,
+    pub project_server_proxies_huggingface_bytes: bool,
+    pub piece_count: usize,
+    pub artifact_sha256: String,
+    pub merkle_root_sha256: String,
+}
+
+/// Summary returned after a metadata-only status check against a running direct peer.
+#[derive(Debug, Clone)]
+pub struct PeerStatusCheck {
+    pub report_path: String,
+    pub peer_base_url: String,
+    pub status_url: String,
+    pub companion_state_route: String,
+    pub model_id: String,
+    pub artifact_byte_count: u64,
+    pub piece_count: usize,
+    pub piece_set_sha256: String,
     pub manifest_sha256: String,
     pub artifact_sha256: String,
     pub merkle_root_sha256: String,
@@ -181,15 +334,76 @@ pub struct PeerCompanionStateReport {
     pub merkle_root_sha256: String,
 }
 
+/// Summary returned after validating a companion state before serving.
+#[derive(Debug, Clone)]
+pub struct PeerCompanionServe {
+    pub state_path: String,
+    pub state_route: String,
+    pub piece_set_path: String,
+    pub piece_set_sha256: String,
+    pub model_id: String,
+    pub peer_base_url: String,
+    pub artifact_byte_count: u64,
+    pub piece_count: usize,
+    pub manifest_sha256: String,
+    pub artifact_sha256: String,
+    pub merkle_root_sha256: String,
+}
+
+/// Summary returned after writing or validating a metadata-only peer contact card.
+#[derive(Debug, Clone)]
+pub struct PeerContactCardReport {
+    pub card_path: String,
+    pub peer_label: String,
+    pub peer_base_url: String,
+}
+
+/// Summary returned after validating a TinyRustLM local share metadata bundle.
+#[derive(Debug, Clone)]
+pub struct ShareMetadataReport {
+    pub bundle_path: String,
+    pub model_id: String,
+    pub artifact_file_name: String,
+    pub artifact_byte_count: usize,
+    pub artifact_sha256: String,
+    pub chunk_count: usize,
+    pub merkle_root_sha256: String,
+    pub peer_transfer_status: String,
+    pub peer_transfer_implementation: String,
+    pub share_kit_available: bool,
+    pub network_transfer_available: bool,
+}
+
 #[derive(Debug, Clone)]
 struct PeerSourceAnnouncement {
     model_id: String,
     artifact_byte_count: usize,
     artifact_sha256: String,
+    peer_offer_route: String,
+    peer_offer_chunk_count: usize,
     peer_offer_sha256: String,
     peer_offer_merkle_root_sha256: String,
     peer_base_url: String,
     peer_source: Value,
+}
+
+#[derive(Debug, Clone)]
+struct PeerCompanionMetadataCheck {
+    url: String,
+    status: String,
+}
+
+#[derive(Debug, Clone)]
+struct PeerImportReceiptTransfer {
+    request_path: String,
+    peer_base_url: String,
+    piece_dir_path: String,
+    piece_set_path: String,
+    piece_set_sha256: String,
+    companion_state_url: String,
+    companion_state_status: String,
+    piece_count: usize,
+    merkle_root_sha256: String,
 }
 
 pub fn verify_manifest_path(path: &Path) -> Result<Manifest, String> {
@@ -251,6 +465,20 @@ pub fn write_import_receipt_path(
     ensure_parent_dir(receipt_path, "receipt")?;
     fs::write(receipt_path, receipt)
         .map_err(|error| format!("failed to write import receipt: {error}"))?;
+    Ok(report)
+}
+
+fn write_peer_import_receipt_path(
+    manifest_path: &Path,
+    artifact_path: &Path,
+    receipt_path: &Path,
+    transfer: &PeerImportReceiptTransfer,
+) -> Result<ArtifactVerification, String> {
+    let report = verify_artifact_path(manifest_path, artifact_path)?;
+    let receipt = peer_import_receipt_text(&report, artifact_path, transfer)?;
+    ensure_parent_dir(receipt_path, "peer import receipt")?;
+    fs::write(receipt_path, receipt)
+        .map_err(|error| format!("failed to write peer import receipt: {error}"))?;
     Ok(report)
 }
 
@@ -343,10 +571,19 @@ pub fn fetch_peer_pieces_http_path(
     require_fixed_chunk_mode(&bundle.manifest)?;
     let piece_set_url = base_url.join_file("minimodel.peer_piece_set.v0")?;
     let piece_set_bytes = http_get_bytes(&piece_set_url, 1_048_576)?;
+    let piece_set_sha256 = sha256_prefixed(&piece_set_bytes);
     let piece_set_text = std::str::from_utf8(&piece_set_bytes)
         .map_err(|_| "peer piece set must be valid UTF-8".to_string())?;
     let piece_set = Manifest::parse(piece_set_text)?;
     validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
+    let companion = validate_optional_peer_companion_state(
+        &base_url,
+        &piece_set_url,
+        &bundle.manifest,
+        &bundle.bytes,
+        &piece_set,
+        piece_set_text.as_bytes(),
+    )?;
     let chunk_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
     let temp_dir = temp_download_dir(output_dir)?;
     if temp_dir.exists() {
@@ -374,6 +611,7 @@ pub fn fetch_peer_pieces_http_path(
                 .join("minimodel.peer_piece_set.v0")
                 .display()
                 .to_string(),
+            piece_set_sha256,
             piece_count: chunk_count,
             manifest_sha256: sha256_prefixed(&bundle.bytes),
             artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
@@ -381,6 +619,8 @@ pub fn fetch_peer_pieces_http_path(
                 bundle.manifest.require("chunks.merkle_root_sha256")?,
             )?,
             peer_base_url: base_url.to_string(),
+            companion_state_url: companion.url,
+            companion_state_status: companion.status,
         }),
         Err(error) => {
             let _ = fs::remove_dir_all(&temp_dir);
@@ -404,17 +644,234 @@ pub fn execute_peer_import_request_path(
     let fetch =
         fetch_peer_pieces_http_path(manifest_path, &request.expected_peer_base_url, &piece_dir)?;
     let artifact = assemble_peer_pieces_path(manifest_path, &piece_dir, &output_artifact_path)?;
-    write_import_receipt_path(manifest_path, &output_artifact_path, &receipt_path)?;
+    write_peer_import_receipt_path(
+        manifest_path,
+        &output_artifact_path,
+        &receipt_path,
+        &PeerImportReceiptTransfer {
+            request_path: request_path.display().to_string(),
+            peer_base_url: fetch.peer_base_url.clone(),
+            piece_dir_path: piece_dir.display().to_string(),
+            piece_set_path: fetch.piece_set_path.clone(),
+            piece_set_sha256: fetch.piece_set_sha256.clone(),
+            companion_state_url: fetch.companion_state_url.clone(),
+            companion_state_status: fetch.companion_state_status.clone(),
+            piece_count: fetch.piece_count,
+            merkle_root_sha256: fetch.merkle_root_sha256.clone(),
+        },
+    )?;
     Ok(PeerImportRequestExecution {
         request_path: request_path.display().to_string(),
         peer_base_url: fetch.peer_base_url,
+        companion_state_url: fetch.companion_state_url,
+        companion_state_status: fetch.companion_state_status,
         piece_dir_path: piece_dir.display().to_string(),
+        piece_set_sha256: fetch.piece_set_sha256,
         output_artifact_path: output_artifact_path.display().to_string(),
         receipt_path: receipt_path.display().to_string(),
         piece_count: fetch.piece_count,
         manifest_sha256: artifact.manifest_sha256,
         artifact_sha256: artifact.artifact_sha256,
         merkle_root_sha256: fetch.merkle_root_sha256,
+    })
+}
+
+pub fn inspect_peer_import_request_path(
+    request_path: &Path,
+    manifest_path: &Path,
+) -> Result<PeerImportRequestInspection, String> {
+    let (request_bytes, request) = read_peer_import_request_bytes_path(request_path)?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    validate_peer_import_request_against_manifest(&request, &bundle.manifest)?;
+    let contract = peer_import_request_contract_summary(&request);
+    Ok(PeerImportRequestInspection {
+        request_path: request_path.display().to_string(),
+        request_sha256: sha256_prefixed(&request_bytes),
+        manifest_sha256: sha256_prefixed(&bundle.bytes),
+        model_id: request.model_id,
+        artifact_byte_count: request.artifact_byte_count,
+        artifact_sha256: normalize_sha256(&request.artifact_sha256)?,
+        expected_peer_base_url: normalize_known_peer_base_url(&request.expected_peer_base_url)?,
+        expected_piece_dir: request.expected_piece_dir,
+        assembled_output_slm: request.assembled_output_slm,
+        metadata_routes_status: contract.metadata_routes_status,
+        peer_status_route: contract.peer_status_route,
+        peer_piece_set_route: contract.peer_piece_set_route,
+        peer_companion_state_route: contract.peer_companion_state_route,
+        receiver_validation_contract_status: contract.receiver_validation_contract_status,
+        check_peer_status_before_piece_fetch: contract.check_peer_status_before_piece_fetch,
+        preflight_fetches_piece_set_before_pieces: contract
+            .preflight_fetches_piece_set_before_pieces,
+        validate_advertised_companion_state_before_piece_fetch: contract
+            .validate_advertised_companion_state_before_piece_fetch,
+        import_receipt_required_before_browser_load: contract
+            .import_receipt_required_before_browser_load,
+    })
+}
+
+pub fn inspect_import_receipt_path(
+    receipt_path: &Path,
+    manifest_path: &Path,
+    artifact_path: &Path,
+) -> Result<ImportReceiptInspection, String> {
+    let receipt_bytes = fs::read(receipt_path)
+        .map_err(|error| format!("failed to read import receipt: {error}"))?;
+    let receipt_text = std::str::from_utf8(&receipt_bytes)
+        .map_err(|_| "import receipt must be valid UTF-8".to_string())?;
+    let receipt = Manifest::parse(receipt_text)
+        .map_err(|error| format!("failed to parse import receipt: {error}"))?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    let artifact_bytes =
+        fs::read(artifact_path).map_err(|error| format!("failed to read artifact: {error}"))?;
+    let artifact = verify_artifact_bytes(&bundle.manifest, &bundle.bytes, &artifact_bytes)?;
+    let peer =
+        validate_import_receipt_fields(&receipt, &bundle.manifest, &artifact, artifact_path)?;
+
+    Ok(ImportReceiptInspection {
+        receipt_path: receipt_path.display().to_string(),
+        receipt_sha256: sha256_prefixed(&receipt_bytes),
+        manifest_sha256: artifact.manifest_sha256,
+        model_id: artifact.manifest_model_id,
+        artifact_path: artifact_path.display().to_string(),
+        artifact_byte_count: artifact.artifact_byte_count,
+        artifact_sha256: artifact.artifact_sha256,
+        slm_model_shape: artifact.slm.model_shape,
+        slm_quantization: artifact.slm.quantization,
+        peer_import: peer.peer_import,
+        peer_base_url: peer.peer_base_url,
+        companion_state_status: peer.companion_state_status,
+        piece_count: peer.piece_count,
+        merkle_root_sha256: peer.merkle_root_sha256,
+        peer_piece_bytes_fetched: peer.peer_piece_bytes_fetched,
+        artifact_assembled_from_peer_pieces: peer.artifact_assembled_from_peer_pieces,
+    })
+}
+
+pub fn inspect_peer_import_receipt_path(
+    receipt_path: &Path,
+    request_path: &Path,
+    preflight_path: &Path,
+    manifest_path: &Path,
+    artifact_path: &Path,
+) -> Result<PeerImportReceiptInspection, String> {
+    let receipt_bytes = fs::read(receipt_path)
+        .map_err(|error| format!("failed to read import receipt: {error}"))?;
+    let receipt_text = std::str::from_utf8(&receipt_bytes)
+        .map_err(|_| "import receipt must be valid UTF-8".to_string())?;
+    let receipt = Manifest::parse(receipt_text)
+        .map_err(|error| format!("failed to parse import receipt: {error}"))?;
+    let receipt_created_utc = receipt_required(&receipt, "receipt.created_utc")?;
+    let receipt_created_seconds =
+        parse_utc_timestamp_seconds(receipt_created_utc, "import receipt receipt.created_utc")?;
+    let preflight_bytes = fs::read(preflight_path)
+        .map_err(|error| format!("failed to read peer import preflight: {error}"))?;
+    let preflight_text = std::str::from_utf8(&preflight_bytes)
+        .map_err(|_| "peer import preflight must be valid UTF-8".to_string())?;
+    let preflight = Manifest::parse(preflight_text)
+        .map_err(|error| format!("failed to parse peer import preflight: {error}"))?;
+    let preflight_created_utc = preflight_required(&preflight, "preflight.created_utc")?;
+    let preflight_created_seconds = parse_utc_timestamp_seconds(
+        preflight_created_utc,
+        "peer import preflight preflight.created_utc",
+    )?;
+    let receipt_report = inspect_import_receipt_path(receipt_path, manifest_path, artifact_path)?;
+    if !receipt_report.peer_import {
+        return Err("peer import receipt chain requires a peer-import receipt".to_string());
+    }
+    let preflight_report =
+        inspect_peer_import_preflight_path(preflight_path, request_path, manifest_path)?;
+    if !preflight_report.import_receipt_required_before_browser_load {
+        return Err(
+            "peer import receipt chain requires import_receipt_required_before_browser_load=true"
+                .to_string(),
+        );
+    }
+    if receipt_created_seconds < preflight_created_seconds {
+        return Err(format!(
+            "peer import receipt chain receipt.created_utc must be greater than or equal to preflight.created_utc: receipt {receipt_created_utc}, preflight {preflight_created_utc}"
+        ));
+    }
+
+    require_receipt_path_hint(
+        &receipt,
+        "peer_import.request_path_hint",
+        request_path,
+        "peer import request",
+    )?;
+    require_receipt_equal(&receipt, "peer.base_url", &preflight_report.peer_base_url)?;
+    require_receipt_equal(
+        &receipt,
+        "peer.companion_state_url",
+        &preflight_report.companion_state_url,
+    )?;
+    require_receipt_equal(
+        &receipt,
+        "peer.companion_state_status",
+        &preflight_report.companion_state_status,
+    )?;
+    require_receipt_sha_equal(
+        &receipt,
+        "peer.piece_set_sha256",
+        &preflight_report.piece_set_sha256,
+    )?;
+    require_receipt_sha_equal(
+        &receipt,
+        "artifact.sha256",
+        &preflight_report.artifact_sha256,
+    )?;
+    require_receipt_equal(
+        &receipt,
+        "chunks.count",
+        &preflight_report.piece_count.to_string(),
+    )?;
+    require_receipt_sha_equal(
+        &receipt,
+        "chunks.merkle_root_sha256",
+        &preflight_report.merkle_root_sha256,
+    )?;
+
+    let peer_piece_set_metadata_fetched =
+        require_receipt_bool(&receipt, "peer_piece_set_metadata_fetched", true)?;
+    let peer_companion_state_metadata_fetched = require_receipt_bool(
+        &receipt,
+        "peer_companion_state_metadata_fetched",
+        preflight_report.peer_companion_state_metadata_fetched,
+    )?;
+    let peer_piece_bytes_fetched =
+        require_receipt_bool(&receipt, "peer_piece_bytes_fetched", true)?;
+    let artifact_assembled_from_peer_pieces =
+        require_receipt_bool(&receipt, "artifact.assembled_from_peer_pieces", true)?;
+    let project_server_serves_model_bytes =
+        require_receipt_bool(&receipt, "project_server_serves_model_bytes", false)?;
+    let project_server_runs_model_bytes =
+        require_receipt_bool(&receipt, "project_server_runs_model_bytes", false)?;
+    let project_server_proxies_huggingface_bytes =
+        require_receipt_bool(&receipt, "project_server_proxies_huggingface_bytes", false)?;
+
+    Ok(PeerImportReceiptInspection {
+        receipt_path: receipt_report.receipt_path,
+        receipt_sha256: receipt_report.receipt_sha256,
+        request_path: preflight_report.request_path,
+        request_sha256: preflight_report.request_sha256,
+        preflight_path: preflight_report.preflight_path,
+        preflight_sha256: preflight_report.preflight_sha256,
+        manifest_sha256: receipt_report.manifest_sha256,
+        model_id: receipt_report.model_id,
+        artifact_path: receipt_report.artifact_path,
+        artifact_sha256: receipt_report.artifact_sha256,
+        peer_base_url: preflight_report.peer_base_url,
+        companion_state_url: preflight_report.companion_state_url,
+        companion_state_status: preflight_report.companion_state_status,
+        piece_set_sha256: preflight_report.piece_set_sha256,
+        piece_count: preflight_report.piece_count,
+        merkle_root_sha256: preflight_report.merkle_root_sha256,
+        peer_piece_set_metadata_fetched,
+        peer_companion_state_metadata_fetched,
+        peer_piece_bytes_fetched,
+        artifact_assembled_from_peer_pieces,
+        project_server_serves_model_bytes,
+        project_server_runs_model_bytes,
+        project_server_proxies_huggingface_bytes,
     })
 }
 
@@ -430,16 +887,41 @@ pub fn preflight_peer_import_request_path(
     reject_project_server_peer_host(&base_url.host)?;
     let piece_set_url = base_url.join_file("minimodel.peer_piece_set.v0")?;
     let piece_set_bytes = http_get_bytes(&piece_set_url, 1_048_576)?;
+    let piece_set_sha256 = sha256_prefixed(&piece_set_bytes);
     let piece_set_text = std::str::from_utf8(&piece_set_bytes)
         .map_err(|_| "peer piece set must be valid UTF-8".to_string())?;
     let piece_set = Manifest::parse(piece_set_text)?;
     validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
+    let companion = validate_optional_peer_companion_state(
+        &base_url,
+        &piece_set_url,
+        &bundle.manifest,
+        &bundle.bytes,
+        &piece_set,
+        piece_set_text.as_bytes(),
+    )?;
     let piece_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
+    let contract = peer_import_request_contract_summary(&request);
     let report = PeerImportPreflight {
         request_path: request_path.display().to_string(),
         preflight_path: preflight_path.display().to_string(),
         peer_base_url: base_url.to_string(),
         piece_set_url: piece_set_url.to_string(),
+        piece_set_sha256,
+        companion_state_url: companion.url,
+        companion_state_status: companion.status,
+        metadata_routes_status: contract.metadata_routes_status,
+        peer_status_route: contract.peer_status_route,
+        peer_piece_set_route: contract.peer_piece_set_route,
+        peer_companion_state_route: contract.peer_companion_state_route,
+        receiver_validation_contract_status: contract.receiver_validation_contract_status,
+        check_peer_status_before_piece_fetch: contract.check_peer_status_before_piece_fetch,
+        preflight_fetches_piece_set_before_pieces: contract
+            .preflight_fetches_piece_set_before_pieces,
+        validate_advertised_companion_state_before_piece_fetch: contract
+            .validate_advertised_companion_state_before_piece_fetch,
+        import_receipt_required_before_browser_load: contract
+            .import_receipt_required_before_browser_load,
         piece_count,
         manifest_sha256: sha256_prefixed(&bundle.bytes),
         artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
@@ -454,20 +936,253 @@ pub fn preflight_peer_import_request_path(
     Ok(report)
 }
 
+pub fn inspect_peer_import_preflight_path(
+    preflight_path: &Path,
+    request_path: &Path,
+    manifest_path: &Path,
+) -> Result<PeerImportPreflightInspection, String> {
+    let preflight_bytes = fs::read(preflight_path)
+        .map_err(|error| format!("failed to read peer import preflight: {error}"))?;
+    let preflight_text = std::str::from_utf8(&preflight_bytes)
+        .map_err(|_| "peer import preflight must be valid UTF-8".to_string())?;
+    let preflight = Manifest::parse(preflight_text)
+        .map_err(|error| format!("failed to parse peer import preflight: {error}"))?;
+    let (request_bytes, request) = read_peer_import_request_bytes_path(request_path)?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    validate_peer_import_request_against_manifest(&request, &bundle.manifest)?;
+    let contract = peer_import_request_contract_summary(&request);
+    let base_url = HttpUrl::parse(&request.expected_peer_base_url)?;
+    let peer_base_url = normalize_known_peer_base_url(&base_url.to_string())?;
+    let piece_set_url = base_url.join_file(PEER_PIECE_SET_ROUTE)?.to_string();
+    let companion_state_url = base_url.join_file(PEER_COMPANION_STATE_ROUTE)?.to_string();
+    let manifest_sha256 = sha256_prefixed(&bundle.bytes);
+    let model_id = bundle.manifest.require("model.id")?.to_string();
+    let artifact_sha256 = normalize_sha256(bundle.manifest.require("artifact.sha256")?)?;
+    let merkle_root_sha256 =
+        normalize_sha256(bundle.manifest.require("chunks.merkle_root_sha256")?)?;
+    let piece_count = parse_usize(bundle.manifest.require("chunks.count")?, "chunks.count")?;
+
+    require_preflight_equal(&preflight, "preflight.version", "0")?;
+    require_preflight_equal(
+        &preflight,
+        "preflight.kind",
+        "minimodel.peer_import_preflight",
+    )?;
+    require_preflight_timestampish(preflight_required(&preflight, "preflight.created_utc")?)?;
+    require_preflight_path_hint(
+        &preflight,
+        "request.path",
+        request_path,
+        "peer import request",
+    )?;
+    require_preflight_equal(&preflight, "request.kind", &request.request_kind)?;
+    require_preflight_sha_equal(&preflight, "manifest.sha256", &manifest_sha256)?;
+    require_preflight_equal(&preflight, "manifest.model_id", &model_id)?;
+    require_preflight_equal(&preflight, "peer.base_url", &peer_base_url)?;
+    require_preflight_equal(
+        &preflight,
+        "metadata_routes.status",
+        &contract.metadata_routes_status,
+    )?;
+    require_preflight_equal(
+        &preflight,
+        "metadata_routes.peer_status",
+        &contract.peer_status_route,
+    )?;
+    require_preflight_equal(
+        &preflight,
+        "metadata_routes.peer_piece_set",
+        &contract.peer_piece_set_route,
+    )?;
+    require_preflight_equal(
+        &preflight,
+        "metadata_routes.peer_companion_state",
+        &contract.peer_companion_state_route,
+    )?;
+    require_preflight_equal(
+        &preflight,
+        "receiver_validation_contract.status",
+        &contract.receiver_validation_contract_status,
+    )?;
+    require_preflight_bool(
+        &preflight,
+        "receiver_validation.check_peer_status_before_piece_fetch",
+        contract.check_peer_status_before_piece_fetch,
+    )?;
+    require_preflight_bool(
+        &preflight,
+        "receiver_validation.preflight_fetches_piece_set_before_pieces",
+        contract.preflight_fetches_piece_set_before_pieces,
+    )?;
+    require_preflight_bool(
+        &preflight,
+        "receiver_validation.validate_advertised_companion_state_before_piece_fetch",
+        contract.validate_advertised_companion_state_before_piece_fetch,
+    )?;
+    require_preflight_bool(
+        &preflight,
+        "receiver_validation.import_receipt_required_before_browser_load",
+        contract.import_receipt_required_before_browser_load,
+    )?;
+    require_preflight_equal(&preflight, "peer.piece_set_url", &piece_set_url)?;
+    require_preflight_equal(&preflight, "peer.companion_state_url", &companion_state_url)?;
+    let companion_state_status = preflight_required(&preflight, "peer.companion_state_status")?;
+    if !matches!(companion_state_status, "validated" | "not-advertised") {
+        return Err(format!(
+            "peer import preflight peer.companion_state_status must be validated or not-advertised, got {companion_state_status}"
+        ));
+    }
+    require_preflight_equal(&preflight, "piece_set.kind", PEER_PIECE_SET_ROUTE)?;
+    require_preflight_equal(&preflight, "piece_set.validation_status", "passed")?;
+    let piece_set_sha256 = normalize_sha256(preflight_required(&preflight, "piece_set.sha256")?)?;
+    require_preflight_equal(&preflight, "artifact.kind", &request.artifact_kind)?;
+    require_preflight_equal(
+        &preflight,
+        "artifact.byte_count",
+        &request.artifact_byte_count.to_string(),
+    )?;
+    require_preflight_sha_equal(&preflight, "artifact.sha256", &artifact_sha256)?;
+    require_preflight_equal(&preflight, "chunks.mode", "fixed-size-merkle-v0")?;
+    require_preflight_equal(&preflight, "chunks.count", &piece_count.to_string())?;
+    require_preflight_sha_equal(&preflight, "chunks.merkle_root_sha256", &merkle_root_sha256)?;
+    let peer_piece_set_metadata_fetched =
+        require_preflight_bool(&preflight, "peer_piece_set_metadata_fetched", true)?;
+    let expected_companion_fetched = companion_state_status == "validated";
+    let peer_companion_state_metadata_fetched = require_preflight_bool(
+        &preflight,
+        "peer_companion_state_metadata_fetched",
+        expected_companion_fetched,
+    )?;
+    let peer_piece_bytes_fetched =
+        require_preflight_bool(&preflight, "peer_piece_bytes_fetched", false)?;
+    let artifact_bytes_fetched =
+        require_preflight_bool(&preflight, "artifact_bytes_fetched", false)?;
+    let project_server_serves_model_bytes =
+        require_preflight_bool(&preflight, "project_server_serves_model_bytes", false)?;
+    let project_server_runs_model_bytes =
+        require_preflight_bool(&preflight, "project_server_runs_model_bytes", false)?;
+    let project_server_proxies_huggingface_bytes = require_preflight_bool(
+        &preflight,
+        "project_server_proxies_huggingface_bytes",
+        false,
+    )?;
+    require_preflight_equal(
+        &preflight,
+        "required_next_gate",
+        "run-import-peer-request-fetch-pieces-assemble-rust-reverify",
+    )?;
+
+    Ok(PeerImportPreflightInspection {
+        preflight_path: preflight_path.display().to_string(),
+        preflight_sha256: sha256_prefixed(&preflight_bytes),
+        request_path: request_path.display().to_string(),
+        request_sha256: sha256_prefixed(&request_bytes),
+        manifest_sha256,
+        model_id,
+        peer_base_url,
+        piece_set_url,
+        piece_set_sha256,
+        companion_state_url,
+        companion_state_status: companion_state_status.to_string(),
+        metadata_routes_status: contract.metadata_routes_status,
+        peer_status_route: contract.peer_status_route,
+        peer_piece_set_route: contract.peer_piece_set_route,
+        peer_companion_state_route: contract.peer_companion_state_route,
+        receiver_validation_contract_status: contract.receiver_validation_contract_status,
+        check_peer_status_before_piece_fetch: contract.check_peer_status_before_piece_fetch,
+        preflight_fetches_piece_set_before_pieces: contract
+            .preflight_fetches_piece_set_before_pieces,
+        validate_advertised_companion_state_before_piece_fetch: contract
+            .validate_advertised_companion_state_before_piece_fetch,
+        import_receipt_required_before_browser_load: contract
+            .import_receipt_required_before_browser_load,
+        peer_piece_set_metadata_fetched,
+        peer_companion_state_metadata_fetched,
+        peer_piece_bytes_fetched,
+        artifact_bytes_fetched,
+        project_server_serves_model_bytes,
+        project_server_runs_model_bytes,
+        project_server_proxies_huggingface_bytes,
+        piece_count,
+        artifact_sha256,
+        merkle_root_sha256,
+    })
+}
+
+pub fn check_peer_status_path(
+    manifest_path: &Path,
+    peer_base_url: &str,
+    output_json: &Path,
+) -> Result<PeerStatusCheck, String> {
+    let base_url = HttpUrl::parse(peer_base_url)?;
+    let normalized_peer_base_url = normalize_known_peer_base_url(&base_url.to_string())?;
+    let status_url = base_url.join_file(PEER_STATUS_ROUTE)?;
+    let status_url_text = status_url.to_string();
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    let expected = expected_peer_status_share(
+        &bundle.manifest,
+        &bundle.bytes,
+        base_url
+            .join_file("minimodel.peer_piece_set.v0")?
+            .to_string(),
+    )?;
+    let status_bytes = http_get_bytes(&status_url, 32 * 1024)
+        .map_err(|error| format!("failed to fetch peer status metadata: {error}"))?;
+    let status_value: Value = serde_json::from_slice(&status_bytes)
+        .map_err(|error| format!("failed to parse peer status JSON: {error}"))?;
+    let companion_state_route =
+        validate_peer_status_value(&status_value, &expected, &normalized_peer_base_url)?;
+    let report_value = peer_status_check_value(
+        &expected,
+        &normalized_peer_base_url,
+        &status_url_text,
+        &companion_state_route,
+    )?;
+    let report_text = serde_json::to_string_pretty(&report_value)
+        .map_err(|error| format!("failed to encode peer status check JSON: {error}"))?
+        + "\n";
+    ensure_parent_dir(output_json, "peer status check")?;
+    fs::write(output_json, report_text)
+        .map_err(|error| format!("failed to write peer status check: {error}"))?;
+    Ok(PeerStatusCheck {
+        report_path: output_json.display().to_string(),
+        peer_base_url: normalized_peer_base_url,
+        status_url: status_url_text,
+        companion_state_route,
+        model_id: expected.model_id,
+        artifact_byte_count: expected.artifact_byte_count,
+        piece_count: expected.piece_count,
+        piece_set_sha256: expected.piece_set_sha256,
+        manifest_sha256: expected.manifest_sha256,
+        artifact_sha256: expected.artifact_sha256,
+        merkle_root_sha256: expected.merkle_root_sha256,
+    })
+}
+
 pub fn inspect_peer_piece_dir_path(
     manifest_path: &Path,
     piece_dir: &Path,
 ) -> Result<PeerPieceServe, String> {
     let bundle = read_valid_manifest_path(manifest_path)?;
     require_fixed_chunk_mode(&bundle.manifest)?;
+    let artifact_byte_count = bundle
+        .manifest
+        .require("artifact.byte_count")?
+        .parse::<u64>()
+        .map_err(|_| "artifact.byte_count must be a decimal integer".to_string())?;
     let piece_set_path = piece_dir.join("minimodel.peer_piece_set.v0");
-    let piece_set_text = fs::read_to_string(&piece_set_path)
+    let piece_set_bytes = fs::read(&piece_set_path)
         .map_err(|error| format!("failed to read peer piece set: {error}"))?;
+    let piece_set_text = std::str::from_utf8(&piece_set_bytes)
+        .map_err(|_| "peer piece set must be valid UTF-8".to_string())?;
     let piece_set = Manifest::parse(&piece_set_text)?;
     validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
     let chunk_count = validate_peer_piece_files(&piece_set, piece_dir)?;
     Ok(PeerPieceServe {
         piece_set_path: piece_set_path.display().to_string(),
+        piece_set_sha256: sha256_prefixed(&piece_set_bytes),
+        model_id: bundle.manifest.require("model.id")?.to_string(),
+        artifact_byte_count,
         piece_count: chunk_count,
         manifest_sha256: sha256_prefixed(&bundle.bytes),
         artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
@@ -518,6 +1233,7 @@ pub fn write_peer_companion_state_path(
         },
         "commands": {
             "serve_peer_pieces": "minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>",
+            "serve_peer_companion": "minimodel serve-peer-companion <state-json> <manifest> <piece-dir> <bind-addr>",
             "write_peer_source_announcement": "minimodel write-peer-source-announcement <catalog-entry-json> <announcement-json> <known-peer-base-url>",
         },
         "boundary": {
@@ -544,6 +1260,131 @@ pub fn write_peer_companion_state_path(
         artifact_sha256: share.artifact_sha256,
         merkle_root_sha256: share.merkle_root_sha256,
     })
+}
+
+/// Validate a companion state JSON file against the local manifest and peer-piece directory.
+pub fn inspect_peer_companion_state_path(
+    state_path: &Path,
+    manifest_path: &Path,
+    piece_dir: &Path,
+) -> Result<PeerCompanionServe, String> {
+    let manifest = verify_manifest_path(manifest_path)?;
+    let model_id = manifest.require("model.id")?.to_string();
+    let share = inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
+    let piece_set_path = piece_dir.join("minimodel.peer_piece_set.v0");
+    let piece_set_bytes = fs::read(&piece_set_path)
+        .map_err(|error| format!("failed to read peer piece set for companion serve: {error}"))?;
+    let state_bytes = fs::read(state_path)
+        .map_err(|error| format!("failed to read peer companion state: {error}"))?;
+    let state: Value = serde_json::from_slice(&state_bytes)
+        .map_err(|error| format!("failed to parse peer companion state JSON: {error}"))?;
+    let peer_base_url = validate_peer_companion_state_value(
+        &state,
+        &model_id,
+        &share,
+        &sha256_prefixed(&piece_set_bytes),
+    )?;
+    Ok(PeerCompanionServe {
+        state_path: state_path.display().to_string(),
+        state_route: "minimodel.peer_companion_state.v0.json".to_string(),
+        piece_set_path: piece_set_path.display().to_string(),
+        piece_set_sha256: sha256_prefixed(&piece_set_bytes),
+        model_id,
+        peer_base_url,
+        artifact_byte_count: share.artifact_byte_count,
+        piece_count: share.piece_count,
+        manifest_sha256: share.manifest_sha256,
+        artifact_sha256: share.artifact_sha256,
+        merkle_root_sha256: share.merkle_root_sha256,
+    })
+}
+
+/// Serve a verified companion state plus the prepared peer-piece directory over local HTTP.
+pub fn serve_peer_companion_http_path(
+    state_path: &Path,
+    manifest_path: &Path,
+    piece_dir: &Path,
+    bind_addr: &str,
+) -> Result<PeerCompanionServe, String> {
+    let listener = TcpListener::bind(bind_addr)
+        .map_err(|error| format!("failed to bind peer companion server at {bind_addr}: {error}"))?;
+    serve_peer_companion_http_listener(state_path, manifest_path, piece_dir, listener, None)
+}
+
+/// Write a reusable metadata-only contact card for a consenting direct peer.
+pub fn write_peer_contact_card_path(
+    output_path: &Path,
+    known_peer_base_url: &str,
+    peer_label: Option<&str>,
+) -> Result<PeerContactCardReport, String> {
+    let peer_base_url = normalize_known_peer_base_url(known_peer_base_url)?;
+    let peer_label = match peer_label {
+        Some(value) if !value.trim().is_empty() => validate_peer_contact_label(value)?,
+        _ => default_peer_contact_label(&peer_base_url)?,
+    };
+    let card = serde_json::json!({
+        "card_kind": "minimodel.peer_contact_card",
+        "card_version": 0,
+        "created_utc": utc_now()?,
+        "peer_label": peer_label,
+        "peer_base_url": peer_base_url,
+        "transfer_protocol": "direct-http-piece-server-v0",
+        "contact_status": "operator-reviewed-consenting-peer",
+        "intended_use": "known-peer-url-for-minimodel-peer-piece-import",
+        "project_server_serves_model_bytes": false,
+        "project_server_runs_model_bytes": false,
+        "project_server_proxies_model_bytes": false,
+        "commands": {
+            "serve_peer_pieces": "minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>",
+            "serve_peer_companion": "minimodel serve-peer-companion <state-json> <manifest> <piece-dir> <bind-addr>",
+            "import_peer_request": "minimodel import-peer-request <request-json> <manifest> <output-dir>",
+        },
+        "boundary": {
+            "metadata_only": true,
+            "peer_contact_card_embeds_model_bytes": false,
+            "project_server_serves_model_bytes": false,
+            "project_server_runs_model_bytes": false,
+            "project_server_proxies_model_bytes": false,
+            "requires_rust_reverify_before_browser_import": true,
+        }
+    });
+    let text = serde_json::to_string_pretty(&card)
+        .map_err(|error| format!("failed to encode peer contact card JSON: {error}"))?
+        + "\n";
+    ensure_parent_dir(output_path, "peer contact card")?;
+    fs::write(output_path, text)
+        .map_err(|error| format!("failed to write peer contact card: {error}"))?;
+
+    Ok(PeerContactCardReport {
+        card_path: output_path.display().to_string(),
+        peer_label,
+        peer_base_url,
+    })
+}
+
+/// Validate a peer contact card and return the normalized peer URL it names.
+pub fn inspect_peer_contact_card_path(card_path: &Path) -> Result<PeerContactCardReport, String> {
+    let label = card_path.display().to_string();
+    let text = fs::read_to_string(card_path)
+        .map_err(|error| format!("failed to read peer contact card {label}: {error}"))?;
+    let value: Value = serde_json::from_str(&text)
+        .map_err(|error| format!("failed to parse peer contact card {label}: {error}"))?;
+    let (peer_label, peer_base_url) = validate_peer_contact_card_value(&value, &label)?;
+    Ok(PeerContactCardReport {
+        card_path: label,
+        peer_label,
+        peer_base_url,
+    })
+}
+
+/// Validate a TinyRustLM local share metadata bundle before catalog or peer-share use.
+pub fn inspect_share_metadata_path(bundle_path: &Path) -> Result<ShareMetadataReport, String> {
+    let label = bundle_path.display().to_string();
+    let text = fs::read_to_string(bundle_path)
+        .map_err(|error| format!("failed to read share metadata bundle {label}: {error}"))?;
+    let value: Value = serde_json::from_str(&text)
+        .map_err(|error| format!("failed to parse share metadata bundle {label}: {error}"))?;
+    validate_share_metadata_bundle_value(&value, &label, label.clone())
 }
 
 pub fn write_catalog_entry_path(
@@ -638,6 +1479,27 @@ pub fn write_catalog_snapshot_path(
         entry_count: entry_paths.len(),
         p2p_ready_count,
         peer_source_count,
+    })
+}
+
+pub fn inspect_catalog_snapshot_path(
+    catalog_path: &Path,
+) -> Result<CatalogSnapshotInspectionReport, String> {
+    let label = catalog_path.display().to_string();
+    let bytes = fs::read(catalog_path)
+        .map_err(|error| format!("failed to read catalog snapshot {label}: {error}"))?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| format!("catalog snapshot {label} must be valid UTF-8"))?;
+    let value: Value = serde_json::from_str(text)
+        .map_err(|error| format!("failed to parse catalog snapshot {label}: {error}"))?;
+    let summary = validate_catalog_snapshot_value(&value, &label)?;
+    Ok(CatalogSnapshotInspectionReport {
+        catalog_path: label,
+        entry_count: summary.entry_count,
+        p2p_ready_count: summary.p2p_ready_count,
+        peer_source_count: summary.peer_source_count,
+        announcement_route_count: summary.announcement_route_count,
+        catalog_sha256: sha256_prefixed(&bytes),
     })
 }
 
@@ -805,6 +1667,31 @@ pub fn write_peer_source_announcement_feed_path(
         announcement_count: announcements.len(),
         model_count,
         feed_sha256,
+    })
+}
+
+pub fn inspect_peer_source_announcement_feed_path(
+    feed_json_path: &Path,
+) -> Result<PeerSourceAnnouncementFeedReport, String> {
+    let label = feed_json_path.display().to_string();
+    let text = fs::read_to_string(feed_json_path).map_err(|error| {
+        format!("failed to read peer-source announcement feed {label}: {error}")
+    })?;
+    let value: Value = serde_json::from_str(&text).map_err(|error| {
+        format!("failed to parse peer-source announcement feed {label}: {error}")
+    })?;
+    let announcements = validate_peer_source_announcement_feed_value(&value, &label)?;
+    let model_count = announcements
+        .iter()
+        .map(|(_, announcement)| announcement.model_id.clone())
+        .collect::<BTreeSet<_>>()
+        .len();
+
+    Ok(PeerSourceAnnouncementFeedReport {
+        feed_path: label,
+        announcement_count: announcements.len(),
+        model_count,
+        feed_sha256: sha256_prefixed(text.as_bytes()),
     })
 }
 
@@ -1163,9 +2050,15 @@ pub fn serve_peer_pieces_http_path(
     piece_dir: &Path,
     bind_addr: &str,
 ) -> Result<PeerPieceServe, String> {
-    let report = inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
-    serve_peer_piece_dir_http_path(piece_dir, bind_addr, None)?;
-    Ok(report)
+    let listener = TcpListener::bind(bind_addr)
+        .map_err(|error| format!("failed to bind peer piece server at {bind_addr}: {error}"))?;
+    serve_peer_pieces_http_listener(
+        manifest_path,
+        piece_dir,
+        listener,
+        None,
+        &format!("http://{bind_addr}/"),
+    )
 }
 
 struct ValidManifest {
@@ -1185,6 +2078,8 @@ struct PeerImportRequest {
     expected_peer_base_url: String,
     expected_piece_dir: String,
     assembled_output_slm: String,
+    metadata_routes: Option<PeerImportMetadataRoutes>,
+    receiver_validation_contract: Option<PeerImportReceiverValidationContract>,
     project_server_serves_model_bytes: bool,
     project_server_runs_model_bytes: bool,
     project_server_proxies_huggingface_bytes: bool,
@@ -1214,6 +2109,36 @@ struct PeerImportPieceContract {
     expected_peer_base_url: String,
     expected_piece_dir: String,
     assembled_output_slm: String,
+    metadata_routes: Option<PeerImportMetadataRoutes>,
+    receiver_validation_contract: Option<PeerImportReceiverValidationContract>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PeerImportMetadataRoutes {
+    peer_status: Option<String>,
+    peer_piece_set: Option<String>,
+    peer_companion_state: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PeerImportReceiverValidationContract {
+    check_peer_status_before_piece_fetch: Option<bool>,
+    preflight_fetches_piece_set_before_pieces: Option<bool>,
+    validate_advertised_companion_state_before_piece_fetch: Option<bool>,
+    import_receipt_required_before_browser_load: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+struct PeerImportRequestContractSummary {
+    metadata_routes_status: String,
+    peer_status_route: String,
+    peer_piece_set_route: String,
+    peer_companion_state_route: String,
+    receiver_validation_contract_status: String,
+    check_peer_status_before_piece_fetch: bool,
+    preflight_fetches_piece_set_before_pieces: bool,
+    validate_advertised_companion_state_before_piece_fetch: bool,
+    import_receipt_required_before_browser_load: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1237,6 +2162,10 @@ impl From<PeerImportRequestFile> for PeerImportRequest {
             expected_peer_base_url: file.local_peer_piece_contract.expected_peer_base_url,
             expected_piece_dir: file.local_peer_piece_contract.expected_piece_dir,
             assembled_output_slm: file.local_peer_piece_contract.assembled_output_slm,
+            metadata_routes: file.local_peer_piece_contract.metadata_routes,
+            receiver_validation_contract: file
+                .local_peer_piece_contract
+                .receiver_validation_contract,
             project_server_serves_model_bytes: file.boundary.project_server_serves_model_bytes,
             project_server_runs_model_bytes: file.boundary.project_server_runs_model_bytes,
             project_server_proxies_huggingface_bytes: file
@@ -1259,13 +2188,22 @@ fn read_valid_manifest_path(path: &Path) -> Result<ValidManifest, String> {
 }
 
 fn read_peer_import_request_path(path: &Path) -> Result<PeerImportRequest, String> {
-    let text = fs::read_to_string(path)
-        .map_err(|error| format!("failed to read peer import request: {error}"))?;
-    let request_file: PeerImportRequestFile = serde_json::from_str(&text)
+    let (_, request) = read_peer_import_request_bytes_path(path)?;
+    Ok(request)
+}
+
+fn read_peer_import_request_bytes_path(
+    path: &Path,
+) -> Result<(Vec<u8>, PeerImportRequest), String> {
+    let bytes =
+        fs::read(path).map_err(|error| format!("failed to read peer import request: {error}"))?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "peer import request must be valid UTF-8".to_string())?;
+    let request_file: PeerImportRequestFile = serde_json::from_str(text)
         .map_err(|error| format!("failed to parse peer import request JSON: {error}"))?;
     let request = PeerImportRequest::from(request_file);
     validate_peer_import_request_static_fields(&request)?;
-    Ok(request)
+    Ok((bytes, request))
 }
 
 fn validate_peer_import_request_static_fields(request: &PeerImportRequest) -> Result<(), String> {
@@ -1290,6 +2228,8 @@ fn validate_peer_import_request_static_fields(request: &PeerImportRequest) -> Re
             request.expected_piece_set_kind
         ));
     }
+    validate_peer_import_metadata_routes(request.metadata_routes.as_ref())?;
+    validate_peer_import_receiver_contract(request.receiver_validation_contract.as_ref())?;
     let peer_url = HttpUrl::parse(&request.expected_peer_base_url)?;
     reject_project_server_peer_host(&peer_url.host)?;
     require_safe_import_name(&request.expected_piece_dir, "expected_piece_dir")?;
@@ -1314,6 +2254,141 @@ fn validate_peer_import_request_static_fields(request: &PeerImportRequest) -> Re
         );
     }
     Ok(())
+}
+
+fn validate_peer_import_metadata_routes(
+    routes: Option<&PeerImportMetadataRoutes>,
+) -> Result<(), String> {
+    let Some(routes) = routes else {
+        return Ok(());
+    };
+    match routes.peer_status.as_deref() {
+        Some("minimodel.peer_status.v0.json") => {}
+        Some(route) => {
+            return Err(format!(
+                "peer import metadata route peer_status must be minimodel.peer_status.v0.json, got {route}"
+            ));
+        }
+        None => {
+            return Err(
+                "peer import metadata route peer_status must be declared when metadata_routes is present"
+                    .to_string(),
+            );
+        }
+    }
+    match routes.peer_piece_set.as_deref() {
+        Some("minimodel.peer_piece_set.v0") => {}
+        Some(route) => {
+            return Err(format!(
+                "peer import metadata route peer_piece_set must be minimodel.peer_piece_set.v0, got {route}"
+            ));
+        }
+        None => {
+            return Err(
+                "peer import metadata route peer_piece_set must be declared when metadata_routes is present"
+                    .to_string(),
+            );
+        }
+    }
+    match routes.peer_companion_state.as_deref() {
+        Some("minimodel.peer_companion_state.v0.json") => {}
+        Some(route) => {
+            return Err(format!(
+                "peer import metadata route peer_companion_state must be minimodel.peer_companion_state.v0.json, got {route}"
+            ));
+        }
+        None => {
+            return Err(
+                "peer import metadata route peer_companion_state must be declared when metadata_routes is present"
+                    .to_string(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn validate_peer_import_receiver_contract(
+    contract: Option<&PeerImportReceiverValidationContract>,
+) -> Result<(), String> {
+    let Some(contract) = contract else {
+        return Ok(());
+    };
+    let required = [
+        (
+            "check_peer_status_before_piece_fetch",
+            contract.check_peer_status_before_piece_fetch,
+        ),
+        (
+            "preflight_fetches_piece_set_before_pieces",
+            contract.preflight_fetches_piece_set_before_pieces,
+        ),
+        (
+            "validate_advertised_companion_state_before_piece_fetch",
+            contract.validate_advertised_companion_state_before_piece_fetch,
+        ),
+        (
+            "import_receipt_required_before_browser_load",
+            contract.import_receipt_required_before_browser_load,
+        ),
+    ];
+    for (field, value) in required {
+        if value != Some(true) {
+            return Err(format!(
+                "peer import receiver validation contract {field} must be true when declared"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn peer_import_request_contract_summary(
+    request: &PeerImportRequest,
+) -> PeerImportRequestContractSummary {
+    let metadata_routes_status = if request.metadata_routes.is_some() {
+        "validated"
+    } else {
+        "not-declared"
+    };
+    let peer_status_route = request
+        .metadata_routes
+        .as_ref()
+        .and_then(|routes| routes.peer_status.clone())
+        .unwrap_or_else(|| PEER_STATUS_ROUTE.to_string());
+    let peer_piece_set_route = request
+        .metadata_routes
+        .as_ref()
+        .and_then(|routes| routes.peer_piece_set.clone())
+        .unwrap_or_else(|| PEER_PIECE_SET_ROUTE.to_string());
+    let peer_companion_state_route = request
+        .metadata_routes
+        .as_ref()
+        .and_then(|routes| routes.peer_companion_state.clone())
+        .unwrap_or_else(|| PEER_COMPANION_STATE_ROUTE.to_string());
+    let receiver_validation_contract_status = if request.receiver_validation_contract.is_some() {
+        "validated"
+    } else {
+        "not-declared"
+    };
+    let receiver_validation_contract = request.receiver_validation_contract.as_ref();
+    PeerImportRequestContractSummary {
+        metadata_routes_status: metadata_routes_status.to_string(),
+        peer_status_route,
+        peer_piece_set_route,
+        peer_companion_state_route,
+        receiver_validation_contract_status: receiver_validation_contract_status.to_string(),
+        check_peer_status_before_piece_fetch: receiver_validation_contract
+            .and_then(|contract| contract.check_peer_status_before_piece_fetch)
+            .unwrap_or(false),
+        preflight_fetches_piece_set_before_pieces: receiver_validation_contract
+            .and_then(|contract| contract.preflight_fetches_piece_set_before_pieces)
+            .unwrap_or(false),
+        validate_advertised_companion_state_before_piece_fetch: receiver_validation_contract
+            .and_then(|contract| contract.validate_advertised_companion_state_before_piece_fetch)
+            .unwrap_or(false),
+        import_receipt_required_before_browser_load: receiver_validation_contract
+            .and_then(|contract| contract.import_receipt_required_before_browser_load)
+            .unwrap_or(false),
+    }
 }
 
 fn validate_peer_import_request_against_manifest(
@@ -1345,6 +2420,322 @@ fn validate_peer_import_request_against_manifest(
     )?;
     require_fixed_chunk_mode(manifest)?;
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct ImportReceiptPeerFields {
+    peer_import: bool,
+    peer_base_url: Option<String>,
+    companion_state_status: Option<String>,
+    piece_count: Option<usize>,
+    merkle_root_sha256: Option<String>,
+    peer_piece_bytes_fetched: bool,
+    artifact_assembled_from_peer_pieces: bool,
+}
+
+fn validate_import_receipt_fields(
+    receipt: &Manifest,
+    manifest: &Manifest,
+    artifact: &ArtifactVerification,
+    artifact_path: &Path,
+) -> Result<ImportReceiptPeerFields, String> {
+    require_receipt_equal(receipt, "receipt.version", "0")?;
+    require_receipt_equal(receipt, "receipt.kind", "minimodel.import_receipt")?;
+    require_receipt_timestampish(receipt_required(receipt, "receipt.created_utc")?)?;
+    require_receipt_sha_equal(receipt, "manifest.sha256", &artifact.manifest_sha256)?;
+    require_receipt_equal(receipt, "manifest.model_id", &artifact.manifest_model_id)?;
+
+    let file_name = artifact_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "artifact path must include a file name".to_string())?;
+    require_receipt_equal(receipt, "artifact.local_path_hint", file_name)?;
+
+    let receipt_byte_count = receipt_required(receipt, "artifact.byte_count")?
+        .parse::<u64>()
+        .map_err(|_| "import receipt artifact.byte_count must be a decimal integer".to_string())?;
+    if receipt_byte_count != artifact.artifact_byte_count {
+        return Err(format!(
+            "import receipt artifact.byte_count mismatch: expected {}, got {receipt_byte_count}",
+            artifact.artifact_byte_count
+        ));
+    }
+    require_receipt_sha_equal(receipt, "artifact.sha256", &artifact.artifact_sha256)?;
+    require_receipt_equal(receipt, "slm.validation_status", "passed")?;
+    require_receipt_equal(receipt, "slm.model_shape", &artifact.slm.model_shape)?;
+    require_receipt_equal(receipt, "slm.quantization", &artifact.slm.quantization)?;
+    require_receipt_equal(receipt, "evidence.status", &artifact.evidence_status)?;
+    require_receipt_equal(
+        receipt,
+        "import.next_gate",
+        "user-selected-tinyrustlm-local-file-open",
+    )?;
+
+    validate_import_receipt_peer_fields(receipt, manifest)
+}
+
+fn validate_import_receipt_peer_fields(
+    receipt: &Manifest,
+    manifest: &Manifest,
+) -> Result<ImportReceiptPeerFields, String> {
+    let has_peer_fields = [
+        "peer_import.transport",
+        "peer_import.verification_status",
+        "peer.base_url",
+        "peer_piece_bytes_fetched",
+        "artifact.assembled_from_peer_pieces",
+    ]
+    .iter()
+    .any(|key| receipt.get(key).is_some());
+
+    for key in [
+        "project_server_serves_model_bytes",
+        "project_server_runs_model_bytes",
+        "project_server_proxies_huggingface_bytes",
+    ] {
+        require_receipt_optional_equal(receipt, key, "false")?;
+    }
+
+    if !has_peer_fields {
+        return Ok(ImportReceiptPeerFields {
+            peer_import: false,
+            peer_base_url: None,
+            companion_state_status: None,
+            piece_count: None,
+            merkle_root_sha256: None,
+            peer_piece_bytes_fetched: false,
+            artifact_assembled_from_peer_pieces: false,
+        });
+    }
+
+    require_receipt_equal(
+        receipt,
+        "peer_import.transport",
+        "known-direct-http-peer-v0",
+    )?;
+    require_receipt_equal(receipt, "peer_import.verification_status", "passed")?;
+    require_safe_piece_file_name(receipt_required(receipt, "peer_import.request_path_hint")?)?;
+
+    let peer_base_url = normalize_known_peer_base_url(receipt_required(receipt, "peer.base_url")?)?;
+    require_safe_import_name(
+        receipt_required(receipt, "peer.piece_dir_path_hint")?,
+        "peer.piece_dir_path_hint",
+    )?;
+    require_receipt_equal(
+        receipt,
+        "peer.piece_set_path_hint",
+        "minimodel.peer_piece_set.v0",
+    )?;
+    normalize_sha256(receipt_required(receipt, "peer.piece_set_sha256")?)?;
+
+    let expected_companion_url = HttpUrl::parse(&peer_base_url)?
+        .join_file(PEER_COMPANION_STATE_ROUTE)?
+        .to_string();
+    let companion_state_url = receipt_required(receipt, "peer.companion_state_url")?;
+    if companion_state_url != expected_companion_url {
+        return Err(format!(
+            "import receipt peer.companion_state_url mismatch: expected {expected_companion_url}, got {companion_state_url}"
+        ));
+    }
+    let companion_state_status = receipt_required(receipt, "peer.companion_state_status")?;
+    require_value_member(
+        companion_state_status,
+        "peer.companion_state_status",
+        &["validated", "not-advertised"],
+    )?;
+
+    require_fixed_chunk_mode(manifest)?;
+    require_receipt_equal(receipt, "chunks.mode", "fixed-size-merkle-v0")?;
+    let expected_piece_count = parse_usize(manifest.require("chunks.count")?, "chunks.count")?;
+    let piece_count = parse_usize(
+        receipt_required(receipt, "chunks.count")?,
+        "import receipt chunks.count",
+    )?;
+    if piece_count != expected_piece_count {
+        return Err(format!(
+            "import receipt chunks.count mismatch: expected {expected_piece_count}, got {piece_count}"
+        ));
+    }
+    let expected_merkle = normalize_sha256(manifest.require("chunks.merkle_root_sha256")?)?;
+    let merkle_root_sha256 =
+        normalize_sha256(receipt_required(receipt, "chunks.merkle_root_sha256")?)?;
+    require_normalized_equal(
+        "import receipt chunks.merkle_root_sha256",
+        &expected_merkle,
+        &merkle_root_sha256,
+        "receipt",
+    )?;
+
+    require_receipt_bool(receipt, "peer_piece_set_metadata_fetched", true)?;
+    require_receipt_bool(
+        receipt,
+        "peer_companion_state_metadata_fetched",
+        companion_state_status == "validated",
+    )?;
+    let peer_piece_bytes_fetched = require_receipt_bool(receipt, "peer_piece_bytes_fetched", true)?;
+    let artifact_assembled_from_peer_pieces =
+        require_receipt_bool(receipt, "artifact.assembled_from_peer_pieces", true)?;
+
+    Ok(ImportReceiptPeerFields {
+        peer_import: true,
+        peer_base_url: Some(peer_base_url),
+        companion_state_status: Some(companion_state_status.to_string()),
+        piece_count: Some(piece_count),
+        merkle_root_sha256: Some(merkle_root_sha256),
+        peer_piece_bytes_fetched,
+        artifact_assembled_from_peer_pieces,
+    })
+}
+
+fn receipt_required<'a>(receipt: &'a Manifest, key: &str) -> Result<&'a str, String> {
+    receipt
+        .get(key)
+        .ok_or_else(|| format!("missing required import receipt field {key}"))
+}
+
+fn require_receipt_equal(receipt: &Manifest, key: &str, expected: &str) -> Result<(), String> {
+    let actual = receipt_required(receipt, key)?;
+    if actual == expected {
+        return Ok(());
+    }
+    Err(format!(
+        "import receipt {key} mismatch: expected {expected}, got {actual}"
+    ))
+}
+
+fn require_receipt_optional_equal(
+    receipt: &Manifest,
+    key: &str,
+    expected: &str,
+) -> Result<(), String> {
+    let Some(actual) = receipt.get(key) else {
+        return Ok(());
+    };
+    if actual == expected {
+        return Ok(());
+    }
+    Err(format!(
+        "import receipt {key} mismatch: expected {expected}, got {actual}"
+    ))
+}
+
+fn require_receipt_sha_equal(receipt: &Manifest, key: &str, expected: &str) -> Result<(), String> {
+    let actual = normalize_sha256(receipt_required(receipt, key)?)?;
+    require_normalized_equal(
+        &format!("import receipt {key}"),
+        &normalize_sha256(expected)?,
+        &actual,
+        "receipt",
+    )
+}
+
+fn require_receipt_bool(receipt: &Manifest, key: &str, expected: bool) -> Result<bool, String> {
+    let actual = receipt_required(receipt, key)?;
+    let parsed = match actual {
+        "true" => true,
+        "false" => false,
+        _ => return Err(format!("import receipt {key} must be true or false")),
+    };
+    if parsed == expected {
+        return Ok(parsed);
+    }
+    Err(format!(
+        "import receipt {key} mismatch: expected {expected}, got {actual}"
+    ))
+}
+
+fn require_receipt_path_hint(
+    receipt: &Manifest,
+    key: &str,
+    expected_path: &Path,
+    label: &str,
+) -> Result<(), String> {
+    let actual_hint = path_file_name_hint(receipt_required(receipt, key)?, label)?;
+    let expected_hint = expected_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{label} path must include a file or directory name"))?;
+    if actual_hint == expected_hint {
+        return Ok(());
+    }
+    Err(format!(
+        "import receipt {key} mismatch: expected basename {expected_hint}, got {actual_hint}"
+    ))
+}
+
+fn require_receipt_timestampish(value: &str) -> Result<(), String> {
+    parse_utc_timestamp_seconds(value, "import receipt receipt.created_utc").map(|_| ())
+}
+
+fn preflight_required<'a>(preflight: &'a Manifest, key: &str) -> Result<&'a str, String> {
+    preflight
+        .get(key)
+        .ok_or_else(|| format!("missing required peer import preflight field {key}"))
+}
+
+fn require_preflight_equal(preflight: &Manifest, key: &str, expected: &str) -> Result<(), String> {
+    let actual = preflight_required(preflight, key)?;
+    if actual == expected {
+        return Ok(());
+    }
+    Err(format!(
+        "peer import preflight {key} mismatch: expected {expected}, got {actual}"
+    ))
+}
+
+fn require_preflight_sha_equal(
+    preflight: &Manifest,
+    key: &str,
+    expected: &str,
+) -> Result<(), String> {
+    let actual = normalize_sha256(preflight_required(preflight, key)?)?;
+    require_normalized_equal(
+        &format!("peer import preflight {key}"),
+        &normalize_sha256(expected)?,
+        &actual,
+        "preflight",
+    )
+}
+
+fn require_preflight_bool(preflight: &Manifest, key: &str, expected: bool) -> Result<bool, String> {
+    let actual = preflight_required(preflight, key)?;
+    let parsed = match actual {
+        "true" => true,
+        "false" => false,
+        _ => return Err(format!("peer import preflight {key} must be true or false")),
+    };
+    if parsed == expected {
+        return Ok(parsed);
+    }
+    Err(format!(
+        "peer import preflight {key} mismatch: expected {expected}, got {actual}"
+    ))
+}
+
+fn require_preflight_timestampish(value: &str) -> Result<(), String> {
+    parse_utc_timestamp_seconds(value, "peer import preflight preflight.created_utc").map(|_| ())
+}
+
+fn require_preflight_path_hint(
+    preflight: &Manifest,
+    key: &str,
+    expected_path: &Path,
+    label: &str,
+) -> Result<(), String> {
+    let actual_hint = path_file_name_hint(preflight_required(preflight, key)?, label)?;
+    let expected_hint = expected_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{label} path must include a file or directory name"))?;
+    if actual_hint == expected_hint {
+        return Ok(());
+    }
+    Err(format!(
+        "peer import preflight {key} mismatch: expected basename {expected_hint}, got {actual_hint}"
+    ))
 }
 
 pub fn import_receipt_text(
@@ -1381,6 +2772,78 @@ pub fn import_receipt_text(
     Ok(text)
 }
 
+fn peer_import_receipt_text(
+    report: &ArtifactVerification,
+    artifact_path: &Path,
+    transfer: &PeerImportReceiptTransfer,
+) -> Result<String, String> {
+    let mut text = import_receipt_text(report, artifact_path)?;
+    push_line(
+        &mut text,
+        "peer_import.request_path_hint",
+        &path_file_name_hint(&transfer.request_path, "peer import request")?,
+    );
+    push_line(
+        &mut text,
+        "peer_import.transport",
+        "known-direct-http-peer-v0",
+    );
+    push_line(&mut text, "peer_import.verification_status", "passed");
+    push_line(&mut text, "peer.base_url", &transfer.peer_base_url);
+    push_line(
+        &mut text,
+        "peer.piece_dir_path_hint",
+        &path_file_name_hint(&transfer.piece_dir_path, "peer piece directory")?,
+    );
+    push_line(
+        &mut text,
+        "peer.piece_set_path_hint",
+        &path_file_name_hint(&transfer.piece_set_path, "peer piece set")?,
+    );
+    push_line(
+        &mut text,
+        "peer.piece_set_sha256",
+        &transfer.piece_set_sha256,
+    );
+    push_line(
+        &mut text,
+        "peer.companion_state_url",
+        &transfer.companion_state_url,
+    );
+    push_line(
+        &mut text,
+        "peer.companion_state_status",
+        &transfer.companion_state_status,
+    );
+    push_line(&mut text, "chunks.mode", "fixed-size-merkle-v0");
+    push_line(&mut text, "chunks.count", &transfer.piece_count.to_string());
+    push_line(
+        &mut text,
+        "chunks.merkle_root_sha256",
+        &transfer.merkle_root_sha256,
+    );
+    push_line(&mut text, "peer_piece_set_metadata_fetched", "true");
+    push_line(
+        &mut text,
+        "peer_companion_state_metadata_fetched",
+        if transfer.companion_state_status == "validated" {
+            "true"
+        } else {
+            "false"
+        },
+    );
+    push_line(&mut text, "peer_piece_bytes_fetched", "true");
+    push_line(&mut text, "artifact.assembled_from_peer_pieces", "true");
+    push_line(&mut text, "project_server_serves_model_bytes", "false");
+    push_line(&mut text, "project_server_runs_model_bytes", "false");
+    push_line(
+        &mut text,
+        "project_server_proxies_huggingface_bytes",
+        "false",
+    );
+    Ok(text)
+}
+
 fn peer_import_preflight_text(
     report: &PeerImportPreflight,
     request: &PeerImportRequest,
@@ -1403,9 +2866,81 @@ fn peer_import_preflight_text(
         manifest.require("model.id")?,
     );
     push_line(&mut text, "peer.base_url", &report.peer_base_url);
+    push_line(
+        &mut text,
+        "metadata_routes.status",
+        &report.metadata_routes_status,
+    );
+    push_line(
+        &mut text,
+        "metadata_routes.peer_status",
+        &report.peer_status_route,
+    );
+    push_line(
+        &mut text,
+        "metadata_routes.peer_piece_set",
+        &report.peer_piece_set_route,
+    );
+    push_line(
+        &mut text,
+        "metadata_routes.peer_companion_state",
+        &report.peer_companion_state_route,
+    );
+    push_line(
+        &mut text,
+        "receiver_validation_contract.status",
+        &report.receiver_validation_contract_status,
+    );
+    push_line(
+        &mut text,
+        "receiver_validation.check_peer_status_before_piece_fetch",
+        if report.check_peer_status_before_piece_fetch {
+            "true"
+        } else {
+            "false"
+        },
+    );
+    push_line(
+        &mut text,
+        "receiver_validation.preflight_fetches_piece_set_before_pieces",
+        if report.preflight_fetches_piece_set_before_pieces {
+            "true"
+        } else {
+            "false"
+        },
+    );
+    push_line(
+        &mut text,
+        "receiver_validation.validate_advertised_companion_state_before_piece_fetch",
+        if report.validate_advertised_companion_state_before_piece_fetch {
+            "true"
+        } else {
+            "false"
+        },
+    );
+    push_line(
+        &mut text,
+        "receiver_validation.import_receipt_required_before_browser_load",
+        if report.import_receipt_required_before_browser_load {
+            "true"
+        } else {
+            "false"
+        },
+    );
     push_line(&mut text, "peer.piece_set_url", &report.piece_set_url);
+    push_line(
+        &mut text,
+        "peer.companion_state_url",
+        &report.companion_state_url,
+    );
+    push_line(
+        &mut text,
+        "peer.companion_state_status",
+        &report.companion_state_status,
+    );
     push_line(&mut text, "piece_set.kind", "minimodel.peer_piece_set.v0");
     push_line(&mut text, "piece_set.validation_status", "passed");
+    push_line(&mut text, "piece_set.sha256", &report.piece_set_sha256);
     push_line(&mut text, "artifact.kind", &request.artifact_kind);
     push_line(
         &mut text,
@@ -1421,6 +2956,15 @@ fn peer_import_preflight_text(
         &report.merkle_root_sha256,
     );
     push_line(&mut text, "peer_piece_set_metadata_fetched", "true");
+    push_line(
+        &mut text,
+        "peer_companion_state_metadata_fetched",
+        if report.companion_state_status == "validated" {
+            "true"
+        } else {
+            "false"
+        },
+    );
     push_line(&mut text, "peer_piece_bytes_fetched", "false");
     push_line(&mut text, "artifact_bytes_fetched", "false");
     push_line(&mut text, "project_server_serves_model_bytes", "false");
@@ -1701,6 +3245,14 @@ struct CatalogEntrySummary {
     peer_source_count: usize,
 }
 
+#[derive(Debug)]
+struct CatalogSnapshotSummary {
+    entry_count: usize,
+    p2p_ready_count: usize,
+    peer_source_count: usize,
+    announcement_route_count: usize,
+}
+
 fn catalog_snapshot_value(entries: Vec<Value>) -> Result<Value, String> {
     catalog_snapshot_value_with_announcement_routes(entries, Vec::new())
 }
@@ -1791,6 +3343,427 @@ fn validate_catalog_announcement_route(value: &str) -> Result<String, String> {
     Ok(route.to_string())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ShareMetadataTransferMode {
+    MetadataOnly,
+    ShareKitReady,
+}
+
+#[derive(Debug, Clone)]
+struct ShareMetadataPeerOfferSummary {
+    artifact_file_name: String,
+    artifact_byte_count: usize,
+    artifact_sha256: String,
+    chunk_count: usize,
+    merkle_root_sha256: String,
+    network_transfer_available: bool,
+}
+
+fn validate_share_metadata_bundle_value(
+    value: &Value,
+    label: &str,
+    bundle_path: String,
+) -> Result<ShareMetadataReport, String> {
+    value
+        .as_object()
+        .ok_or_else(|| format!("{label} share metadata bundle must be a JSON object"))?;
+    require_json_string_field(
+        value,
+        "bundle_kind",
+        label,
+        "minimodel.local_slm_share_metadata.v0",
+    )?;
+    json_required_string(value, "generated_at", label)?;
+
+    let boundary_label = format!("{label} boundary");
+    let boundary = json_required_object(value, "boundary", label)?;
+    let (mode, peer_transfer_status, peer_transfer_implementation) =
+        validate_share_metadata_boundary_value(boundary, &boundary_label)?;
+
+    let catalog_label = format!("{label} catalog_entry");
+    let catalog_entry = json_required_object(value, "catalog_entry", label)?;
+    let catalog_summary = validate_catalog_entry_value(catalog_entry, &catalog_label)?;
+    let catalog_artifact_file_name =
+        json_required_string(catalog_entry, "artifact_file_name", &catalog_label)?;
+    require_safe_piece_file_name(&catalog_artifact_file_name)?;
+    if !catalog_artifact_file_name.ends_with(".slm") {
+        return Err(format!(
+            "{catalog_label} artifact_file_name must end with .slm"
+        ));
+    }
+    let catalog_artifact_byte_count =
+        json_required_usize(catalog_entry, "artifact_byte_count", &catalog_label)?;
+    let catalog_artifact_sha256 = normalize_sha256(&json_required_string(
+        catalog_entry,
+        "artifact_sha256",
+        &catalog_label,
+    )?)?;
+    if let Some(source_model_id) =
+        json_optional_string(catalog_entry, "source_huggingface_model_id")
+    {
+        validate_huggingface_model_id(&source_model_id)?;
+    }
+    if catalog_entry.get("peer_sources").is_some() {
+        return Err(format!(
+            "{catalog_label} must not include peer_sources; local share metadata is not a catalog availability claim"
+        ));
+    }
+
+    let peer_offer_label = format!("{label} peer_offer");
+    let peer_offer = json_required_object(value, "peer_offer", label)?;
+    let peer_offer_summary =
+        validate_share_metadata_peer_offer_value(peer_offer, &peer_offer_label, mode)?;
+    if peer_offer_summary.artifact_file_name != catalog_artifact_file_name {
+        return Err(format!(
+            "{peer_offer_label} artifact_file_name {} did not match catalog artifact_file_name {}",
+            peer_offer_summary.artifact_file_name, catalog_artifact_file_name
+        ));
+    }
+    if peer_offer_summary.artifact_byte_count != catalog_artifact_byte_count {
+        return Err(format!(
+            "{peer_offer_label} artifact_byte_count {} did not match catalog artifact_byte_count {}",
+            peer_offer_summary.artifact_byte_count, catalog_artifact_byte_count
+        ));
+    }
+    require_normalized_equal(
+        "artifact_sha256",
+        &catalog_artifact_sha256,
+        &peer_offer_summary.artifact_sha256,
+        &peer_offer_label,
+    )?;
+
+    validate_share_metadata_conversion_request(value, label)?;
+    validate_share_metadata_share_kit(value, label, mode)?;
+
+    Ok(ShareMetadataReport {
+        bundle_path,
+        model_id: catalog_summary.model_id,
+        artifact_file_name: catalog_artifact_file_name,
+        artifact_byte_count: catalog_artifact_byte_count,
+        artifact_sha256: catalog_artifact_sha256,
+        chunk_count: peer_offer_summary.chunk_count,
+        merkle_root_sha256: peer_offer_summary.merkle_root_sha256,
+        peer_transfer_status,
+        peer_transfer_implementation,
+        share_kit_available: mode == ShareMetadataTransferMode::ShareKitReady,
+        network_transfer_available: peer_offer_summary.network_transfer_available,
+    })
+}
+
+fn validate_share_metadata_boundary_value(
+    boundary: &Value,
+    label: &str,
+) -> Result<(ShareMetadataTransferMode, String, String), String> {
+    require_json_bool_false(boundary, "project_server_runs_model_bytes", label)?;
+    require_json_bool_false(boundary, "project_server_serves_model_bytes", label)?;
+    require_json_bool_true(boundary, "user_consent_required_before_transfer", label)?;
+    json_required_string(boundary, "tiny_rust_lm_execution_rule", label)?;
+
+    let implemented = json_required_bool(boundary, "peer_transfer_implemented", label)?;
+    let status = json_required_string(boundary, "peer_transfer_status", label)?;
+    let implementation = json_required_string(boundary, "peer_transfer_implementation", label)?;
+    let mode = match (implemented, status.as_str(), implementation.as_str()) {
+        (false, "metadata-only", "not-included-in-metadata-export") => {
+            ShareMetadataTransferMode::MetadataOnly
+        }
+        (
+            true,
+            "local-share-kit-script-ready-known-peer-needed",
+            "generated-local-minimodel-share-kit-v0",
+        ) => ShareMetadataTransferMode::ShareKitReady,
+        _ => {
+            return Err(format!(
+                "{label} has unsupported peer transfer profile: implemented={implemented}, status={status}, implementation={implementation}"
+            ));
+        }
+    };
+    Ok((mode, status, implementation))
+}
+
+fn validate_share_metadata_peer_offer_value(
+    peer_offer: &Value,
+    label: &str,
+    mode: ShareMetadataTransferMode,
+) -> Result<ShareMetadataPeerOfferSummary, String> {
+    require_json_string_field(peer_offer, "offer_kind", label, "minimodel.peer_offer.v0")?;
+    require_json_u64_field(peer_offer, "offer_version", label, 0)?;
+    require_json_string_field(peer_offer, "artifact_kind", label, "slm")?;
+    match mode {
+        ShareMetadataTransferMode::MetadataOnly => require_json_string_field(
+            peer_offer,
+            "offer_status",
+            label,
+            "metadata-ready-transfer-not-implemented",
+        )?,
+        ShareMetadataTransferMode::ShareKitReady => require_json_string_field(
+            peer_offer,
+            "offer_status",
+            label,
+            "local-share-kit-ready-known-peer-needed",
+        )?,
+    }
+
+    let artifact_file_name = json_required_string(peer_offer, "artifact_file_name", label)?;
+    require_safe_piece_file_name(&artifact_file_name)?;
+    if !artifact_file_name.ends_with(".slm") {
+        return Err(format!("{label} artifact_file_name must end with .slm"));
+    }
+    let artifact_byte_count = json_required_usize(peer_offer, "artifact_byte_count", label)?;
+    if artifact_byte_count == 0 {
+        return Err(format!("{label} artifact_byte_count must be positive"));
+    }
+    let artifact_sha256 =
+        normalize_sha256(&json_required_string(peer_offer, "artifact_sha256", label)?)?;
+    json_required_string(peer_offer, "slm_checksum", label)?;
+
+    let chunks_label = format!("{label} chunks");
+    let chunks_value = json_required_object(peer_offer, "chunks", label)?;
+    require_json_string_field(chunks_value, "algorithm", &chunks_label, "sha256-merkle-v0")?;
+    let chunk_size = json_required_usize(chunks_value, "chunk_size", &chunks_label)?;
+    if chunk_size == 0 {
+        return Err(format!("{chunks_label} chunk_size must be positive"));
+    }
+    let chunk_count = json_required_usize(chunks_value, "chunk_count", &chunks_label)?;
+    let entries = json_required_array(chunks_value, "entries", &chunks_label)?;
+    if chunk_count != entries.len() {
+        return Err(format!(
+            "{chunks_label} chunk_count {chunk_count} did not match entries length {}",
+            entries.len()
+        ));
+    }
+    if chunk_count == 0 {
+        return Err(format!("{chunks_label} chunk_count must be positive"));
+    }
+
+    let mut chunks = Vec::with_capacity(entries.len());
+    let mut expected_offset = 0usize;
+    for (index, entry) in entries.iter().enumerate() {
+        let entry_label = format!("{chunks_label} entries[{index}]");
+        let entry_index = json_required_usize(entry, "index", &entry_label)?;
+        if entry_index != index {
+            return Err(format!(
+                "{entry_label} index {entry_index} did not match position {index}"
+            ));
+        }
+        let offset = json_required_usize(entry, "offset", &entry_label)?;
+        if offset != expected_offset {
+            return Err(format!(
+                "{entry_label} offset {offset} did not match expected offset {expected_offset}"
+            ));
+        }
+        let byte_count = json_required_usize(entry, "byte_count", &entry_label)?;
+        if byte_count == 0 {
+            return Err(format!("{entry_label} byte_count must be positive"));
+        }
+        if byte_count > chunk_size {
+            return Err(format!(
+                "{entry_label} byte_count {byte_count} exceeds chunk_size {chunk_size}"
+            ));
+        }
+        if index + 1 < entries.len() && byte_count != chunk_size {
+            return Err(format!(
+                "{entry_label} byte_count must equal chunk_size except for the final chunk"
+            ));
+        }
+        let sha256 = normalize_sha256(&json_required_string(entry, "sha256", &entry_label)?)?;
+        chunks.push(ChunkProof {
+            offset,
+            byte_count,
+            sha256,
+        });
+        expected_offset = expected_offset
+            .checked_add(byte_count)
+            .ok_or_else(|| format!("{entry_label} offset overflow"))?;
+    }
+    if expected_offset != artifact_byte_count {
+        return Err(format!(
+            "{chunks_label} byte total {expected_offset} did not match artifact_byte_count {artifact_byte_count}"
+        ));
+    }
+    if chunks.len() == 1 && chunks[0].sha256 != artifact_sha256 {
+        return Err(format!(
+            "{chunks_label} single chunk SHA-256 {} did not match artifact_sha256 {}",
+            chunks[0].sha256, artifact_sha256
+        ));
+    }
+
+    let chunk_list_sha256 = normalize_sha256(&json_required_string(
+        chunks_value,
+        "chunk_list_sha256",
+        &chunks_label,
+    )?)?;
+    let actual_chunk_list_sha256 = sha256_prefixed(chunk_list_text(&chunks).as_bytes());
+    if chunk_list_sha256 != actual_chunk_list_sha256 {
+        return Err(format!(
+            "{chunks_label} chunk_list_sha256 {chunk_list_sha256} did not match recomputed {actual_chunk_list_sha256}"
+        ));
+    }
+    let declared_merkle_root_sha256 = normalize_sha256(&json_required_string(
+        chunks_value,
+        "merkle_root_sha256",
+        &chunks_label,
+    )?)?;
+    let actual_merkle_root_sha256 = merkle_root_sha256(&chunks)?;
+    if declared_merkle_root_sha256 != actual_merkle_root_sha256 {
+        return Err(format!(
+            "{chunks_label} merkle_root_sha256 {declared_merkle_root_sha256} did not match recomputed {actual_merkle_root_sha256}"
+        ));
+    }
+
+    let transfer_label = format!("{label} transfer");
+    let transfer = json_required_object(peer_offer, "transfer", label)?;
+    let protocols = json_required_string_array(transfer, "protocols", &transfer_label)?;
+    match mode {
+        ShareMetadataTransferMode::MetadataOnly => {
+            if !protocols.is_empty() {
+                return Err(format!(
+                    "{transfer_label} protocols must be empty for metadata-only exports"
+                ));
+            }
+            require_json_bool_false(transfer, "local_share_kit_available", &transfer_label)?;
+            require_json_bool_false(transfer, "serve_helper_available", &transfer_label)?;
+            require_json_string_field(
+                transfer,
+                "required_next_gate",
+                &transfer_label,
+                "implement-consent-based-peer-transfer-and-rust-reverify-before-import",
+            )?;
+        }
+        ShareMetadataTransferMode::ShareKitReady => {
+            let expected_protocols = [
+                "minimodel-prepare-peer-share-v0",
+                "known-direct-http-peer-v0",
+                "minimodel-peer-companion-v0",
+            ];
+            if protocols != expected_protocols {
+                return Err(format!(
+                    "{transfer_label} protocols must be {:?}, got {:?}",
+                    expected_protocols, protocols
+                ));
+            }
+            require_json_bool_true(transfer, "local_share_kit_available", &transfer_label)?;
+            require_json_bool_true(transfer, "serve_helper_available", &transfer_label)?;
+            require_json_string_field(
+                transfer,
+                "required_next_gate",
+                &transfer_label,
+                "run-generated-share-kit-set-known-peer-url-and-serve-from-user-machine",
+            )?;
+        }
+    }
+    require_json_bool_false(transfer, "network_transfer_available", &transfer_label)?;
+    require_json_bool_false(
+        transfer,
+        "project_server_serves_model_bytes",
+        &transfer_label,
+    )?;
+    require_json_bool_false(transfer, "project_server_runs_model_bytes", &transfer_label)?;
+    let network_transfer_available =
+        json_required_bool(transfer, "network_transfer_available", &transfer_label)?;
+
+    Ok(ShareMetadataPeerOfferSummary {
+        artifact_file_name,
+        artifact_byte_count,
+        artifact_sha256,
+        chunk_count,
+        merkle_root_sha256: declared_merkle_root_sha256,
+        network_transfer_available,
+    })
+}
+
+fn validate_share_metadata_conversion_request(value: &Value, label: &str) -> Result<(), String> {
+    let Some(conversion_request) = value.get("conversion_request") else {
+        return Ok(());
+    };
+    if conversion_request.is_null() {
+        return Ok(());
+    }
+    let conversion_label = format!("{label} conversion_request");
+    conversion_request
+        .as_object()
+        .ok_or_else(|| format!("{conversion_label} must be an object or null"))?;
+    require_json_string_field(
+        conversion_request,
+        "request_kind",
+        &conversion_label,
+        "minimodel.huggingface_conversion_request.v0",
+    )?;
+    if let Some(source) = conversion_request.get("source") {
+        let source_label = format!("{conversion_label} source");
+        source
+            .as_object()
+            .ok_or_else(|| format!("{source_label} must be an object"))?;
+        if let Some(model_id) = json_optional_string(source, "model_id") {
+            validate_huggingface_model_id(&model_id)?;
+        }
+        if let Some(kind) = json_optional_string(source, "kind") {
+            if kind != "huggingface_model" {
+                return Err(format!(
+                    "{source_label} kind must be huggingface_model, got {kind}"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_share_metadata_share_kit(
+    value: &Value,
+    label: &str,
+    mode: ShareMetadataTransferMode,
+) -> Result<(), String> {
+    match (mode, value.get("share_kit")) {
+        (ShareMetadataTransferMode::MetadataOnly, None) => Ok(()),
+        (ShareMetadataTransferMode::MetadataOnly, Some(_)) => Err(format!(
+            "{label} metadata-only export must not include share_kit"
+        )),
+        (ShareMetadataTransferMode::ShareKitReady, None) => {
+            Err(format!("{label} share-kit-ready export missing share_kit"))
+        }
+        (ShareMetadataTransferMode::ShareKitReady, Some(share_kit)) => {
+            let share_kit_label = format!("{label} share_kit");
+            share_kit
+                .as_object()
+                .ok_or_else(|| format!("{share_kit_label} must be an object"))?;
+            require_json_string_field(
+                share_kit,
+                "kit_kind",
+                &share_kit_label,
+                "tinyrustlm.local_p2p_share_kit.v0",
+            )?;
+            require_json_string_field(
+                share_kit,
+                "kit_status",
+                &share_kit_label,
+                "script-ready-known-peer-needed",
+            )?;
+            for key in [
+                "prepares_peer_pieces",
+                "writes_catalog_snapshot",
+                "writes_peer_source_metadata_when_known_peer_set",
+                "writes_peer_companion_state_when_known_peer_set",
+                "writes_peer_contact_card_when_known_peer_set",
+                "serve_helper_available",
+                "user_consent_required_before_transfer",
+            ] {
+                require_json_bool_true(share_kit, key, &share_kit_label)?;
+            }
+            require_json_bool_false(
+                share_kit,
+                "project_server_serves_model_bytes",
+                &share_kit_label,
+            )?;
+            require_json_bool_false(
+                share_kit,
+                "project_server_runs_model_bytes",
+                &share_kit_label,
+            )?;
+            json_required_string(share_kit, "execution_rule", &share_kit_label)?;
+            Ok(())
+        }
+    }
+}
+
 fn validate_catalog_entry_value(value: &Value, label: &str) -> Result<CatalogEntrySummary, String> {
     let object = value
         .as_object()
@@ -1810,12 +3783,6 @@ fn validate_catalog_entry_value(value: &Value, label: &str) -> Result<CatalogEnt
     }
     normalize_sha256(&json_required_string(value, "artifact_sha256", label)?)?;
 
-    if json_optional_string(value, "peer_import_status").as_deref() == Some("request-script-ready")
-    {
-        json_required_string(value, "peer_offer_route", label)?;
-        normalize_sha256(&json_required_string(value, "peer_offer_sha256", label)?)?;
-    }
-
     let declared_peer_source_count =
         json_optional_usize(value, "peer_source_count", label)?.unwrap_or(0);
     let actual_peer_source_count = validate_catalog_peer_sources(value, label)?;
@@ -1825,10 +3792,197 @@ fn validate_catalog_entry_value(value: &Value, label: &str) -> Result<CatalogEnt
         ));
     }
 
+    let peer_import_status = json_optional_string(value, "peer_import_status");
+    let peer_hint_status = json_optional_string(value, "peer_hint_status");
+    let has_peer_offer_fields = [
+        "peer_offer_route",
+        "peer_offer_sha256",
+        "peer_offer_chunk_count",
+        "peer_offer_merkle_root_sha256",
+    ]
+    .iter()
+    .any(|key| value.get(*key).is_some());
+    if peer_import_status.as_deref() == Some("request-script-ready")
+        || peer_hint_status.as_deref() == Some("peer-offer-ready-known-peer-needed")
+        || declared_peer_source_count > 0
+        || has_peer_offer_fields
+    {
+        validate_catalog_peer_offer_proof_fields(value, label)?;
+    }
+
     Ok(CatalogEntrySummary {
         model_id,
         peer_source_count: declared_peer_source_count,
     })
+}
+
+fn validate_catalog_snapshot_value(
+    value: &Value,
+    label: &str,
+) -> Result<CatalogSnapshotSummary, String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("{label} catalog snapshot must be a JSON object"))?;
+    require_json_u64_field(value, "catalog_version", label, 0)?;
+    require_json_string_field(value, "catalog_kind", label, "minimodel.model_catalog")?;
+    json_required_string(value, "catalog_id", label)?;
+    json_required_string(value, "generated_at", label)?;
+    json_required_string(value, "publisher_id", label)?;
+    json_required_string(value, "publisher_key_id", label)?;
+    require_json_bool_false(value, "project_server_serves_model_bytes", label)?;
+    require_json_bool_false(value, "project_server_runs_model_bytes", label)?;
+    reject_catalog_artifact_url_fields(object, label)?;
+    json_required_string(value, "execution_policy", label)?;
+
+    let announcement_route_count = validate_catalog_announcement_route_fields(value, label)?;
+    let entries = json_required_array(value, "entries", label)?;
+    if entries.is_empty() {
+        return Err(format!("{label} catalog entries must not be empty"));
+    }
+    if entries.len() > 4096 {
+        return Err(format!("{label} catalog entries exceeded 4096 rows"));
+    }
+
+    let mut model_ids = BTreeSet::new();
+    let mut p2p_ready_count = 0usize;
+    let mut peer_source_count = 0usize;
+    for (index, entry) in entries.iter().enumerate() {
+        let entry_label = format!("{label} entries[{index}]");
+        let summary = validate_catalog_entry_value(entry, &entry_label)?;
+        if !model_ids.insert(summary.model_id.clone()) {
+            return Err(format!(
+                "{entry_label} duplicated catalog model_id {}",
+                summary.model_id
+            ));
+        }
+        if summary.peer_source_count > 0 {
+            p2p_ready_count += 1;
+            peer_source_count += summary.peer_source_count;
+        }
+    }
+
+    Ok(CatalogSnapshotSummary {
+        entry_count: entries.len(),
+        p2p_ready_count,
+        peer_source_count,
+        announcement_route_count,
+    })
+}
+
+fn validate_catalog_announcement_route_fields(value: &Value, label: &str) -> Result<usize, String> {
+    let mut routes = BTreeSet::new();
+
+    if value.get("peer_source_announcement_route").is_some() {
+        let route = validate_catalog_announcement_route(&json_required_string(
+            value,
+            "peer_source_announcement_route",
+            label,
+        )?)?;
+        let sha256 = json_optional_string(value, "peer_source_announcement_sha256")
+            .or_else(|| json_optional_string(value, "peer_source_announcement_checksum_sha256"))
+            .ok_or_else(|| {
+                format!(
+                    "{label} peer_source_announcement_route must include peer_source_announcement_sha256"
+                )
+            })?;
+        normalize_sha256(&sha256)?;
+        routes.insert(route);
+    }
+
+    for key in [
+        "peer_source_announcement_routes",
+        "peer_source_announcement_feeds",
+    ] {
+        let Some(raw_routes) = value.get(key) else {
+            continue;
+        };
+        let raw_routes = raw_routes
+            .as_array()
+            .ok_or_else(|| format!("{label} {key} must be an array"))?;
+        for (index, raw_route) in raw_routes.iter().enumerate() {
+            let route_label = format!("{label} {key}[{index}]");
+            let route = validate_catalog_announcement_route_reference(raw_route, &route_label)?;
+            if !routes.insert(route.clone()) {
+                return Err(format!("{route_label} duplicated route {route}"));
+            }
+        }
+    }
+
+    if routes.len() > 64 {
+        return Err(format!(
+            "{label} listed more than 64 peer-source announcement routes"
+        ));
+    }
+    Ok(routes.len())
+}
+
+fn validate_catalog_announcement_route_reference(
+    value: &Value,
+    label: &str,
+) -> Result<String, String> {
+    if let Some(route) = value.as_str() {
+        validate_catalog_announcement_route(route)?;
+        return Err(format!("{label} must include a SHA-256 checksum"));
+    }
+
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("{label} must be an object with route and sha256"))?;
+    let route = ["route", "announcement_route", "url", "href"]
+        .iter()
+        .find_map(|key| object.get(*key).and_then(Value::as_str))
+        .map(validate_catalog_announcement_route)
+        .transpose()?
+        .ok_or_else(|| format!("{label} missing string route"))?;
+    let sha256 = [
+        "sha256",
+        "checksum_sha256",
+        "announcement_sha256",
+        "peer_source_announcement_sha256",
+    ]
+    .iter()
+    .find_map(|key| object.get(*key).and_then(Value::as_str))
+    .ok_or_else(|| format!("{label} must include a SHA-256 checksum"))?;
+    normalize_sha256(sha256)?;
+    if let Some(route_kind) = object.get("route_kind").and_then(Value::as_str) {
+        if route_kind != "minimodel.peer_source_announcement_catalog" {
+            return Err(format!(
+                "{label} route_kind must be minimodel.peer_source_announcement_catalog"
+            ));
+        }
+    }
+    Ok(route)
+}
+
+fn validate_catalog_peer_offer_proof_fields(value: &Value, label: &str) -> Result<(), String> {
+    require_json_string_field(value, "peer_offer_kind", label, "minimodel.peer_offer.v0")?;
+    require_json_string_field(
+        value,
+        "peer_offer_chunk_algorithm",
+        label,
+        "sha256-merkle-v0",
+    )?;
+    let route = json_required_string(value, "peer_offer_route", label)?;
+    if route.contains('\n') || route.contains('\r') {
+        return Err(format!(
+            "{label} peer_offer_route must not contain newlines"
+        ));
+    }
+    normalize_sha256(&json_required_string(value, "peer_offer_sha256", label)?)?;
+    let chunk_size = json_required_usize(value, "peer_offer_chunk_size", label)?;
+    if chunk_size == 0 {
+        return Err(format!("{label} peer_offer_chunk_size must be positive"));
+    }
+    let chunk_count = json_required_usize(value, "peer_offer_chunk_count", label)?;
+    if chunk_count == 0 {
+        return Err(format!("{label} peer_offer_chunk_count must be positive"));
+    }
+    normalize_sha256(&json_required_string(
+        value,
+        "peer_offer_merkle_root_sha256",
+        label,
+    )?)?;
+    Ok(())
 }
 
 fn reject_catalog_artifact_url_fields(
@@ -1969,6 +4123,8 @@ fn apply_peer_source_announcements_to_catalog_value(
         "peer_offer_merkle_root_sha256",
         label,
     )?)?;
+    let peer_offer_route = json_required_string(&value, "peer_offer_route", label)?;
+    let peer_offer_chunk_count = json_required_usize(&value, "peer_offer_chunk_count", label)?;
 
     let mut applied = Vec::with_capacity(announcements.len());
     for (announcement_label, announcement) in announcements {
@@ -1982,6 +4138,18 @@ fn apply_peer_source_announcements_to_catalog_value(
             return Err(format!(
                 "{announcement_label} artifact_byte_count {} did not match catalog artifact_byte_count {}",
                 announcement.artifact_byte_count, artifact_byte_count
+            ));
+        }
+        if announcement.peer_offer_route != peer_offer_route {
+            return Err(format!(
+                "{announcement_label} peer_offer_route {} did not match catalog peer_offer_route {}",
+                announcement.peer_offer_route, peer_offer_route
+            ));
+        }
+        if announcement.peer_offer_chunk_count != peer_offer_chunk_count {
+            return Err(format!(
+                "{announcement_label} peer_offer_chunk_count {} did not match catalog peer_offer_chunk_count {}",
+                announcement.peer_offer_chunk_count, peer_offer_chunk_count
             ));
         }
         require_normalized_equal(
@@ -2079,8 +4247,16 @@ fn validate_peer_source_announcement_value(
         "peer_offer_merkle_root_sha256",
         label,
     )?)?;
-    json_required_string(value, "peer_offer_route", label)?;
-    json_required_usize(value, "peer_offer_chunk_count", label)?;
+    let peer_offer_route = json_required_string(value, "peer_offer_route", label)?;
+    if peer_offer_route.contains('\n') || peer_offer_route.contains('\r') {
+        return Err(format!(
+            "{label} peer_offer_route must not contain newlines"
+        ));
+    }
+    let peer_offer_chunk_count = json_required_usize(value, "peer_offer_chunk_count", label)?;
+    if peer_offer_chunk_count == 0 {
+        return Err(format!("{label} peer_offer_chunk_count must be positive"));
+    }
     normalize_sha256(&json_required_string(value, "catalog_entry_sha256", label)?)?;
     let peer_source = value
         .get("peer_source")
@@ -2092,6 +4268,8 @@ fn validate_peer_source_announcement_value(
         model_id,
         artifact_byte_count,
         artifact_sha256,
+        peer_offer_route,
+        peer_offer_chunk_count,
         peer_offer_sha256,
         peer_offer_merkle_root_sha256,
         peer_source: known_peer_source_value(&peer_base_url),
@@ -2133,6 +4311,14 @@ fn require_json_bool_false(value: &Value, key: &str, label: &str) -> Result<(), 
     }
 }
 
+fn require_json_bool_true(value: &Value, key: &str, label: &str) -> Result<(), String> {
+    match value.get(key).and_then(Value::as_bool) {
+        Some(true) => Ok(()),
+        Some(false) => Err(format!("{label} {key} must be true")),
+        None => Err(format!("{label} missing true {key}")),
+    }
+}
+
 fn json_required_string(value: &Value, key: &str, label: &str) -> Result<String, String> {
     let text = value
         .get(key)
@@ -2141,6 +4327,49 @@ fn json_required_string(value: &Value, key: &str, label: &str) -> Result<String,
         .filter(|text| !text.is_empty())
         .ok_or_else(|| format!("{label} missing string {key}"))?;
     Ok(text.to_string())
+}
+
+fn json_required_object<'a>(value: &'a Value, key: &str, label: &str) -> Result<&'a Value, String> {
+    let object = value
+        .get(key)
+        .filter(|value| value.is_object())
+        .ok_or_else(|| format!("{label} missing object {key}"))?;
+    Ok(object)
+}
+
+fn json_required_array<'a>(
+    value: &'a Value,
+    key: &str,
+    label: &str,
+) -> Result<&'a [Value], String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .ok_or_else(|| format!("{label} missing array {key}"))
+}
+
+fn json_required_string_array(
+    value: &Value,
+    key: &str,
+    label: &str,
+) -> Result<Vec<String>, String> {
+    let array = json_required_array(value, key, label)?;
+    let mut strings = Vec::with_capacity(array.len());
+    for (index, item) in array.iter().enumerate() {
+        let Some(text) = item.as_str().map(str::trim).filter(|text| !text.is_empty()) else {
+            return Err(format!("{label} {key}[{index}] must be a non-empty string"));
+        };
+        strings.push(text.to_string());
+    }
+    Ok(strings)
+}
+
+fn json_required_bool(value: &Value, key: &str, label: &str) -> Result<bool, String> {
+    value
+        .get(key)
+        .and_then(Value::as_bool)
+        .ok_or_else(|| format!("{label} missing boolean {key}"))
 }
 
 fn json_optional_string(value: &Value, key: &str) -> Option<String> {
@@ -2166,6 +4395,492 @@ fn json_optional_usize(value: &Value, key: &str, label: &str) -> Result<Option<u
     usize::try_from(number)
         .map(Some)
         .map_err(|_| format!("{label} {key} is too large for this platform"))
+}
+
+fn validate_peer_companion_state_value(
+    value: &Value,
+    expected_model_id: &str,
+    share: &PeerPieceServe,
+    piece_set_sha256: &str,
+) -> Result<String, String> {
+    let label = "peer companion state";
+    require_json_string_field(value, "state_kind", label, "minimodel.peer_companion_state")?;
+    require_json_u64_field(value, "state_version", label, 0)?;
+    require_json_string_field(value, "model_id", label, expected_model_id)?;
+    require_json_string_field(value, "share_status", label, "ready-to-serve")?;
+    require_json_string_field(
+        value,
+        "transfer_protocol",
+        label,
+        "direct-http-piece-server-v0",
+    )?;
+    require_json_string_field(
+        value,
+        "consent_status",
+        label,
+        "operator-reviewed-consenting-peer",
+    )?;
+    let peer_base_url =
+        normalize_known_peer_base_url(&json_required_string(value, "peer_base_url", label)?)?;
+
+    let manifest = json_required_object(value, "manifest", label)?;
+    let manifest_sha = normalize_sha256(&json_required_string(
+        manifest,
+        "sha256",
+        "peer companion state manifest",
+    )?)?;
+    if manifest_sha != share.manifest_sha256 {
+        return Err(format!(
+            "peer companion state manifest.sha256 mismatch: expected {}, got {manifest_sha}",
+            share.manifest_sha256
+        ));
+    }
+
+    let artifact = json_required_object(value, "artifact", label)?;
+    let artifact_sha = normalize_sha256(&json_required_string(
+        artifact,
+        "sha256",
+        "peer companion state artifact",
+    )?)?;
+    if artifact_sha != share.artifact_sha256 {
+        return Err(format!(
+            "peer companion state artifact.sha256 mismatch: expected {}, got {artifact_sha}",
+            share.artifact_sha256
+        ));
+    }
+
+    let pieces = json_required_object(value, "pieces", label)?;
+    require_json_string_field(
+        pieces,
+        "piece_set_path_hint",
+        "peer companion state pieces",
+        "minimodel.peer_piece_set.v0",
+    )?;
+    let state_piece_set_sha = normalize_sha256(&json_required_string(
+        pieces,
+        "piece_set_sha256",
+        "peer companion state pieces",
+    )?)?;
+    if state_piece_set_sha != piece_set_sha256 {
+        return Err(format!(
+            "peer companion state pieces.piece_set_sha256 mismatch: expected {piece_set_sha256}, got {state_piece_set_sha}"
+        ));
+    }
+    let state_piece_count =
+        json_required_usize(pieces, "piece_count", "peer companion state pieces")?;
+    if state_piece_count != share.piece_count {
+        return Err(format!(
+            "peer companion state pieces.piece_count mismatch: expected {}, got {state_piece_count}",
+            share.piece_count
+        ));
+    }
+    let state_merkle_root = normalize_sha256(&json_required_string(
+        pieces,
+        "merkle_root_sha256",
+        "peer companion state pieces",
+    )?)?;
+    if state_merkle_root != share.merkle_root_sha256 {
+        return Err(format!(
+            "peer companion state pieces.merkle_root_sha256 mismatch: expected {}, got {state_merkle_root}",
+            share.merkle_root_sha256
+        ));
+    }
+
+    let boundary = json_required_object(value, "boundary", label)?;
+    require_json_bool_false(
+        boundary,
+        "peer_piece_bytes_in_state",
+        "peer companion boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "project_server_serves_model_bytes",
+        "peer companion boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "project_server_runs_model_bytes",
+        "peer companion boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "project_server_proxies_model_bytes",
+        "peer companion boundary",
+    )?;
+
+    Ok(peer_base_url)
+}
+
+fn expected_peer_status_share(
+    manifest: &Manifest,
+    manifest_bytes: &[u8],
+    piece_set_path: String,
+) -> Result<PeerPieceServe, String> {
+    let chunks = chunk_proofs_from_manifest(manifest)?;
+    let manifest_sha256 = sha256_prefixed(manifest_bytes);
+    let model_id = manifest.require("model.id")?.to_string();
+    let artifact_byte_count = manifest
+        .require("artifact.byte_count")?
+        .parse::<u64>()
+        .map_err(|_| "artifact.byte_count must be a decimal integer".to_string())?;
+    let artifact_sha256 = normalize_sha256(manifest.require("artifact.sha256")?)?;
+    let piece_set_text = peer_piece_set_contract_text(
+        manifest,
+        &manifest_sha256,
+        &model_id,
+        artifact_byte_count,
+        &artifact_sha256,
+        &chunks,
+    )?;
+    Ok(PeerPieceServe {
+        piece_set_path,
+        piece_set_sha256: sha256_prefixed(piece_set_text.as_bytes()),
+        model_id,
+        artifact_byte_count,
+        piece_count: chunks.len(),
+        manifest_sha256,
+        artifact_sha256,
+        merkle_root_sha256: normalize_sha256(manifest.require("chunks.merkle_root_sha256")?)?,
+    })
+}
+
+fn peer_status_value(
+    share: &PeerPieceServe,
+    peer_base_url: &str,
+    companion_state_route: Option<&str>,
+) -> Result<Value, String> {
+    let peer_base_url = normalize_known_peer_base_url(peer_base_url)?;
+    Ok(serde_json::json!({
+        "status_kind": "minimodel.peer_status",
+        "status_version": 0,
+        "created_utc": utc_now()?,
+        "share_status": "ready-to-serve",
+        "transfer_protocol": "direct-http-piece-server-v0",
+        "peer_base_url": peer_base_url,
+        "model_id": share.model_id,
+        "routes": {
+            "peer_status": PEER_STATUS_ROUTE,
+            "peer_piece_set": "minimodel.peer_piece_set.v0",
+            "peer_companion_state": companion_state_route.unwrap_or("not-advertised"),
+        },
+        "manifest": {
+            "sha256": share.manifest_sha256,
+        },
+        "artifact": {
+            "kind": "slm",
+            "byte_count": share.artifact_byte_count,
+            "sha256": share.artifact_sha256,
+        },
+        "pieces": {
+            "piece_set_path_hint": "minimodel.peer_piece_set.v0",
+            "piece_set_sha256": share.piece_set_sha256,
+            "piece_count": share.piece_count,
+            "merkle_root_sha256": share.merkle_root_sha256,
+        },
+        "boundary": {
+            "metadata_only": true,
+            "peer_status_embeds_model_bytes": false,
+            "peer_status_embeds_piece_bytes": false,
+            "project_server_serves_model_bytes": false,
+            "project_server_runs_model_bytes": false,
+            "project_server_proxies_model_bytes": false,
+            "requires_rust_reverify_before_browser_import": true,
+        }
+    }))
+}
+
+fn peer_status_bytes(
+    share: &PeerPieceServe,
+    peer_base_url: &str,
+    companion_state_route: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    let status = peer_status_value(share, peer_base_url, companion_state_route)?;
+    let text = serde_json::to_string_pretty(&status)
+        .map_err(|error| format!("failed to encode peer status JSON: {error}"))?
+        + "\n";
+    Ok(text.into_bytes())
+}
+
+fn validate_peer_status_value(
+    value: &Value,
+    expected: &PeerPieceServe,
+    expected_peer_base_url: &str,
+) -> Result<String, String> {
+    let label = "peer status";
+    require_json_string_field(value, "status_kind", label, "minimodel.peer_status")?;
+    require_json_u64_field(value, "status_version", label, 0)?;
+    require_json_string_field(value, "share_status", label, "ready-to-serve")?;
+    require_json_string_field(
+        value,
+        "transfer_protocol",
+        label,
+        "direct-http-piece-server-v0",
+    )?;
+    require_json_string_field(value, "model_id", label, &expected.model_id)?;
+    let peer_base_url =
+        normalize_known_peer_base_url(&json_required_string(value, "peer_base_url", label)?)?;
+    require_normalized_equal(
+        "peer status peer_base_url",
+        expected_peer_base_url,
+        &peer_base_url,
+        "status",
+    )?;
+
+    let routes = json_required_object(value, "routes", label)?;
+    require_json_string_field(
+        routes,
+        "peer_status",
+        "peer status routes",
+        PEER_STATUS_ROUTE,
+    )?;
+    require_json_string_field(
+        routes,
+        "peer_piece_set",
+        "peer status routes",
+        "minimodel.peer_piece_set.v0",
+    )?;
+    let companion_state_route =
+        json_required_string(routes, "peer_companion_state", "peer status routes")?;
+    if companion_state_route != "not-advertised"
+        && companion_state_route != PEER_COMPANION_STATE_ROUTE
+    {
+        return Err(format!(
+            "peer status routes peer_companion_state must be not-advertised or {PEER_COMPANION_STATE_ROUTE}"
+        ));
+    }
+
+    let manifest = json_required_object(value, "manifest", label)?;
+    let manifest_sha = normalize_sha256(&json_required_string(
+        manifest,
+        "sha256",
+        "peer status manifest",
+    )?)?;
+    if manifest_sha != expected.manifest_sha256 {
+        return Err(format!(
+            "peer status manifest.sha256 mismatch: expected {}, got {manifest_sha}",
+            expected.manifest_sha256
+        ));
+    }
+
+    let artifact = json_required_object(value, "artifact", label)?;
+    require_json_string_field(artifact, "kind", "peer status artifact", "slm")?;
+    let artifact_byte_count = json_required_usize(artifact, "byte_count", "peer status artifact")?;
+    if artifact_byte_count as u64 != expected.artifact_byte_count {
+        return Err(format!(
+            "peer status artifact.byte_count mismatch: expected {}, got {artifact_byte_count}",
+            expected.artifact_byte_count
+        ));
+    }
+    let artifact_sha = normalize_sha256(&json_required_string(
+        artifact,
+        "sha256",
+        "peer status artifact",
+    )?)?;
+    if artifact_sha != expected.artifact_sha256 {
+        return Err(format!(
+            "peer status artifact.sha256 mismatch: expected {}, got {artifact_sha}",
+            expected.artifact_sha256
+        ));
+    }
+
+    let pieces = json_required_object(value, "pieces", label)?;
+    require_json_string_field(
+        pieces,
+        "piece_set_path_hint",
+        "peer status pieces",
+        "minimodel.peer_piece_set.v0",
+    )?;
+    let piece_set_sha = normalize_sha256(&json_required_string(
+        pieces,
+        "piece_set_sha256",
+        "peer status pieces",
+    )?)?;
+    if piece_set_sha != expected.piece_set_sha256 {
+        return Err(format!(
+            "peer status pieces.piece_set_sha256 mismatch: expected {}, got {piece_set_sha}",
+            expected.piece_set_sha256
+        ));
+    }
+    let piece_count = json_required_usize(pieces, "piece_count", "peer status pieces")?;
+    if piece_count != expected.piece_count {
+        return Err(format!(
+            "peer status pieces.piece_count mismatch: expected {}, got {piece_count}",
+            expected.piece_count
+        ));
+    }
+    let merkle_root = normalize_sha256(&json_required_string(
+        pieces,
+        "merkle_root_sha256",
+        "peer status pieces",
+    )?)?;
+    if merkle_root != expected.merkle_root_sha256 {
+        return Err(format!(
+            "peer status pieces.merkle_root_sha256 mismatch: expected {}, got {merkle_root}",
+            expected.merkle_root_sha256
+        ));
+    }
+
+    let boundary = json_required_object(value, "boundary", label)?;
+    require_json_bool_true(boundary, "metadata_only", "peer status boundary")?;
+    require_json_bool_false(
+        boundary,
+        "peer_status_embeds_model_bytes",
+        "peer status boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "peer_status_embeds_piece_bytes",
+        "peer status boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "project_server_serves_model_bytes",
+        "peer status boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "project_server_runs_model_bytes",
+        "peer status boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "project_server_proxies_model_bytes",
+        "peer status boundary",
+    )?;
+    require_json_bool_true(
+        boundary,
+        "requires_rust_reverify_before_browser_import",
+        "peer status boundary",
+    )?;
+
+    Ok(companion_state_route)
+}
+
+fn peer_status_check_value(
+    share: &PeerPieceServe,
+    peer_base_url: &str,
+    status_url: &str,
+    companion_state_route: &str,
+) -> Result<Value, String> {
+    Ok(serde_json::json!({
+        "check_kind": "minimodel.peer_status_check",
+        "check_version": 0,
+        "checked_utc": utc_now()?,
+        "status": "validated",
+        "peer_base_url": peer_base_url,
+        "status_url": status_url,
+        "model_id": share.model_id,
+        "routes": {
+            "peer_status": PEER_STATUS_ROUTE,
+            "peer_piece_set": "minimodel.peer_piece_set.v0",
+            "peer_companion_state": companion_state_route,
+        },
+        "manifest": {
+            "sha256": share.manifest_sha256,
+        },
+        "artifact": {
+            "kind": "slm",
+            "byte_count": share.artifact_byte_count,
+            "sha256": share.artifact_sha256,
+        },
+        "pieces": {
+            "piece_set_sha256": share.piece_set_sha256,
+            "piece_count": share.piece_count,
+            "merkle_root_sha256": share.merkle_root_sha256,
+        },
+        "boundary": {
+            "metadata_only": true,
+            "peer_piece_bytes_fetched": false,
+            "artifact_bytes_fetched": false,
+            "project_server_serves_model_bytes": false,
+            "project_server_runs_model_bytes": false,
+            "project_server_proxies_model_bytes": false,
+            "requires_rust_reverify_before_browser_import": true,
+        }
+    }))
+}
+
+fn validate_peer_contact_card_value(
+    value: &Value,
+    label: &str,
+) -> Result<(String, String), String> {
+    require_json_string_field(value, "card_kind", label, "minimodel.peer_contact_card")?;
+    require_json_u64_field(value, "card_version", label, 0)?;
+    let peer_label =
+        validate_peer_contact_label(&json_required_string(value, "peer_label", label)?)?;
+    require_json_string_field(
+        value,
+        "transfer_protocol",
+        label,
+        "direct-http-piece-server-v0",
+    )?;
+    require_json_string_field(
+        value,
+        "contact_status",
+        label,
+        "operator-reviewed-consenting-peer",
+    )?;
+    require_json_string_field(
+        value,
+        "intended_use",
+        label,
+        "known-peer-url-for-minimodel-peer-piece-import",
+    )?;
+    let peer_base_url =
+        normalize_known_peer_base_url(&json_required_string(value, "peer_base_url", label)?)?;
+    require_json_bool_false(value, "project_server_serves_model_bytes", label)?;
+    require_json_bool_false(value, "project_server_runs_model_bytes", label)?;
+    require_json_bool_false(value, "project_server_proxies_model_bytes", label)?;
+
+    let boundary = json_required_object(value, "boundary", label)?;
+    require_json_bool_true(boundary, "metadata_only", "peer contact card boundary")?;
+    require_json_bool_false(
+        boundary,
+        "peer_contact_card_embeds_model_bytes",
+        "peer contact card boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "project_server_serves_model_bytes",
+        "peer contact card boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "project_server_runs_model_bytes",
+        "peer contact card boundary",
+    )?;
+    require_json_bool_false(
+        boundary,
+        "project_server_proxies_model_bytes",
+        "peer contact card boundary",
+    )?;
+    require_json_bool_true(
+        boundary,
+        "requires_rust_reverify_before_browser_import",
+        "peer contact card boundary",
+    )?;
+
+    Ok((peer_label, peer_base_url))
+}
+
+fn validate_peer_contact_label(value: &str) -> Result<String, String> {
+    let label = value.trim();
+    if label.is_empty()
+        || label.len() > 96
+        || !label.is_ascii()
+        || label.bytes().any(|byte| byte.is_ascii_control())
+    {
+        return Err("peer contact label must be 1-96 printable ASCII bytes".to_string());
+    }
+    Ok(label.to_string())
+}
+
+fn default_peer_contact_label(peer_base_url: &str) -> Result<String, String> {
+    let label = peer_base_url
+        .strip_prefix("http://")
+        .unwrap_or(peer_base_url)
+        .trim_end_matches('/');
+    validate_peer_contact_label(label)
 }
 
 fn require_peer_offer_equal(
@@ -2578,17 +5293,35 @@ fn peer_piece_set_text(
     report: &ArtifactVerification,
     chunks: &[ChunkProof],
 ) -> Result<String, String> {
+    peer_piece_set_contract_text(
+        manifest,
+        &report.manifest_sha256,
+        &report.manifest_model_id,
+        report.artifact_byte_count,
+        &report.artifact_sha256,
+        chunks,
+    )
+}
+
+fn peer_piece_set_contract_text(
+    manifest: &Manifest,
+    manifest_sha256: &str,
+    manifest_model_id: &str,
+    artifact_byte_count: u64,
+    artifact_sha256: &str,
+    chunks: &[ChunkProof],
+) -> Result<String, String> {
     let mut text = String::new();
     push_line(&mut text, "piece_set.version", "0");
     push_line(&mut text, "piece_set.kind", "minimodel.peer_piece_set.v0");
-    push_line(&mut text, "manifest.sha256", &report.manifest_sha256);
-    push_line(&mut text, "manifest.model_id", &report.manifest_model_id);
+    push_line(&mut text, "manifest.sha256", manifest_sha256);
+    push_line(&mut text, "manifest.model_id", manifest_model_id);
     push_line(
         &mut text,
         "artifact.byte_count",
-        &report.artifact_byte_count.to_string(),
+        &artifact_byte_count.to_string(),
     );
-    push_line(&mut text, "artifact.sha256", &report.artifact_sha256);
+    push_line(&mut text, "artifact.sha256", artifact_sha256);
     push_line(&mut text, "chunks.mode", "fixed-size-merkle-v0");
     push_line(&mut text, "chunks.size", manifest.require("chunks.size")?);
     push_line(&mut text, "chunks.count", &chunks.len().to_string());
@@ -2731,6 +5464,71 @@ fn validate_piece_set(
     Ok(())
 }
 
+fn validate_optional_peer_companion_state(
+    base_url: &HttpUrl,
+    piece_set_url: &HttpUrl,
+    manifest: &Manifest,
+    manifest_bytes: &[u8],
+    piece_set: &Manifest,
+    piece_set_bytes: &[u8],
+) -> Result<PeerCompanionMetadataCheck, String> {
+    let state_url = base_url.join_file(PEER_COMPANION_STATE_ROUTE)?;
+    let state_url_text = state_url.to_string();
+    let state_bytes = match http_get_bytes(&state_url, 64 * 1024) {
+        Ok(bytes) => bytes,
+        Err(error) if is_peer_http_not_found(&error) => {
+            return Ok(PeerCompanionMetadataCheck {
+                url: state_url_text,
+                status: "not-advertised".to_string(),
+            });
+        }
+        Err(error) => {
+            return Err(format!(
+                "failed to fetch peer companion state metadata from {state_url_text}: {error}"
+            ));
+        }
+    };
+    let state_text = std::str::from_utf8(&state_bytes)
+        .map_err(|_| "peer companion state must be valid UTF-8".to_string())?;
+    let state_value: Value = serde_json::from_str(state_text)
+        .map_err(|error| format!("failed to parse peer companion state JSON: {error}"))?;
+    let share = PeerPieceServe {
+        piece_set_path: piece_set_url.to_string(),
+        piece_set_sha256: sha256_prefixed(piece_set_bytes),
+        model_id: manifest.require("model.id")?.to_string(),
+        artifact_byte_count: manifest
+            .require("artifact.byte_count")?
+            .parse::<u64>()
+            .map_err(|_| "artifact.byte_count must be a decimal integer".to_string())?,
+        piece_count: parse_usize(piece_set.require("chunks.count")?, "chunks.count")?,
+        manifest_sha256: sha256_prefixed(manifest_bytes),
+        artifact_sha256: normalize_sha256(manifest.require("artifact.sha256")?)?,
+        merkle_root_sha256: normalize_sha256(manifest.require("chunks.merkle_root_sha256")?)?,
+    };
+    let state_peer_base_url = validate_peer_companion_state_value(
+        &state_value,
+        manifest.require("model.id")?,
+        &share,
+        &sha256_prefixed(piece_set_bytes),
+    )?;
+    let expected_peer_base_url = normalize_known_peer_base_url(&base_url.to_string())?;
+    require_normalized_equal(
+        "peer companion state peer_base_url",
+        &expected_peer_base_url,
+        &state_peer_base_url,
+        "state",
+    )?;
+    Ok(PeerCompanionMetadataCheck {
+        url: state_url_text,
+        status: "validated".to_string(),
+    })
+}
+
+fn is_peer_http_not_found(error: &str) -> bool {
+    error.contains("peer HTTP request failed: HTTP/1.0 404 ")
+        || error.contains("peer HTTP request failed: HTTP/1.1 404 ")
+}
+
 fn require_piece_set_equal(piece_set: &Manifest, key: &str, expected: &str) -> Result<(), String> {
     let actual = piece_set.require(key)?;
     if actual.eq_ignore_ascii_case(expected) {
@@ -2854,25 +5652,104 @@ fn validate_piece_bytes(
     Ok(())
 }
 
-fn serve_peer_piece_dir_http_path(
-    piece_dir: &Path,
-    bind_addr: &str,
-    request_limit: Option<usize>,
-) -> Result<(), String> {
-    let listener = TcpListener::bind(bind_addr)
-        .map_err(|error| format!("failed to bind peer piece server at {bind_addr}: {error}"))?;
-    serve_peer_piece_dir_http_listener(piece_dir, listener, request_limit)
+#[derive(Debug, Clone)]
+enum ServedPeerExtra {
+    Path(PathBuf),
+    Bytes(Vec<u8>),
 }
 
+#[cfg(test)]
 fn serve_peer_piece_dir_http_listener(
     piece_dir: &Path,
     listener: TcpListener,
     request_limit: Option<usize>,
 ) -> Result<(), String> {
+    serve_peer_piece_dir_http_listener_with_extra(
+        piece_dir,
+        listener,
+        request_limit,
+        BTreeMap::new(),
+        "/",
+    )
+}
+
+fn serve_peer_pieces_http_listener(
+    manifest_path: &Path,
+    piece_dir: &Path,
+    listener: TcpListener,
+    request_limit: Option<usize>,
+    peer_base_url: &str,
+) -> Result<PeerPieceServe, String> {
+    let report = inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
+    let mut extra_files = BTreeMap::new();
+    extra_files.insert(
+        PEER_STATUS_ROUTE.to_string(),
+        ServedPeerExtra::Bytes(peer_status_bytes(&report, peer_base_url, None)?),
+    );
+    let serve_path_prefix = peer_serve_path_prefix(peer_base_url)?;
+    serve_peer_piece_dir_http_listener_with_extra(
+        piece_dir,
+        listener,
+        request_limit,
+        extra_files,
+        &serve_path_prefix,
+    )?;
+    Ok(report)
+}
+
+fn serve_peer_companion_http_listener(
+    state_path: &Path,
+    manifest_path: &Path,
+    piece_dir: &Path,
+    listener: TcpListener,
+    request_limit: Option<usize>,
+) -> Result<PeerCompanionServe, String> {
+    let report = inspect_peer_companion_state_path(state_path, manifest_path, piece_dir)?;
+    let mut extra_files = BTreeMap::new();
+    extra_files.insert(
+        PEER_STATUS_ROUTE.to_string(),
+        ServedPeerExtra::Bytes(peer_status_bytes(
+            &PeerPieceServe {
+                piece_set_path: report.piece_set_path.clone(),
+                piece_set_sha256: report.piece_set_sha256.clone(),
+                model_id: report.model_id.clone(),
+                artifact_byte_count: report.artifact_byte_count,
+                piece_count: report.piece_count,
+                manifest_sha256: report.manifest_sha256.clone(),
+                artifact_sha256: report.artifact_sha256.clone(),
+                merkle_root_sha256: report.merkle_root_sha256.clone(),
+            },
+            &report.peer_base_url,
+            Some(&report.state_route),
+        )?),
+    );
+    extra_files.insert(
+        report.state_route.clone(),
+        ServedPeerExtra::Path(state_path.to_path_buf()),
+    );
+    let serve_path_prefix = peer_serve_path_prefix(&report.peer_base_url)?;
+    serve_peer_piece_dir_http_listener_with_extra(
+        piece_dir,
+        listener,
+        request_limit,
+        extra_files,
+        &serve_path_prefix,
+    )?;
+    Ok(report)
+}
+
+fn serve_peer_piece_dir_http_listener_with_extra(
+    piece_dir: &Path,
+    listener: TcpListener,
+    request_limit: Option<usize>,
+    extra_files: BTreeMap<String, ServedPeerExtra>,
+    serve_path_prefix: &str,
+) -> Result<(), String> {
     let piece_set_text = fs::read_to_string(piece_dir.join("minimodel.peer_piece_set.v0"))
         .map_err(|error| format!("failed to read peer piece set: {error}"))?;
     let piece_set = Manifest::parse(&piece_set_text)?;
-    let allowed_names = allowed_peer_piece_names(&piece_set)?;
+    let allowed_names = allowed_peer_piece_names(&piece_set, &extra_files)?;
+    let serve_path_prefix = normalize_serve_path_prefix(serve_path_prefix)?;
     let mut served = 0usize;
     loop {
         if let Some(limit) = request_limit {
@@ -2886,18 +5763,35 @@ fn serve_peer_piece_dir_http_listener(
         served = served
             .checked_add(1)
             .ok_or_else(|| "served request count overflow".to_string())?;
-        if let Err(error) = serve_peer_piece_request(&mut stream, piece_dir, &allowed_names) {
+        if let Err(error) = serve_peer_piece_request(
+            &mut stream,
+            piece_dir,
+            &allowed_names,
+            &extra_files,
+            &serve_path_prefix,
+        ) {
             let _ = write_http_response(&mut stream, "400 Bad Request", error.as_bytes());
         }
     }
 }
 
-fn allowed_peer_piece_names(piece_set: &Manifest) -> Result<BTreeSet<String>, String> {
+fn allowed_peer_piece_names(
+    piece_set: &Manifest,
+    extra_files: &BTreeMap<String, ServedPeerExtra>,
+) -> Result<BTreeSet<String>, String> {
     let chunk_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
     let mut names = BTreeSet::new();
     names.insert("minimodel.peer_piece_set.v0".to_string());
     for index in 0..chunk_count {
         names.insert(peer_piece_spec(piece_set, index)?.file_name);
+    }
+    for file_name in extra_files.keys() {
+        require_safe_piece_file_name(file_name)?;
+        if !names.insert(file_name.clone()) {
+            return Err(format!(
+                "extra served peer file {file_name} conflicts with peer-piece output"
+            ));
+        }
     }
     Ok(names)
 }
@@ -2906,6 +5800,8 @@ fn serve_peer_piece_request(
     stream: &mut TcpStream,
     piece_dir: &Path,
     allowed_names: &BTreeSet<String>,
+    extra_files: &BTreeMap<String, ServedPeerExtra>,
+    serve_path_prefix: &str,
 ) -> Result<(), String> {
     let request = read_http_request_headers(stream)?;
     let request_text = std::str::from_utf8(&request)
@@ -2929,7 +5825,17 @@ fn serve_peer_piece_request(
         write_http_response(stream, "400 Bad Request", b"plain file paths only")?;
         return Ok(());
     }
-    let file_name = path.trim_start_matches('/');
+    let file_name = match file_name_from_served_path(path, serve_path_prefix) {
+        Ok(file_name) => file_name,
+        Err(PeerPathError::WrongPrefix) => {
+            write_http_response(stream, "404 Not Found", b"not found")?;
+            return Ok(());
+        }
+        Err(PeerPathError::BadPath) => {
+            write_http_response(stream, "400 Bad Request", b"bad peer piece path")?;
+            return Ok(());
+        }
+    };
     if file_name.is_empty() || require_safe_piece_file_name(file_name).is_err() {
         write_http_response(stream, "400 Bad Request", b"bad peer piece path")?;
         return Ok(());
@@ -2938,9 +5844,66 @@ fn serve_peer_piece_request(
         write_http_response(stream, "404 Not Found", b"not found")?;
         return Ok(());
     }
-    let bytes = fs::read(piece_dir.join(file_name))
-        .map_err(|error| format!("failed to read served peer piece: {error}"))?;
+    let bytes = match extra_files.get(file_name) {
+        Some(ServedPeerExtra::Path(path)) => {
+            fs::read(path).map_err(|error| format!("failed to read served peer file: {error}"))?
+        }
+        Some(ServedPeerExtra::Bytes(bytes)) => bytes.clone(),
+        None => fs::read(piece_dir.join(file_name))
+            .map_err(|error| format!("failed to read served peer file: {error}"))?,
+    };
     write_http_response(stream, "200 OK", &bytes)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PeerPathError {
+    WrongPrefix,
+    BadPath,
+}
+
+fn peer_serve_path_prefix(peer_base_url: &str) -> Result<String, String> {
+    let base_url = HttpUrl::parse(peer_base_url)?;
+    normalize_serve_path_prefix(&base_url.path)
+}
+
+fn normalize_serve_path_prefix(prefix: &str) -> Result<String, String> {
+    if prefix.is_empty() || prefix == "/" {
+        return Ok("/".to_string());
+    }
+    if !prefix.starts_with('/') || prefix.contains('?') || prefix.contains('#') {
+        return Err("peer serve path prefix must be an absolute plain path".to_string());
+    }
+    if prefix.contains('\\')
+        || prefix.contains("..")
+        || prefix.contains('\n')
+        || prefix.contains('\r')
+    {
+        return Err("peer serve path prefix must not contain unsafe path components".to_string());
+    }
+    Ok(format!("{}/", prefix.trim_end_matches('/')))
+}
+
+fn file_name_from_served_path<'a>(
+    request_path: &'a str,
+    serve_path_prefix: &str,
+) -> Result<&'a str, PeerPathError> {
+    if !request_path.starts_with('/') || request_path.contains('\\') {
+        return Err(PeerPathError::BadPath);
+    }
+    if serve_path_prefix == "/" {
+        let file_name = request_path.trim_start_matches('/');
+        if file_name.contains('/') {
+            return Err(PeerPathError::BadPath);
+        }
+        return Ok(file_name);
+    }
+    let Some(file_name) = request_path.strip_prefix(serve_path_prefix) else {
+        return Err(PeerPathError::WrongPrefix);
+    };
+    if file_name.is_empty() || file_name.contains('/') {
+        return Err(PeerPathError::BadPath);
+    }
+    Ok(file_name)
 }
 
 fn read_http_request_headers(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
@@ -3043,6 +6006,15 @@ fn receipt_file_name(assembled_output_slm: &str) -> Result<String, String> {
         .strip_suffix(".slm")
         .ok_or_else(|| "assembled_output_slm must end with .slm".to_string())?;
     Ok(format!("{stem}.minimodel-receipt"))
+}
+
+fn path_file_name_hint(path_text: &str, label: &str) -> Result<String, String> {
+    Path::new(path_text)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .ok_or_else(|| format!("{label} path must include a file or directory name"))
 }
 
 fn temp_output_path(output_artifact_path: &Path) -> Result<std::path::PathBuf, String> {
@@ -3172,6 +6144,46 @@ fn chunk_list_text(chunks: &[ChunkProof]) -> String {
     text
 }
 
+fn chunk_proofs_from_manifest(manifest: &Manifest) -> Result<Vec<ChunkProof>, String> {
+    require_fixed_chunk_mode(manifest)?;
+    let chunk_count = parse_usize(manifest.require("chunks.count")?, "chunks.count")?;
+    let mut chunks = Vec::with_capacity(chunk_count);
+    for index in 0..chunk_count {
+        let prefix = format!("chunk.{index}");
+        let offset = parse_usize(
+            manifest.require(&format!("{prefix}.offset"))?,
+            &format!("{prefix}.offset"),
+        )?;
+        let byte_count = parse_usize(
+            manifest.require(&format!("{prefix}.byte_count"))?,
+            &format!("{prefix}.byte_count"),
+        )?;
+        let sha256 = normalize_sha256(manifest.require(&format!("{prefix}.sha256"))?)?;
+        chunks.push(ChunkProof {
+            offset,
+            byte_count,
+            sha256,
+        });
+    }
+    let expected_merkle_root = normalize_sha256(manifest.require("chunks.merkle_root_sha256")?)?;
+    let actual_merkle_root = merkle_root_sha256(&chunks)?;
+    if actual_merkle_root != expected_merkle_root {
+        return Err(format!(
+            "manifest chunks.merkle_root_sha256 mismatch: expected {expected_merkle_root}, recomputed {actual_merkle_root}"
+        ));
+    }
+    if let Some(expected_list_sha) = manifest.get("chunks.list.sha256") {
+        let expected_list_sha = normalize_sha256(expected_list_sha)?;
+        let actual_list_sha = sha256_prefixed(chunk_list_text(&chunks).as_bytes());
+        if actual_list_sha != expected_list_sha {
+            return Err(format!(
+                "manifest chunks.list.sha256 mismatch: expected {expected_list_sha}, recomputed {actual_list_sha}"
+            ));
+        }
+    }
+    Ok(chunks)
+}
+
 fn merkle_root_sha256(chunks: &[ChunkProof]) -> Result<String, String> {
     if chunks.is_empty() {
         return Err("chunk Merkle tree requires at least one chunk".to_string());
@@ -3248,6 +6260,14 @@ impl HttpUrl {
         if host.is_empty() || host.contains('/') || host.contains('\\') {
             return Err("peer URL host is invalid".to_string());
         }
+        if !host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
+        {
+            return Err("peer URL host must be plain ASCII DNS or IPv4 text".to_string());
+        }
+        let host = normalize_peer_url_host(&host)?;
+        validate_peer_url_path(&path)?;
         Ok(Self { host, port, path })
     }
 
@@ -3266,6 +6286,21 @@ impl HttpUrl {
     }
 }
 
+fn validate_peer_url_path(path: &str) -> Result<(), String> {
+    if !path.starts_with('/') {
+        return Err("peer URL path must be absolute".to_string());
+    }
+    if path.contains('\\')
+        || path.contains("..")
+        || path.contains('\n')
+        || path.contains('\r')
+        || path.bytes().any(|byte| byte <= 0x20 || byte == 0x7f)
+    {
+        return Err("peer URL path must be a plain safe path".to_string());
+    }
+    Ok(())
+}
+
 impl std::fmt::Display for HttpUrl {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.port == 80 {
@@ -3274,6 +6309,14 @@ impl std::fmt::Display for HttpUrl {
             write!(formatter, "http://{}:{}{}", self.host, self.port, self.path)
         }
     }
+}
+
+fn normalize_peer_url_host(host: &str) -> Result<String, String> {
+    let normalized = host.trim_end_matches('.').to_ascii_lowercase();
+    if normalized.is_empty() || normalized.starts_with('.') || normalized.contains("..") {
+        return Err("peer URL host is invalid".to_string());
+    }
+    Ok(normalized)
 }
 
 fn reject_project_server_peer_host(host: &str) -> Result<(), String> {
@@ -3291,6 +6334,7 @@ fn reject_project_server_peer_host(host: &str) -> Result<(), String> {
         "tinyrustlm.mirust.com",
         "minimodel.mirust.com",
         "mirust.com",
+        "huggingface.co",
     ];
     if forbidden.contains(&lower.as_str())
         || lower.ends_with(".minimodel.org")
@@ -3298,9 +6342,10 @@ fn reject_project_server_peer_host(host: &str) -> Result<(), String> {
         || lower.ends_with(".slmcomposer.com")
         || lower.ends_with(".lmcomposer.com")
         || lower.ends_with(".mirust.com")
+        || lower.ends_with(".huggingface.co")
     {
         return Err(format!(
-            "peer piece URL host {host} is a project server; project servers never serve model bytes"
+            "peer piece URL host {host} is not a peer; project servers never serve model bytes, and Hugging Face hosts never serve model bytes"
         ));
     }
     Ok(())
@@ -3372,6 +6417,64 @@ fn utc_now() -> Result<String, String> {
     Ok(format_unix_utc(seconds))
 }
 
+fn parse_utc_timestamp_seconds(value: &str, label: &str) -> Result<i64, String> {
+    let bytes = value.as_bytes();
+    let shape_ok = bytes.len() == 20
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes[10] == b'T'
+        && bytes[13] == b':'
+        && bytes[16] == b':'
+        && bytes[19] == b'Z';
+    if !shape_ok {
+        return Err(format!("{label} must be an ISO-like UTC timestamp"));
+    }
+
+    let year = parse_timestamp_digits(bytes, 0, 4, label, "year")?;
+    let month = parse_timestamp_digits(bytes, 5, 7, label, "month")?;
+    let day = parse_timestamp_digits(bytes, 8, 10, label, "day")?;
+    let hour = parse_timestamp_digits(bytes, 11, 13, label, "hour")?;
+    let minute = parse_timestamp_digits(bytes, 14, 16, label, "minute")?;
+    let second = parse_timestamp_digits(bytes, 17, 19, label, "second")?;
+
+    if !(1..=12).contains(&month) {
+        return Err(format!("{label} month must be in 01..12"));
+    }
+    let max_day = days_in_month(year, month);
+    if day < 1 || day > max_day {
+        return Err(format!("{label} day must be valid for the month"));
+    }
+    if hour > 23 {
+        return Err(format!("{label} hour must be in 00..23"));
+    }
+    if minute > 59 {
+        return Err(format!("{label} minute must be in 00..59"));
+    }
+    if second > 59 {
+        return Err(format!("{label} second must be in 00..59"));
+    }
+
+    let days = days_from_civil(year, month, day);
+    Ok(days * 86_400 + hour * 3_600 + minute * 60 + second)
+}
+
+fn parse_timestamp_digits(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    label: &str,
+    component: &str,
+) -> Result<i64, String> {
+    let mut value = 0i64;
+    for byte in &bytes[start..end] {
+        if !byte.is_ascii_digit() {
+            return Err(format!("{label} {component} must be decimal digits"));
+        }
+        value = value * 10 + i64::from(byte - b'0');
+    }
+    Ok(value)
+}
+
 fn format_unix_utc(seconds: i64) -> String {
     let days = seconds.div_euclid(86_400);
     let seconds_of_day = seconds.rem_euclid(86_400);
@@ -3380,6 +6483,16 @@ fn format_unix_utc(seconds: i64) -> String {
     let minute = (seconds_of_day % 3_600) / 60;
     let second = seconds_of_day % 60;
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+}
+
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let year = year - if month <= 2 { 1 } else { 0 };
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let month_prime = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * month_prime + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
 }
 
 fn civil_from_days(days_since_epoch: i64) -> (i64, i64, i64) {
@@ -3394,6 +6507,20 @@ fn civil_from_days(days_since_epoch: i64) -> (i64, i64, i64) {
     let month = mp + if mp < 10 { 3 } else { -9 };
     let year = y + if month <= 2 { 1 } else { 0 };
     (year, month, day)
+}
+
+fn days_in_month(year: i64, month: i64) -> i64 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
+fn is_leap_year(year: i64) -> bool {
+    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }
 
 #[cfg(test)]
@@ -3412,6 +6539,22 @@ mod tests {
     fn formats_unix_epoch_utc() {
         assert_eq!(format_unix_utc(0), "1970-01-01T00:00:00Z");
         assert_eq!(format_unix_utc(1_782_950_400), "2026-07-02T00:00:00Z");
+    }
+
+    #[test]
+    fn rejects_unsafe_peer_url_parts() {
+        assert!(HttpUrl::parse("http://127.0.0.1:8123/peer-pieces/").is_ok());
+        assert!(HttpUrl::parse("http://localhost:8123/peer-pieces/").is_ok());
+
+        for url in [
+            "http://bad host:8123/peer-pieces/",
+            "http://127.0.0.1:8123/peer-pieces/../secret/",
+            "http://127.0.0.1:8123/peer pieces/",
+            "http://127.0.0.1:8123/peer-pieces/\r\nX-Bad: yes",
+            "http://127.0.0.1:8123/peer-pieces\\secret/",
+        ] {
+            assert!(HttpUrl::parse(url).is_err(), "{url} should be rejected");
+        }
     }
 
     #[test]
@@ -3507,6 +6650,19 @@ mod tests {
     }
 
     #[test]
+    fn utc_timestamp_parser_rejects_invalid_calendar_dates() {
+        assert_eq!(
+            parse_utc_timestamp_seconds("1970-01-01T00:00:00Z", "timestamp").unwrap(),
+            0
+        );
+        assert!(parse_utc_timestamp_seconds("2024-02-29T23:59:59Z", "timestamp").is_ok());
+        let error = parse_utc_timestamp_seconds("2026-02-29T00:00:00Z", "timestamp").unwrap_err();
+        assert!(error.contains("day must be valid for the month"));
+        let error = parse_utc_timestamp_seconds("2026-01-01T24:00:00Z", "timestamp").unwrap_err();
+        assert!(error.contains("hour must be in 00..23"));
+    }
+
+    #[test]
     fn exports_and_assembles_peer_pieces_when_fixture_present() {
         let Some(artifact_path) = sibling_q8_fixture() else {
             eprintln!("skipping peer piece round trip test; TinyRustLM fixture not present");
@@ -3554,7 +6710,7 @@ mod tests {
         std::fs::write(&piece_path, piece).unwrap();
         let output = dir.join("assembled-drift.slm");
         let error = assemble_peer_pieces_path(&manifest_path, &piece_dir, &output).unwrap_err();
-        assert!(error.contains("piece.0.sha256"));
+        assert!(error.contains("piece.0.sha256"), "{error}");
         assert!(!output.exists());
     }
 
@@ -3591,11 +6747,12 @@ mod tests {
         std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
         let served_piece_dir = dir.join("served-pieces");
         export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
-        let peer_url = start_peer_piece_server(served_piece_dir, 2);
+        let peer_url = start_peer_piece_server(served_piece_dir, 3);
         let fetched_piece_dir = dir.join("fetched-pieces");
         let fetch = fetch_peer_pieces_http_path(&manifest_path, &peer_url, &fetched_piece_dir)
             .expect("HTTP peer fetch should pass");
         assert_eq!(fetch.piece_count, 1);
+        assert_eq!(fetch.companion_state_status, "not-advertised");
         assert!(std::path::Path::new(&fetch.piece_set_path).exists());
         assert_eq!(
             fetch.artifact_sha256,
@@ -3620,7 +6777,7 @@ mod tests {
         std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
         let served_piece_dir = dir.join("served-pieces");
         export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
-        let peer_url = start_peer_piece_server(served_piece_dir, 2);
+        let peer_url = start_peer_piece_server(served_piece_dir, 3);
         let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
         std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
         let output_dir = dir.join("imported");
@@ -3629,6 +6786,7 @@ mod tests {
             execute_peer_import_request_path(&request_path, &manifest_path, &output_dir).unwrap();
 
         assert_eq!(report.peer_base_url, peer_url);
+        assert_eq!(report.companion_state_status, "not-advertised");
         assert_eq!(report.piece_count, 1);
         assert!(Path::new(&report.piece_dir_path).exists());
         assert!(Path::new(&report.output_artifact_path).exists());
@@ -3640,6 +6798,176 @@ mod tests {
         let receipt = std::fs::read_to_string(&report.receipt_path).unwrap();
         assert!(receipt.contains("slm.validation_status=passed"));
         assert!(receipt.contains("artifact.local_path_hint=tiny-test-model-q8.slm"));
+        assert!(receipt.contains("peer_import.transport=known-direct-http-peer-v0"));
+        assert!(receipt.contains("peer_import.verification_status=passed"));
+        assert!(receipt.contains("peer.base_url="));
+        assert!(receipt.contains("peer.piece_dir_path_hint=tiny-test-model-q8-peer-pieces"));
+        assert!(receipt.contains("peer.piece_set_path_hint=minimodel.peer_piece_set.v0"));
+        assert!(receipt.contains("peer.piece_set_sha256=sha256:"));
+        assert!(receipt.contains("peer.companion_state_status=not-advertised"));
+        assert!(receipt.contains("peer_companion_state_metadata_fetched=false"));
+        assert!(receipt.contains("peer_piece_bytes_fetched=true"));
+        assert!(receipt.contains("artifact.assembled_from_peer_pieces=true"));
+        assert!(receipt.contains("project_server_serves_model_bytes=false"));
+    }
+
+    #[test]
+    fn executes_peer_import_request_validates_companion_state_when_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping companion-aware peer import test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-import-request-companion");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        let served_piece_dir = dir.join("served-pieces");
+        export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
+        let state_path = dir.join("tiny-test-model-q8.peer-companion-state.v0.json");
+        let peer_url = start_peer_companion_server_for_share(
+            manifest_path.clone(),
+            served_piece_dir,
+            state_path,
+            6,
+        );
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
+        let preflight_path = dir.join("tiny-test-model-q8.peer-import.preflight");
+        let output_dir = dir.join("imported");
+
+        let preflight =
+            preflight_peer_import_request_path(&request_path, &manifest_path, &preflight_path)
+                .unwrap();
+        let report =
+            execute_peer_import_request_path(&request_path, &manifest_path, &output_dir).unwrap();
+
+        assert_eq!(report.peer_base_url, peer_url);
+        assert_eq!(report.companion_state_status, "validated");
+        assert!(report.piece_set_sha256.starts_with("sha256:"));
+        assert!(report
+            .companion_state_url
+            .ends_with(PEER_COMPANION_STATE_ROUTE));
+        assert_eq!(report.piece_count, 1);
+        assert_eq!(
+            std::fs::read(&report.output_artifact_path).unwrap(),
+            std::fs::read(artifact_path).unwrap()
+        );
+        let receipt = std::fs::read_to_string(&report.receipt_path).unwrap();
+        let preflight_text = std::fs::read_to_string(&preflight_path).unwrap();
+        assert!(receipt.contains("peer.companion_state_status=validated"));
+        assert!(receipt.contains("peer_companion_state_metadata_fetched=true"));
+        assert!(receipt.contains("peer_piece_bytes_fetched=true"));
+        assert!(receipt.contains("chunks.merkle_root_sha256=sha256:"));
+        let chain = inspect_peer_import_receipt_path(
+            Path::new(&report.receipt_path),
+            &request_path,
+            &preflight_path,
+            &manifest_path,
+            Path::new(&report.output_artifact_path),
+        )
+        .unwrap();
+        assert_eq!(chain.peer_base_url, peer_url);
+        assert_eq!(
+            chain.preflight_sha256,
+            sha256_prefixed(&std::fs::read(&preflight_path).unwrap())
+        );
+        assert_eq!(chain.piece_set_sha256, preflight.piece_set_sha256);
+        assert!(chain.peer_companion_state_metadata_fetched);
+        assert!(chain.peer_piece_bytes_fetched);
+        assert!(chain.artifact_assembled_from_peer_pieces);
+        assert!(!chain.project_server_serves_model_bytes);
+
+        let drift_receipt_path =
+            output_dir.join("tiny-test-model-q8.piece-set-drift.minimodel-receipt");
+        std::fs::write(
+            &drift_receipt_path,
+            receipt.replace(
+                &format!("peer.piece_set_sha256={}", preflight.piece_set_sha256),
+                "peer.piece_set_sha256=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
+        )
+        .unwrap();
+        let error = inspect_peer_import_receipt_path(
+            &drift_receipt_path,
+            &request_path,
+            &preflight_path,
+            &manifest_path,
+            Path::new(&report.output_artifact_path),
+        )
+        .unwrap_err();
+        assert!(error.contains("peer.piece_set_sha256"), "{error}");
+
+        let future_preflight_path =
+            output_dir.join("tiny-test-model-q8.future.peer-import.preflight");
+        let preflight_created_line = preflight_text
+            .lines()
+            .find(|line| line.starts_with("preflight.created_utc="))
+            .expect("preflight includes creation timestamp");
+        std::fs::write(
+            &future_preflight_path,
+            preflight_text.replace(
+                preflight_created_line,
+                "preflight.created_utc=9999-01-01T00:00:00Z",
+            ),
+        )
+        .unwrap();
+        let error = inspect_peer_import_receipt_path(
+            Path::new(&report.receipt_path),
+            &request_path,
+            &future_preflight_path,
+            &manifest_path,
+            Path::new(&report.output_artifact_path),
+        )
+        .unwrap_err();
+        assert!(error.contains("receipt.created_utc"), "{error}");
+        assert!(error.contains("preflight.created_utc"), "{error}");
+    }
+
+    #[test]
+    fn executes_peer_import_request_through_companion_subpath_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!(
+                "skipping companion subpath peer import test; TinyRustLM fixture not present"
+            );
+            return;
+        };
+        let dir = unique_dir("peer-import-request-companion-subpath");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        let served_piece_dir = dir.join("served-pieces");
+        export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
+        let state_path = dir.join("tiny-test-model-q8.peer-companion-state.v0.json");
+        let peer_url = start_peer_companion_server_for_share_with_path(
+            manifest_path.clone(),
+            served_piece_dir,
+            state_path,
+            "peer-pieces",
+            3,
+        );
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
+        let output_dir = dir.join("imported");
+
+        let report =
+            execute_peer_import_request_path(&request_path, &manifest_path, &output_dir).unwrap();
+
+        assert!(peer_url.ends_with("/peer-pieces/"));
+        assert_eq!(report.peer_base_url, peer_url);
+        assert_eq!(report.companion_state_status, "validated");
+        assert!(report
+            .companion_state_url
+            .ends_with("/peer-pieces/minimodel.peer_companion_state.v0.json"));
+        assert_eq!(
+            std::fs::read(&report.output_artifact_path).unwrap(),
+            std::fs::read(artifact_path).unwrap()
+        );
+        let receipt = std::fs::read_to_string(&report.receipt_path).unwrap();
+        assert!(receipt.contains("peer.base_url="));
+        assert!(receipt.contains("/peer-pieces/"));
+        assert!(receipt.contains("peer_piece_bytes_fetched=true"));
     }
 
     #[test]
@@ -3655,7 +6983,95 @@ mod tests {
         std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
         let served_piece_dir = dir.join("served-pieces");
         export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
-        let peer_url = start_peer_piece_server(served_piece_dir, 1);
+        let peer_url = start_peer_piece_server(served_piece_dir, 3);
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        let mut request_value: Value =
+            serde_json::from_str(&peer_import_request_json(&peer_url)).unwrap();
+        let piece_contract = request_value
+            .get_mut("local_peer_piece_contract")
+            .and_then(Value::as_object_mut)
+            .unwrap();
+        piece_contract.remove("metadata_routes");
+        piece_contract.remove("receiver_validation_contract");
+        std::fs::write(
+            &request_path,
+            serde_json::to_string_pretty(&request_value).unwrap(),
+        )
+        .unwrap();
+        let preflight_path = dir.join("tiny-test-model-q8.peer-import.preflight");
+
+        let report =
+            preflight_peer_import_request_path(&request_path, &manifest_path, &preflight_path)
+                .unwrap();
+
+        assert_eq!(report.peer_base_url, peer_url);
+        assert_eq!(report.companion_state_status, "not-advertised");
+        assert_eq!(report.metadata_routes_status, "not-declared");
+        assert_eq!(report.peer_status_route, PEER_STATUS_ROUTE);
+        assert_eq!(report.peer_piece_set_route, PEER_PIECE_SET_ROUTE);
+        assert_eq!(
+            report.peer_companion_state_route,
+            PEER_COMPANION_STATE_ROUTE
+        );
+        assert_eq!(report.receiver_validation_contract_status, "not-declared");
+        assert!(!report.check_peer_status_before_piece_fetch);
+        assert!(!report.preflight_fetches_piece_set_before_pieces);
+        assert!(!report.validate_advertised_companion_state_before_piece_fetch);
+        assert!(!report.import_receipt_required_before_browser_load);
+        assert_eq!(report.piece_count, 1);
+        assert!(preflight_path.exists());
+        let preflight = std::fs::read_to_string(&preflight_path).unwrap();
+        assert!(preflight.contains("preflight.kind=minimodel.peer_import_preflight"));
+        assert!(preflight.contains("metadata_routes.status=not-declared"));
+        assert!(preflight.contains("metadata_routes.peer_status=minimodel.peer_status.v0.json"));
+        assert!(preflight.contains("metadata_routes.peer_piece_set=minimodel.peer_piece_set.v0"));
+        assert!(preflight.contains(
+            "metadata_routes.peer_companion_state=minimodel.peer_companion_state.v0.json"
+        ));
+        assert!(preflight.contains("receiver_validation_contract.status=not-declared"));
+        assert!(
+            preflight.contains("receiver_validation.check_peer_status_before_piece_fetch=false")
+        );
+        assert!(preflight
+            .contains("receiver_validation.preflight_fetches_piece_set_before_pieces=false"));
+        assert!(preflight.contains(
+            "receiver_validation.validate_advertised_companion_state_before_piece_fetch=false"
+        ));
+        assert!(preflight
+            .contains("receiver_validation.import_receipt_required_before_browser_load=false"));
+        assert!(preflight.contains("piece_set.validation_status=passed"));
+        assert!(preflight.contains("piece_set.sha256=sha256:"));
+        assert!(preflight.contains("peer_piece_set_metadata_fetched=true"));
+        assert!(preflight.contains("peer.companion_state_status=not-advertised"));
+        assert!(preflight.contains("peer_companion_state_metadata_fetched=false"));
+        assert!(preflight.contains("peer_piece_bytes_fetched=false"));
+        assert!(preflight.contains("artifact_bytes_fetched=false"));
+        assert!(preflight.contains("project_server_serves_model_bytes=false"));
+        assert!(preflight.contains(
+            "required_next_gate=run-import-peer-request-fetch-pieces-assemble-rust-reverify"
+        ));
+    }
+
+    #[test]
+    fn preflights_peer_import_request_validates_companion_state_when_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping companion-aware peer import preflight test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-import-preflight-companion");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        let served_piece_dir = dir.join("served-pieces");
+        export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
+        let state_path = dir.join("tiny-test-model-q8.peer-companion-state.v0.json");
+        let peer_url = start_peer_companion_server_for_share(
+            manifest_path.clone(),
+            served_piece_dir,
+            state_path,
+            2,
+        );
         let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
         std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
         let preflight_path = dir.join("tiny-test-model-q8.peer-import.preflight");
@@ -3665,18 +7081,114 @@ mod tests {
                 .unwrap();
 
         assert_eq!(report.peer_base_url, peer_url);
-        assert_eq!(report.piece_count, 1);
-        assert!(preflight_path.exists());
+        assert_eq!(report.companion_state_status, "validated");
+        assert_eq!(report.metadata_routes_status, "validated");
+        assert_eq!(report.peer_status_route, PEER_STATUS_ROUTE);
+        assert_eq!(report.peer_piece_set_route, PEER_PIECE_SET_ROUTE);
+        assert_eq!(
+            report.peer_companion_state_route,
+            PEER_COMPANION_STATE_ROUTE
+        );
+        assert_eq!(report.receiver_validation_contract_status, "validated");
+        assert!(report.check_peer_status_before_piece_fetch);
+        assert!(report.preflight_fetches_piece_set_before_pieces);
+        assert!(report.validate_advertised_companion_state_before_piece_fetch);
+        assert!(report.import_receipt_required_before_browser_load);
         let preflight = std::fs::read_to_string(&preflight_path).unwrap();
-        assert!(preflight.contains("preflight.kind=minimodel.peer_import_preflight"));
-        assert!(preflight.contains("piece_set.validation_status=passed"));
-        assert!(preflight.contains("peer_piece_set_metadata_fetched=true"));
+        assert!(preflight.contains("peer.companion_state_status=validated"));
+        assert!(preflight.contains("metadata_routes.status=validated"));
+        assert!(preflight.contains("metadata_routes.peer_status=minimodel.peer_status.v0.json"));
+        assert!(preflight.contains("metadata_routes.peer_piece_set=minimodel.peer_piece_set.v0"));
+        assert!(preflight.contains(
+            "metadata_routes.peer_companion_state=minimodel.peer_companion_state.v0.json"
+        ));
+        assert!(preflight.contains("receiver_validation_contract.status=validated"));
+        assert!(preflight.contains("receiver_validation.check_peer_status_before_piece_fetch=true"));
+        assert!(preflight
+            .contains("receiver_validation.preflight_fetches_piece_set_before_pieces=true"));
+        assert!(preflight.contains(
+            "receiver_validation.validate_advertised_companion_state_before_piece_fetch=true"
+        ));
+        assert!(preflight
+            .contains("receiver_validation.import_receipt_required_before_browser_load=true"));
+        assert!(preflight.contains("peer_companion_state_metadata_fetched=true"));
         assert!(preflight.contains("peer_piece_bytes_fetched=false"));
         assert!(preflight.contains("artifact_bytes_fetched=false"));
-        assert!(preflight.contains("project_server_serves_model_bytes=false"));
-        assert!(preflight.contains(
-            "required_next_gate=run-import-peer-request-fetch-pieces-assemble-rust-reverify"
-        ));
+
+        let inspection =
+            inspect_peer_import_preflight_path(&preflight_path, &request_path, &manifest_path)
+                .unwrap();
+        assert_eq!(inspection.peer_base_url, peer_url);
+        assert_eq!(inspection.companion_state_status, "validated");
+        assert_eq!(inspection.metadata_routes_status, "validated");
+        assert_eq!(inspection.receiver_validation_contract_status, "validated");
+        assert!(inspection.peer_piece_set_metadata_fetched);
+        assert!(inspection.peer_companion_state_metadata_fetched);
+        assert!(!inspection.peer_piece_bytes_fetched);
+        assert!(!inspection.artifact_bytes_fetched);
+
+        let drift_path = dir.join("tiny-test-model-q8.drift.peer-import.preflight");
+        std::fs::write(
+            &drift_path,
+            preflight.replace(
+                "artifact_bytes_fetched=false",
+                "artifact_bytes_fetched=true",
+            ),
+        )
+        .unwrap();
+        let error = inspect_peer_import_preflight_path(&drift_path, &request_path, &manifest_path)
+            .unwrap_err();
+        assert!(error.contains("artifact_bytes_fetched mismatch"));
+    }
+
+    #[test]
+    fn preflight_rejects_peer_companion_state_drift_when_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping companion drift preflight test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-import-preflight-companion-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        let served_piece_dir = dir.join("served-pieces");
+        export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
+        let state_path = dir.join("tiny-test-model-q8.peer-companion-state.v0.json");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let peer_url = format!("http://{address}/");
+        write_peer_companion_state_path(&manifest_path, &served_piece_dir, &state_path, &peer_url)
+            .unwrap();
+        let drifted_state = std::fs::read_to_string(&state_path)
+            .unwrap()
+            .replace("\"piece_count\": 1", "\"piece_count\": 2");
+        std::fs::write(&state_path, drifted_state).unwrap();
+        let mut extra_files = BTreeMap::new();
+        extra_files.insert(
+            PEER_COMPANION_STATE_ROUTE.to_string(),
+            ServedPeerExtra::Path(state_path),
+        );
+        std::thread::spawn(move || {
+            serve_peer_piece_dir_http_listener_with_extra(
+                &served_piece_dir,
+                listener,
+                Some(2),
+                extra_files,
+                "/",
+            )
+            .unwrap();
+        });
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
+        let preflight_path = dir.join("tiny-test-model-q8.peer-import.preflight");
+
+        let error =
+            preflight_peer_import_request_path(&request_path, &manifest_path, &preflight_path)
+                .unwrap_err();
+
+        assert!(error.contains("peer companion state pieces.piece_count mismatch"));
+        assert!(!preflight_path.exists());
     }
 
     #[test]
@@ -3755,6 +7267,373 @@ mod tests {
     }
 
     #[test]
+    fn writes_and_inspects_peer_contact_card() {
+        let dir = unique_dir("peer-contact-card");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let card_path = dir.join("known-peer.card.json");
+
+        let write_report = write_peer_contact_card_path(
+            &card_path,
+            "http://127.0.0.1:8123/peer-pieces",
+            Some("Local lab peer"),
+        )
+        .unwrap();
+        let inspect_report = inspect_peer_contact_card_path(&card_path).unwrap();
+        let text = std::fs::read_to_string(&card_path).unwrap();
+        let value: Value = serde_json::from_str(&text).unwrap();
+
+        assert_eq!(write_report.peer_label, "Local lab peer");
+        assert_eq!(inspect_report.peer_label, "Local lab peer");
+        assert_eq!(
+            inspect_report.peer_base_url,
+            "http://127.0.0.1:8123/peer-pieces/"
+        );
+        assert_eq!(
+            value["card_kind"].as_str(),
+            Some("minimodel.peer_contact_card")
+        );
+        assert_eq!(
+            value["transfer_protocol"].as_str(),
+            Some("direct-http-piece-server-v0")
+        );
+        assert_eq!(value["boundary"]["metadata_only"].as_bool(), Some(true));
+        assert_eq!(
+            value["project_server_serves_model_bytes"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            value["project_server_proxies_model_bytes"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            value["boundary"]["peer_contact_card_embeds_model_bytes"].as_bool(),
+            Some(false)
+        );
+        assert!(!text.contains(".slm"));
+        assert!(!text.contains("artifact_project_server_url"));
+    }
+
+    #[test]
+    fn normalizes_known_peer_root_dot_and_host_case() {
+        let normalized =
+            normalize_known_peer_base_url("http://Peer.Example.test.:8123/peer-pieces").unwrap();
+
+        assert_eq!(normalized, "http://peer.example.test:8123/peer-pieces/");
+    }
+
+    #[test]
+    fn rejects_known_peer_project_huggingface_and_malformed_hosts() {
+        let cases = [
+            ("project-root-dot", "http://MiniModel.org./peer-pieces/"),
+            (
+                "project-subdomain",
+                "http://catalog.minimodel.org:8123/peer-pieces/",
+            ),
+            ("huggingface-root", "http://huggingface.co/peer-pieces/"),
+            ("huggingface-www", "http://www.huggingface.co/peer-pieces/"),
+            (
+                "huggingface-subdomain",
+                "http://cdn.huggingface.co:8123/peer-pieces/",
+            ),
+        ];
+        for (label, peer_url) in cases {
+            let error = normalize_known_peer_base_url(peer_url).unwrap_err();
+            assert!(error.contains("not a peer"), "{label}: {error}");
+            assert!(
+                error.contains("never serve model bytes"),
+                "{label}: {error}"
+            );
+        }
+
+        for peer_url in [
+            "http://.example.com/peer-pieces/",
+            "http://example..com/peer-pieces/",
+        ] {
+            let error = normalize_known_peer_base_url(peer_url).unwrap_err();
+            assert!(error.contains("host is invalid"), "{peer_url}: {error}");
+        }
+    }
+
+    #[test]
+    fn rejects_peer_contact_card_project_server_before_output() {
+        let dir = unique_dir("peer-contact-card-project-host");
+        let _ = std::fs::remove_dir_all(&dir);
+        let card_path = dir.join("known-peer.card.json");
+
+        let error = write_peer_contact_card_path(
+            &card_path,
+            "http://MiniModel.org/peer-pieces",
+            Some("bad peer"),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("project server"));
+        assert!(!card_path.exists());
+    }
+
+    #[test]
+    fn rejects_peer_contact_card_project_and_huggingface_hosts_before_output() {
+        let dir = unique_dir("peer-contact-card-blocked-hosts");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let cases = [
+            ("root-dot", "http://MiniModel.org./peer-pieces/"),
+            ("subdomain", "http://catalog.minimodel.org/peer-pieces/"),
+            ("huggingface", "http://huggingface.co/peer-pieces/"),
+            (
+                "huggingface-subdomain",
+                "http://cdn.huggingface.co/peer-pieces/",
+            ),
+        ];
+        for (label, peer_url) in cases {
+            let card_path = dir.join(format!("{label}.card.json"));
+            let error =
+                write_peer_contact_card_path(&card_path, peer_url, Some("bad peer")).unwrap_err();
+
+            assert!(error.contains("project server"), "{label}: {error}");
+            assert!(
+                error.contains("never serve model bytes"),
+                "{label}: {error}"
+            );
+            assert!(!card_path.exists(), "{label} unexpectedly wrote a card");
+        }
+    }
+
+    #[test]
+    fn rejects_peer_contact_card_boundary_drift() {
+        let dir = unique_dir("peer-contact-card-boundary-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let card_path = dir.join("known-peer.card.json");
+        write_peer_contact_card_path(&card_path, "http://127.0.0.1:8123/", None).unwrap();
+        let mut value: Value =
+            serde_json::from_str(&std::fs::read_to_string(&card_path).unwrap()).unwrap();
+        value["boundary"]["project_server_serves_model_bytes"] = Value::Bool(true);
+        std::fs::write(&card_path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+
+        let error = inspect_peer_contact_card_path(&card_path).unwrap_err();
+
+        assert!(error.contains("project_server_serves_model_bytes"));
+        assert!(error.contains("must be false"));
+    }
+
+    #[test]
+    fn serves_peer_status_route_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer status serve test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-status-serve");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let piece_dir = dir.join("tiny-test-model-q8.peer-pieces");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        export_peer_pieces_path(&manifest_path, &artifact_path, &piece_dir).unwrap();
+
+        let expected = inspect_peer_piece_dir_path(&manifest_path, &piece_dir).unwrap();
+        let peer_url = start_peer_status_server(manifest_path, piece_dir, 2);
+        let status_url = HttpUrl::parse(&format!("{peer_url}{PEER_STATUS_ROUTE}")).unwrap();
+        let status = http_get_bytes(&status_url, 32 * 1024).unwrap();
+        let value: Value = serde_json::from_slice(&status).unwrap();
+        assert_eq!(value["status_kind"].as_str(), Some("minimodel.peer_status"));
+        assert_eq!(
+            value["pieces"]["piece_set_sha256"].as_str(),
+            Some(expected.piece_set_sha256.as_str())
+        );
+        assert_eq!(
+            value["boundary"]["peer_status_embeds_model_bytes"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            value["boundary"]["peer_status_embeds_piece_bytes"].as_bool(),
+            Some(false)
+        );
+
+        let piece_set_url =
+            HttpUrl::parse(&format!("{peer_url}minimodel.peer_piece_set.v0")).unwrap();
+        let piece_set = http_get_bytes(&piece_set_url, 64 * 1024).unwrap();
+        let piece_set_text = std::str::from_utf8(&piece_set).unwrap();
+        assert!(piece_set_text.contains("piece_set.kind=minimodel.peer_piece_set.v0"));
+    }
+
+    #[test]
+    fn checks_peer_status_metadata_only_over_local_http_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer status check test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-status-check");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let piece_dir = dir.join("tiny-test-model-q8.peer-pieces");
+        let status_report_path = dir.join("tiny-test-model-q8.peer-status-check.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        export_peer_pieces_path(&manifest_path, &artifact_path, &piece_dir).unwrap();
+        let peer_url = start_peer_status_server(manifest_path.clone(), piece_dir, 1);
+
+        let report =
+            check_peer_status_path(&manifest_path, &peer_url, &status_report_path).unwrap();
+
+        assert_eq!(report.peer_base_url, peer_url);
+        assert_eq!(report.model_id, "tinyrustlm/tiny-test-model-q8");
+        assert!(report.piece_set_sha256.starts_with("sha256:"));
+        let status_report: Value =
+            serde_json::from_str(&std::fs::read_to_string(&status_report_path).unwrap()).unwrap();
+        assert_eq!(
+            status_report["check_kind"].as_str(),
+            Some("minimodel.peer_status_check")
+        );
+        assert_eq!(status_report["status"].as_str(), Some("validated"));
+        assert_eq!(
+            status_report["boundary"]["peer_piece_bytes_fetched"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            status_report["boundary"]["artifact_bytes_fetched"].as_bool(),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn checks_peer_status_under_peer_url_subpath_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer status subpath check test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-status-check-subpath");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let piece_dir = dir.join("tiny-test-model-q8.peer-pieces");
+        let status_report_path = dir.join("tiny-test-model-q8.peer-status-check.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        export_peer_pieces_path(&manifest_path, &artifact_path, &piece_dir).unwrap();
+        let peer_url =
+            start_peer_status_server_with_path(manifest_path.clone(), piece_dir, "peer-pieces", 1);
+
+        let report =
+            check_peer_status_path(&manifest_path, &peer_url, &status_report_path).unwrap();
+
+        assert!(peer_url.ends_with("/peer-pieces/"));
+        assert_eq!(report.peer_base_url, peer_url);
+        assert!(report
+            .status_url
+            .ends_with("/peer-pieces/minimodel.peer_status.v0.json"));
+        let status_report: Value =
+            serde_json::from_str(&std::fs::read_to_string(&status_report_path).unwrap()).unwrap();
+        assert_eq!(status_report["status"].as_str(), Some("validated"));
+        assert_eq!(
+            status_report["peer_base_url"].as_str(),
+            Some(peer_url.as_str())
+        );
+    }
+
+    #[test]
+    fn rejects_peer_status_artifact_drift_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer status drift test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-status-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let piece_dir = dir.join("tiny-test-model-q8.peer-pieces");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        export_peer_pieces_path(&manifest_path, &artifact_path, &piece_dir).unwrap();
+        let expected = inspect_peer_piece_dir_path(&manifest_path, &piece_dir).unwrap();
+        let mut status = peer_status_value(&expected, "http://127.0.0.1:8123/", None).unwrap();
+        status["artifact"]["sha256"] = Value::String(
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        );
+
+        let error =
+            validate_peer_status_value(&status, &expected, "http://127.0.0.1:8123/").unwrap_err();
+
+        assert!(error.contains("artifact.sha256 mismatch"));
+    }
+
+    #[test]
+    fn serves_peer_companion_state_route_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer companion serve test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-companion-serve");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let piece_dir = dir.join("tiny-test-model-q8.peer-pieces");
+        let state_path = dir.join("tiny-test-model-q8.peer-companion-state.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        export_peer_pieces_path(&manifest_path, &artifact_path, &piece_dir).unwrap();
+        write_peer_companion_state_path(
+            &manifest_path,
+            &piece_dir,
+            &state_path,
+            "http://127.0.0.1:8123/",
+        )
+        .unwrap();
+        std::fs::write(
+            piece_dir.join("unlisted-companion-leak.slm"),
+            b"do not serve",
+        )
+        .unwrap();
+
+        let peer_url = start_peer_companion_server(state_path, manifest_path, piece_dir, 3);
+        let state_url =
+            HttpUrl::parse(&format!("{peer_url}minimodel.peer_companion_state.v0.json")).unwrap();
+        let state = http_get_bytes(&state_url, 32 * 1024).unwrap();
+        let state_text = std::str::from_utf8(&state).unwrap();
+        assert!(state_text.contains("\"state_kind\": \"minimodel.peer_companion_state\""));
+        assert!(state_text.contains("\"peer_piece_bytes_in_state\": false"));
+
+        let piece_set_url =
+            HttpUrl::parse(&format!("{peer_url}minimodel.peer_piece_set.v0")).unwrap();
+        let piece_set = http_get_bytes(&piece_set_url, 64 * 1024).unwrap();
+        let piece_set_text = std::str::from_utf8(&piece_set).unwrap();
+        assert!(piece_set_text.contains("piece_set.kind=minimodel.peer_piece_set.v0"));
+
+        let leaked_url = HttpUrl::parse(&format!("{peer_url}unlisted-companion-leak.slm")).unwrap();
+        let error = http_get_bytes(&leaked_url, 1024).unwrap_err();
+        assert!(error.contains("404 Not Found"));
+    }
+
+    #[test]
+    fn rejects_peer_companion_state_piece_count_drift_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer companion state drift test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-companion-state-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let piece_dir = dir.join("tiny-test-model-q8.peer-pieces");
+        let state_path = dir.join("tiny-test-model-q8.peer-companion-state.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        export_peer_pieces_path(&manifest_path, &artifact_path, &piece_dir).unwrap();
+        write_peer_companion_state_path(
+            &manifest_path,
+            &piece_dir,
+            &state_path,
+            "http://127.0.0.1:8123/",
+        )
+        .unwrap();
+        let mut value: Value =
+            serde_json::from_str(&std::fs::read_to_string(&state_path).unwrap()).unwrap();
+        value["pieces"]["piece_count"] = Value::Number(2.into());
+        std::fs::write(&state_path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+
+        let error =
+            inspect_peer_companion_state_path(&state_path, &manifest_path, &piece_dir).unwrap_err();
+        assert!(error.contains("pieces.piece_count mismatch"));
+    }
+
+    #[test]
     fn rejects_peer_import_request_artifact_drift_before_fetch_when_fixture_present() {
         let Some(_artifact_path) = sibling_q8_fixture() else {
             eprintln!("skipping peer import request drift test; TinyRustLM fixture not present");
@@ -3784,6 +7663,54 @@ mod tests {
     }
 
     #[test]
+    fn rejects_peer_import_request_metadata_route_drift_before_manifest_read() {
+        let dir = unique_dir("peer-import-route-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        let output_dir = dir.join("imported");
+        let request = peer_import_request_json("http://127.0.0.1:9/").replace(
+            "\"peer_companion_state\": \"minimodel.peer_companion_state.v0.json\"",
+            "\"peer_companion_state\": \"../minimodel.peer_companion_state.v0.json\"",
+        );
+        std::fs::write(&request_path, request).unwrap();
+
+        let error = execute_peer_import_request_path(
+            &request_path,
+            Path::new("missing-manifest"),
+            &output_dir,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("peer import metadata route peer_companion_state"));
+        assert!(!output_dir.exists());
+    }
+
+    #[test]
+    fn rejects_peer_import_request_receiver_contract_drift_before_manifest_read() {
+        let dir = unique_dir("peer-import-receiver-contract-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
+        let output_dir = dir.join("imported");
+        let request = peer_import_request_json("http://127.0.0.1:9/").replace(
+            "\"validate_advertised_companion_state_before_piece_fetch\": true",
+            "\"validate_advertised_companion_state_before_piece_fetch\": false",
+        );
+        std::fs::write(&request_path, request).unwrap();
+
+        let error = execute_peer_import_request_path(
+            &request_path,
+            Path::new("missing-manifest"),
+            &output_dir,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("validate_advertised_companion_state_before_piece_fetch"));
+        assert!(!output_dir.exists());
+    }
+
+    #[test]
     fn rejects_http_peer_piece_payload_drift_when_fixture_present() {
         let Some(artifact_path) = sibling_q8_fixture() else {
             eprintln!("skipping HTTP peer drift test; TinyRustLM fixture not present");
@@ -3800,11 +7727,11 @@ mod tests {
         let mut piece = std::fs::read(&piece_path).unwrap();
         piece[0] ^= 0x01;
         std::fs::write(&piece_path, piece).unwrap();
-        let peer_url = start_peer_piece_server(served_piece_dir, 2);
+        let peer_url = start_peer_piece_server(served_piece_dir, 3);
         let fetched_piece_dir = dir.join("fetched-pieces");
         let error =
             fetch_peer_pieces_http_path(&manifest_path, &peer_url, &fetched_piece_dir).unwrap_err();
-        assert!(error.contains("piece.0.sha256"));
+        assert!(error.contains("piece.0.sha256"), "{error}");
         assert!(!fetched_piece_dir.exists());
     }
 
@@ -3837,20 +7764,40 @@ mod tests {
         let dir = unique_dir("peer-import-project-host");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
-        std::fs::write(
-            &request_path,
-            peer_import_request_json("http://MiniModel.org/peer-pieces/"),
-        )
-        .unwrap();
-        let error = execute_peer_import_request_path(
-            &request_path,
-            Path::new("missing-manifest"),
-            &dir.join("imported"),
-        )
-        .unwrap_err();
-        assert!(error.contains("project server"));
-        assert!(error.contains("never serve model bytes"));
+        let cases = [
+            ("project-root-dot", "http://MiniModel.org./peer-pieces/"),
+            (
+                "project-subdomain",
+                "http://catalog.minimodel.org:8123/peer-pieces/",
+            ),
+            ("huggingface-root", "http://huggingface.co/peer-pieces/"),
+            (
+                "huggingface-subdomain",
+                "http://cdn.huggingface.co:8123/peer-pieces/",
+            ),
+        ];
+
+        for (label, peer_url) in cases {
+            let request_path = dir.join(format!(
+                "tiny-test-model-q8.{label}.minimodel-peer-import-request.json"
+            ));
+            let output_dir = dir.join(format!("imported-{label}"));
+            std::fs::write(&request_path, peer_import_request_json(peer_url)).unwrap();
+
+            let error = execute_peer_import_request_path(
+                &request_path,
+                Path::new("missing-manifest"),
+                &output_dir,
+            )
+            .unwrap_err();
+
+            assert!(error.contains("project server"), "{label}: {error}");
+            assert!(
+                error.contains("never serve model bytes"),
+                "{label}: {error}"
+            );
+            assert!(!output_dir.exists(), "{label} unexpectedly wrote output");
+        }
     }
 
     #[test]
@@ -4515,6 +8462,106 @@ mod tests {
     }
 
     #[test]
+    fn rejects_peer_source_announcement_peer_offer_route_drift() {
+        let dir = unique_dir("peer-source-announcement-route-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let announcement_path = dir.join("tiny-test-model-q8.peer-source-announcement.v0.json");
+        let merged_entry_path = dir.join("tiny-test-model-q8.catalog-entry.announced-peer.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            None,
+            None,
+        )
+        .unwrap();
+        write_peer_source_announcement_path(
+            &catalog_entry_path,
+            &announcement_path,
+            "http://127.0.0.1:8123/peer-pieces",
+        )
+        .unwrap();
+
+        let mut value: Value =
+            serde_json::from_str(&std::fs::read_to_string(&announcement_path).unwrap()).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "peer_offer_route".to_string(),
+            Value::String("different.minimodel-peer-offer".to_string()),
+        );
+        std::fs::write(
+            &announcement_path,
+            serde_json::to_string_pretty(&value).unwrap(),
+        )
+        .unwrap();
+
+        let error = apply_peer_source_announcements_path(
+            &catalog_entry_path,
+            &merged_entry_path,
+            &[announcement_path],
+        )
+        .unwrap_err();
+
+        assert!(error.contains("peer_offer_route"));
+        assert!(!merged_entry_path.exists());
+    }
+
+    #[test]
+    fn rejects_peer_source_announcement_peer_offer_chunk_count_drift() {
+        let dir = unique_dir("peer-source-announcement-chunk-count-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let announcement_path = dir.join("tiny-test-model-q8.peer-source-announcement.v0.json");
+        let merged_entry_path = dir.join("tiny-test-model-q8.catalog-entry.announced-peer.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            None,
+            None,
+        )
+        .unwrap();
+        write_peer_source_announcement_path(
+            &catalog_entry_path,
+            &announcement_path,
+            "http://127.0.0.1:8123/peer-pieces",
+        )
+        .unwrap();
+
+        let mut value: Value =
+            serde_json::from_str(&std::fs::read_to_string(&announcement_path).unwrap()).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "peer_offer_chunk_count".to_string(),
+            Value::Number(99.into()),
+        );
+        std::fs::write(
+            &announcement_path,
+            serde_json::to_string_pretty(&value).unwrap(),
+        )
+        .unwrap();
+
+        let error = apply_peer_source_announcements_path(
+            &catalog_entry_path,
+            &merged_entry_path,
+            &[announcement_path],
+        )
+        .unwrap_err();
+
+        assert!(error.contains("peer_offer_chunk_count"));
+        assert!(!merged_entry_path.exists());
+    }
+
+    #[test]
     fn rejects_catalog_snapshot_with_unmatched_peer_source_announcement() {
         let dir = unique_dir("peer-source-announcement-unmatched");
         let _ = std::fs::remove_dir_all(&dir);
@@ -4664,6 +8711,45 @@ mod tests {
 
         assert!(error.contains("artifact_project_server_url"));
         assert!(error.contains("metadata only"));
+    }
+
+    #[test]
+    fn rejects_catalog_snapshot_incomplete_peer_offer_proof() {
+        let dir = unique_dir("catalog-snapshot-incomplete-peer-proof");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let peer_offer_path = dir.join("tiny-test-model-q8.minimodel-peer-offer");
+        let catalog_entry_path = dir.join("tiny-test-model-q8.catalog-entry.v0.json");
+        let catalog_snapshot_path = dir.join("models.v0.json");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        std::fs::write(&peer_offer_path, REAL_Q8_PEER_OFFER).unwrap();
+        write_catalog_entry_path(
+            &manifest_path,
+            &peer_offer_path,
+            &catalog_entry_path,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let mut value: Value =
+            serde_json::from_str(&std::fs::read_to_string(&catalog_entry_path).unwrap()).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("peer_offer_merkle_root_sha256");
+        std::fs::write(
+            &catalog_entry_path,
+            serde_json::to_string_pretty(&value).unwrap(),
+        )
+        .unwrap();
+
+        let error =
+            write_catalog_snapshot_path(&catalog_snapshot_path, &[catalog_entry_path]).unwrap_err();
+
+        assert!(error.contains("peer_offer_merkle_root_sha256"));
+        assert!(!catalog_snapshot_path.exists());
     }
 
     #[test]
@@ -4880,5 +8966,107 @@ mod tests {
             serve_peer_piece_dir_http_listener(&root, listener, Some(request_count)).unwrap();
         });
         format!("http://{address}/")
+    }
+
+    fn start_peer_status_server(
+        manifest_path: PathBuf,
+        piece_dir: PathBuf,
+        request_count: usize,
+    ) -> String {
+        start_peer_status_server_with_path(manifest_path, piece_dir, "", request_count)
+    }
+
+    fn start_peer_status_server_with_path(
+        manifest_path: PathBuf,
+        piece_dir: PathBuf,
+        path_prefix: &str,
+        request_count: usize,
+    ) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let normalized_prefix = path_prefix.trim_matches('/');
+        let peer_url = if normalized_prefix.is_empty() {
+            format!("http://{address}/")
+        } else {
+            format!("http://{address}/{normalized_prefix}/")
+        };
+        let peer_url_for_thread = peer_url.clone();
+        std::thread::spawn(move || {
+            serve_peer_pieces_http_listener(
+                &manifest_path,
+                &piece_dir,
+                listener,
+                Some(request_count),
+                &peer_url_for_thread,
+            )
+            .unwrap();
+        });
+        peer_url
+    }
+
+    fn start_peer_companion_server(
+        state_path: PathBuf,
+        manifest_path: PathBuf,
+        piece_dir: PathBuf,
+        request_count: usize,
+    ) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            serve_peer_companion_http_listener(
+                &state_path,
+                &manifest_path,
+                &piece_dir,
+                listener,
+                Some(request_count),
+            )
+            .unwrap();
+        });
+        format!("http://{address}/")
+    }
+
+    fn start_peer_companion_server_for_share(
+        manifest_path: PathBuf,
+        piece_dir: PathBuf,
+        state_path: PathBuf,
+        request_count: usize,
+    ) -> String {
+        start_peer_companion_server_for_share_with_path(
+            manifest_path,
+            piece_dir,
+            state_path,
+            "",
+            request_count,
+        )
+    }
+
+    fn start_peer_companion_server_for_share_with_path(
+        manifest_path: PathBuf,
+        piece_dir: PathBuf,
+        state_path: PathBuf,
+        path_prefix: &str,
+        request_count: usize,
+    ) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let normalized_prefix = path_prefix.trim_matches('/');
+        let peer_url = if normalized_prefix.is_empty() {
+            format!("http://{address}/")
+        } else {
+            format!("http://{address}/{normalized_prefix}/")
+        };
+        write_peer_companion_state_path(&manifest_path, &piece_dir, &state_path, &peer_url)
+            .unwrap();
+        std::thread::spawn(move || {
+            serve_peer_companion_http_listener(
+                &state_path,
+                &manifest_path,
+                &piece_dir,
+                listener,
+                Some(request_count),
+            )
+            .unwrap();
+        });
+        peer_url
     }
 }

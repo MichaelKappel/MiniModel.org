@@ -33,12 +33,29 @@
     "expected_peer_base_url": "http://127.0.0.1:8123/",
     "expected_piece_dir": "tiny-test-model-q8-peer-pieces",
     "assembled_output_slm": "tiny-test-model-q8.slm",
+    "metadata_routes": {
+      "peer_status": "minimodel.peer_status.v0.json",
+      "peer_piece_set": "minimodel.peer_piece_set.v0",
+      "peer_companion_state": "minimodel.peer_companion_state.v0.json"
+    },
+    "receiver_validation_contract": {
+      "check_peer_status_before_piece_fetch": true,
+      "preflight_fetches_piece_set_before_pieces": true,
+      "validate_advertised_companion_state_before_piece_fetch": true,
+      "import_receipt_required_before_browser_load": true
+    },
     "peer_side_commands": [
       "minimodel export-peer-pieces <manifest> <artifact.slm> <piece-dir>",
       "minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>"
     ],
     "rust_commands": [
-      "minimodel import-peer-request <request-json> <manifest> <output-dir>"
+      "minimodel inspect-peer-import-request <request-json> <manifest>",
+      "minimodel check-peer-status <manifest> <known-peer-base-url> <output-json>",
+      "minimodel preflight-peer-import-request <request-json> <manifest> <output.preflight>",
+      "minimodel inspect-peer-import-preflight <output.preflight> <request-json> <manifest>",
+      "minimodel import-peer-request <request-json> <manifest> <output-dir>",
+      "minimodel inspect-import-receipt <receipt.minimodel-receipt> <manifest> <artifact.slm>",
+      "minimodel inspect-peer-import-receipt <receipt.minimodel-receipt> <request-json> <output.preflight> <manifest> <artifact.slm>"
     ]
   },
   "boundary": {

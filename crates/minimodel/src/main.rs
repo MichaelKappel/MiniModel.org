@@ -61,6 +61,110 @@ fn run() -> Result<(), String> {
             println!("manifest.sha256: {}", report.manifest_sha256);
             println!("artifact.sha256: {}", report.artifact_sha256);
         }
+        "inspect-import-receipt" => {
+            let receipt = one_arg(&mut args, "receipt.minimodel-receipt")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            let artifact = one_arg(&mut args, "artifact.slm")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_import_receipt_path(
+                Path::new(&receipt),
+                Path::new(&manifest),
+                Path::new(&artifact),
+            )?;
+            println!("MiniModel import receipt validation: PASS");
+            println!("receipt: {}", report.receipt_path);
+            println!("manifest: {manifest}");
+            println!("artifact: {}", report.artifact_path);
+            println!("model.id: {}", report.model_id);
+            println!("bytes: {}", report.artifact_byte_count);
+            println!("receipt.sha256: {}", report.receipt_sha256);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("slm.model_shape: {}", report.slm_model_shape);
+            println!("slm.quantization: {}", report.slm_quantization);
+            println!("peer_import: {}", report.peer_import);
+            if let Some(peer_base_url) = report.peer_base_url {
+                println!("peer_base_url: {peer_base_url}");
+            }
+            if let Some(companion_state_status) = report.companion_state_status {
+                println!("companion_state_status: {companion_state_status}");
+            }
+            if let Some(piece_count) = report.piece_count {
+                println!("piece_count: {piece_count}");
+            }
+            if let Some(merkle_root_sha256) = report.merkle_root_sha256 {
+                println!("chunks.merkle_root_sha256: {merkle_root_sha256}");
+            }
+            println!(
+                "peer_piece_bytes_fetched: {}",
+                report.peer_piece_bytes_fetched
+            );
+            println!(
+                "artifact.assembled_from_peer_pieces: {}",
+                report.artifact_assembled_from_peer_pieces
+            );
+        }
+        "inspect-peer-import-receipt" => {
+            let receipt = one_arg(&mut args, "receipt.minimodel-receipt")?;
+            let request_json = one_arg(&mut args, "request-json")?;
+            let preflight = one_arg(&mut args, "preflight")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            let artifact = one_arg(&mut args, "artifact.slm")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_peer_import_receipt_path(
+                Path::new(&receipt),
+                Path::new(&request_json),
+                Path::new(&preflight),
+                Path::new(&manifest),
+                Path::new(&artifact),
+            )?;
+            println!("MiniModel peer import receipt chain validation: PASS");
+            println!("receipt: {}", report.receipt_path);
+            println!("request: {}", report.request_path);
+            println!("preflight: {}", report.preflight_path);
+            println!("manifest: {manifest}");
+            println!("artifact: {}", report.artifact_path);
+            println!("model.id: {}", report.model_id);
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("companion_state_url: {}", report.companion_state_url);
+            println!("companion_state_status: {}", report.companion_state_status);
+            println!("piece_set.sha256: {}", report.piece_set_sha256);
+            println!("piece_count: {}", report.piece_count);
+            println!("receipt.sha256: {}", report.receipt_sha256);
+            println!("request.sha256: {}", report.request_sha256);
+            println!("preflight.sha256: {}", report.preflight_sha256);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+            println!(
+                "peer_piece_set_metadata_fetched: {}",
+                report.peer_piece_set_metadata_fetched
+            );
+            println!(
+                "peer_companion_state_metadata_fetched: {}",
+                report.peer_companion_state_metadata_fetched
+            );
+            println!(
+                "peer_piece_bytes_fetched: {}",
+                report.peer_piece_bytes_fetched
+            );
+            println!(
+                "artifact.assembled_from_peer_pieces: {}",
+                report.artifact_assembled_from_peer_pieces
+            );
+            println!(
+                "project_server_serves_model_bytes: {}",
+                report.project_server_serves_model_bytes
+            );
+            println!(
+                "project_server_runs_model_bytes: {}",
+                report.project_server_runs_model_bytes
+            );
+            println!(
+                "project_server_proxies_huggingface_bytes: {}",
+                report.project_server_proxies_huggingface_bytes
+            );
+        }
         "export-peer-pieces" => {
             let manifest = one_arg(&mut args, "manifest")?;
             let artifact = one_arg(&mut args, "artifact.slm")?;
@@ -106,7 +210,10 @@ fn run() -> Result<(), String> {
             )?;
             println!("MiniModel peer pieces fetched and verified: {output_dir}");
             println!("peer_base_url: {}", report.peer_base_url);
+            println!("companion_state_url: {}", report.companion_state_url);
+            println!("companion_state_status: {}", report.companion_state_status);
             println!("piece_set: {}", report.piece_set_path);
+            println!("piece_set.sha256: {}", report.piece_set_sha256);
             println!("piece_count: {}", report.piece_count);
             println!("manifest.sha256: {}", report.manifest_sha256);
             println!("artifact.sha256: {}", report.artifact_sha256);
@@ -125,13 +232,68 @@ fn run() -> Result<(), String> {
             println!("MiniModel peer import request executed: {request_json}");
             println!("output_dir: {output_dir}");
             println!("peer_base_url: {}", report.peer_base_url);
+            println!("companion_state_url: {}", report.companion_state_url);
+            println!("companion_state_status: {}", report.companion_state_status);
             println!("piece_dir: {}", report.piece_dir_path);
+            println!("piece_set.sha256: {}", report.piece_set_sha256);
             println!("piece_count: {}", report.piece_count);
             println!("artifact: {}", report.output_artifact_path);
             println!("receipt: {}", report.receipt_path);
             println!("manifest.sha256: {}", report.manifest_sha256);
             println!("artifact.sha256: {}", report.artifact_sha256);
             println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+        }
+        "inspect-peer-import-request" => {
+            let request_json = one_arg(&mut args, "request-json")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_peer_import_request_path(
+                Path::new(&request_json),
+                Path::new(&manifest),
+            )?;
+            println!("MiniModel peer import request validation: PASS");
+            println!("request: {}", report.request_path);
+            println!("manifest: {manifest}");
+            println!("model.id: {}", report.model_id);
+            println!("artifact.byte_count: {}", report.artifact_byte_count);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("peer_base_url: {}", report.expected_peer_base_url);
+            println!("expected_piece_dir: {}", report.expected_piece_dir);
+            println!("assembled_output_slm: {}", report.assembled_output_slm);
+            println!("metadata_routes.status: {}", report.metadata_routes_status);
+            println!("metadata_routes.peer_status: {}", report.peer_status_route);
+            println!(
+                "metadata_routes.peer_piece_set: {}",
+                report.peer_piece_set_route
+            );
+            println!(
+                "metadata_routes.peer_companion_state: {}",
+                report.peer_companion_state_route
+            );
+            println!(
+                "receiver_validation_contract.status: {}",
+                report.receiver_validation_contract_status
+            );
+            println!(
+                "receiver_validation.check_peer_status_before_piece_fetch: {}",
+                report.check_peer_status_before_piece_fetch
+            );
+            println!(
+                "receiver_validation.preflight_fetches_piece_set_before_pieces: {}",
+                report.preflight_fetches_piece_set_before_pieces
+            );
+            println!(
+                "receiver_validation.validate_advertised_companion_state_before_piece_fetch: {}",
+                report.validate_advertised_companion_state_before_piece_fetch
+            );
+            println!(
+                "receiver_validation.import_receipt_required_before_browser_load: {}",
+                report.import_receipt_required_before_browser_load
+            );
+            println!("request.sha256: {}", report.request_sha256);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("peer_piece_bytes_fetched: false");
+            println!("artifact_bytes_fetched: false");
         }
         "preflight-peer-import-request" => {
             let request_json = one_arg(&mut args, "request-json")?;
@@ -148,12 +310,152 @@ fn run() -> Result<(), String> {
             println!("manifest: {manifest}");
             println!("preflight: {output_preflight}");
             println!("peer_base_url: {}", report.peer_base_url);
+            println!("metadata_routes.status: {}", report.metadata_routes_status);
+            println!("metadata_routes.peer_status: {}", report.peer_status_route);
+            println!(
+                "metadata_routes.peer_piece_set: {}",
+                report.peer_piece_set_route
+            );
+            println!(
+                "metadata_routes.peer_companion_state: {}",
+                report.peer_companion_state_route
+            );
+            println!(
+                "receiver_validation_contract.status: {}",
+                report.receiver_validation_contract_status
+            );
+            println!(
+                "receiver_validation.check_peer_status_before_piece_fetch: {}",
+                report.check_peer_status_before_piece_fetch
+            );
+            println!(
+                "receiver_validation.preflight_fetches_piece_set_before_pieces: {}",
+                report.preflight_fetches_piece_set_before_pieces
+            );
+            println!(
+                "receiver_validation.validate_advertised_companion_state_before_piece_fetch: {}",
+                report.validate_advertised_companion_state_before_piece_fetch
+            );
+            println!(
+                "receiver_validation.import_receipt_required_before_browser_load: {}",
+                report.import_receipt_required_before_browser_load
+            );
             println!("piece_set_url: {}", report.piece_set_url);
+            println!("piece_set.sha256: {}", report.piece_set_sha256);
+            println!("companion_state_url: {}", report.companion_state_url);
+            println!("companion_state_status: {}", report.companion_state_status);
             println!("piece_count: {}", report.piece_count);
             println!("manifest.sha256: {}", report.manifest_sha256);
             println!("artifact.sha256: {}", report.artifact_sha256);
             println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
             println!("peer_piece_bytes_fetched: false");
+        }
+        "inspect-peer-import-preflight" => {
+            let preflight = one_arg(&mut args, "preflight")?;
+            let request_json = one_arg(&mut args, "request-json")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_peer_import_preflight_path(
+                Path::new(&preflight),
+                Path::new(&request_json),
+                Path::new(&manifest),
+            )?;
+            println!("MiniModel peer import preflight validation: PASS");
+            println!("preflight: {}", report.preflight_path);
+            println!("request: {}", report.request_path);
+            println!("manifest: {manifest}");
+            println!("model.id: {}", report.model_id);
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("metadata_routes.status: {}", report.metadata_routes_status);
+            println!("metadata_routes.peer_status: {}", report.peer_status_route);
+            println!(
+                "metadata_routes.peer_piece_set: {}",
+                report.peer_piece_set_route
+            );
+            println!(
+                "metadata_routes.peer_companion_state: {}",
+                report.peer_companion_state_route
+            );
+            println!(
+                "receiver_validation_contract.status: {}",
+                report.receiver_validation_contract_status
+            );
+            println!(
+                "receiver_validation.check_peer_status_before_piece_fetch: {}",
+                report.check_peer_status_before_piece_fetch
+            );
+            println!(
+                "receiver_validation.preflight_fetches_piece_set_before_pieces: {}",
+                report.preflight_fetches_piece_set_before_pieces
+            );
+            println!(
+                "receiver_validation.validate_advertised_companion_state_before_piece_fetch: {}",
+                report.validate_advertised_companion_state_before_piece_fetch
+            );
+            println!(
+                "receiver_validation.import_receipt_required_before_browser_load: {}",
+                report.import_receipt_required_before_browser_load
+            );
+            println!("piece_set_url: {}", report.piece_set_url);
+            println!("piece_set.sha256: {}", report.piece_set_sha256);
+            println!("companion_state_url: {}", report.companion_state_url);
+            println!("companion_state_status: {}", report.companion_state_status);
+            println!("piece_count: {}", report.piece_count);
+            println!("preflight.sha256: {}", report.preflight_sha256);
+            println!("request.sha256: {}", report.request_sha256);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+            println!(
+                "peer_piece_set_metadata_fetched: {}",
+                report.peer_piece_set_metadata_fetched
+            );
+            println!(
+                "peer_companion_state_metadata_fetched: {}",
+                report.peer_companion_state_metadata_fetched
+            );
+            println!(
+                "peer_piece_bytes_fetched: {}",
+                report.peer_piece_bytes_fetched
+            );
+            println!("artifact_bytes_fetched: {}", report.artifact_bytes_fetched);
+            println!(
+                "project_server_serves_model_bytes: {}",
+                report.project_server_serves_model_bytes
+            );
+            println!(
+                "project_server_runs_model_bytes: {}",
+                report.project_server_runs_model_bytes
+            );
+            println!(
+                "project_server_proxies_huggingface_bytes: {}",
+                report.project_server_proxies_huggingface_bytes
+            );
+        }
+        "check-peer-status" => {
+            let manifest = one_arg(&mut args, "manifest")?;
+            let peer_base_url = one_arg(&mut args, "known-peer-base-url")?;
+            let output_json = one_arg(&mut args, "output-json")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::check_peer_status_path(
+                Path::new(&manifest),
+                &peer_base_url,
+                Path::new(&output_json),
+            )?;
+            println!("MiniModel peer status check: PASS");
+            println!("manifest: {manifest}");
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("status_url: {}", report.status_url);
+            println!("status_report: {}", report.report_path);
+            println!("model.id: {}", report.model_id);
+            println!("artifact.byte_count: {}", report.artifact_byte_count);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("piece_set.sha256: {}", report.piece_set_sha256);
+            println!("piece_count: {}", report.piece_count);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+            println!("companion_state_route: {}", report.companion_state_route);
+            println!("peer_piece_bytes_fetched: false");
+            println!("artifact_bytes_fetched: false");
         }
         "prepare-peer-share" => {
             let artifact = one_arg(&mut args, "artifact.slm")?;
@@ -213,6 +515,58 @@ fn run() -> Result<(), String> {
                 &bind_addr,
             )?;
         }
+        "serve-peer-companion" => {
+            let state_json = one_arg(&mut args, "state-json")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            let piece_dir = one_arg(&mut args, "piece-dir")?;
+            let bind_addr = one_arg(&mut args, "bind-addr")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_peer_companion_state_path(
+                Path::new(&state_json),
+                Path::new(&manifest),
+                Path::new(&piece_dir),
+            )?;
+            println!("MiniModel peer companion ready to serve: {state_json}");
+            println!("bind_addr: {bind_addr}");
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("state_route: {}", report.state_route);
+            println!("piece_set: {}", report.piece_set_path);
+            println!("piece_count: {}", report.piece_count);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+            println!("Press Ctrl+C to stop serving the peer companion endpoint.");
+            minimodel_core::serve_peer_companion_http_path(
+                Path::new(&state_json),
+                Path::new(&manifest),
+                Path::new(&piece_dir),
+                &bind_addr,
+            )?;
+        }
+        "inspect-peer-companion-state" => {
+            let state_json = one_arg(&mut args, "state-json")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            let piece_dir = one_arg(&mut args, "piece-dir")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_peer_companion_state_path(
+                Path::new(&state_json),
+                Path::new(&manifest),
+                Path::new(&piece_dir),
+            )?;
+            println!("MiniModel peer companion state inspection: PASS");
+            println!("state_json: {state_json}");
+            println!("model.id: {}", report.model_id);
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("state_route: {}", report.state_route);
+            println!("piece_set: {}", report.piece_set_path);
+            println!("piece_set.sha256: {}", report.piece_set_sha256);
+            println!("piece_count: {}", report.piece_count);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("artifact.byte_count: {}", report.artifact_byte_count);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+            println!("boundary: metadata-only peer companion state; no model bytes embedded");
+        }
         "write-peer-companion-state" => {
             let manifest = one_arg(&mut args, "manifest")?;
             let piece_dir = one_arg(&mut args, "piece-dir")?;
@@ -232,6 +586,53 @@ fn run() -> Result<(), String> {
             println!("manifest.sha256: {}", report.manifest_sha256);
             println!("artifact.sha256: {}", report.artifact_sha256);
             println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+        }
+        "write-peer-contact-card" => {
+            let output_json = one_arg(&mut args, "output-json")?;
+            let known_peer_base_url = one_arg(&mut args, "known-peer-base-url")?;
+            let peer_label = args.next();
+            no_more_args(&mut args)?;
+            let report = minimodel_core::write_peer_contact_card_path(
+                Path::new(&output_json),
+                &known_peer_base_url,
+                peer_label.as_deref(),
+            )?;
+            println!("MiniModel peer contact card written: {output_json}");
+            println!("card: {}", report.card_path);
+            println!("peer_label: {}", report.peer_label);
+            println!("peer_base_url: {}", report.peer_base_url);
+        }
+        "inspect-peer-contact-card" => {
+            let card_json = one_arg(&mut args, "card-json")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_peer_contact_card_path(Path::new(&card_json))?;
+            println!("MiniModel peer contact card validation: PASS");
+            println!("card: {}", report.card_path);
+            println!("peer_label: {}", report.peer_label);
+            println!("peer_base_url: {}", report.peer_base_url);
+        }
+        "inspect-share-metadata" => {
+            let bundle_json = one_arg(&mut args, "bundle-json")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_share_metadata_path(Path::new(&bundle_json))?;
+            println!("MiniModel share metadata validation: PASS");
+            println!("bundle: {}", report.bundle_path);
+            println!("model.id: {}", report.model_id);
+            println!("artifact_file_name: {}", report.artifact_file_name);
+            println!("artifact.byte_count: {}", report.artifact_byte_count);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("chunk_count: {}", report.chunk_count);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+            println!("peer_transfer_status: {}", report.peer_transfer_status);
+            println!(
+                "peer_transfer_implementation: {}",
+                report.peer_transfer_implementation
+            );
+            println!("share_kit_available: {}", report.share_kit_available);
+            println!(
+                "network_transfer_available: {}",
+                report.network_transfer_available
+            );
         }
         "write-catalog-entry" => {
             let manifest = one_arg(&mut args, "manifest")?;
@@ -328,6 +729,21 @@ fn run() -> Result<(), String> {
             println!("p2p_ready_count: {}", report.p2p_ready_count);
             println!("peer_source_count: {}", report.peer_source_count);
         }
+        "inspect-catalog-snapshot" => {
+            let catalog_json = one_arg(&mut args, "catalog-json")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_catalog_snapshot_path(Path::new(&catalog_json))?;
+            println!("MiniModel catalog snapshot validation: PASS");
+            println!("catalog: {}", report.catalog_path);
+            println!("entry_count: {}", report.entry_count);
+            println!("p2p_ready_count: {}", report.p2p_ready_count);
+            println!("peer_source_count: {}", report.peer_source_count);
+            println!(
+                "announcement_route_count: {}",
+                report.announcement_route_count
+            );
+            println!("catalog.sha256: {}", report.catalog_sha256);
+        }
         "write-catalog-snapshot-with-announcements" => {
             let output_json = one_arg(&mut args, "output-json")?;
             let rest: Vec<String> = args.collect();
@@ -364,6 +780,17 @@ fn run() -> Result<(), String> {
                 "catalog_route_hint: minimodel write-catalog-snapshot-with-announcement-feed models.v0.json peer-source-announcements.v0.json \"{}\" <catalog-entry-json>...",
                 report.feed_path
             );
+        }
+        "inspect-peer-source-announcement-feed" => {
+            let feed_json = one_arg(&mut args, "feed-json")?;
+            no_more_args(&mut args)?;
+            let report =
+                minimodel_core::inspect_peer_source_announcement_feed_path(Path::new(&feed_json))?;
+            println!("MiniModel peer source announcement feed validation: PASS");
+            println!("feed: {}", report.feed_path);
+            println!("announcement_count: {}", report.announcement_count);
+            println!("model_count: {}", report.model_count);
+            println!("feed.sha256: {}", report.feed_sha256);
         }
         "write-catalog-snapshot-with-announcement-feed" => {
             let output_json = one_arg(&mut args, "output-json")?;
@@ -422,20 +849,36 @@ fn print_usage() {
     eprintln!(
         "  minimodel write-import-receipt <manifest> <artifact.slm> <receipt.minimodel-receipt>"
     );
+    eprintln!(
+        "  minimodel inspect-import-receipt <receipt.minimodel-receipt> <manifest> <artifact.slm>"
+    );
+    eprintln!(
+        "  minimodel inspect-peer-import-receipt <receipt.minimodel-receipt> <request-json> <preflight> <manifest> <artifact.slm>"
+    );
     eprintln!("  minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>");
     eprintln!("  minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>");
     eprintln!("  minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>");
     eprintln!("  minimodel import-peer-request <request-json> <manifest> <output-dir>");
+    eprintln!("  minimodel inspect-peer-import-request <request-json> <manifest>");
     eprintln!(
         "  minimodel preflight-peer-import-request <request-json> <manifest> <output.preflight>"
     );
+    eprintln!("  minimodel inspect-peer-import-preflight <preflight> <request-json> <manifest>");
+    eprintln!("  minimodel check-peer-status <manifest> <known-peer-base-url> <output-json>");
     eprintln!(
         "  minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]"
     );
     eprintln!("  minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>");
+    eprintln!("  minimodel serve-peer-companion <state-json> <manifest> <piece-dir> <bind-addr>");
+    eprintln!("  minimodel inspect-peer-companion-state <state-json> <manifest> <piece-dir>");
     eprintln!(
         "  minimodel write-peer-companion-state <manifest> <piece-dir> <output-json> <known-peer-base-url>"
     );
+    eprintln!(
+        "  minimodel write-peer-contact-card <output-json> <known-peer-base-url> [peer-label]"
+    );
+    eprintln!("  minimodel inspect-peer-contact-card <card-json>");
+    eprintln!("  minimodel inspect-share-metadata <bundle-json>");
     eprintln!(
         "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]"
     );
@@ -455,6 +898,8 @@ fn print_usage() {
     eprintln!(
         "  minimodel write-peer-source-announcement-feed <output-json> [announcement-json...]"
     );
+    eprintln!("  minimodel inspect-peer-source-announcement-feed <feed-json>");
+    eprintln!("  minimodel inspect-catalog-snapshot <catalog-json>");
     eprintln!(
         "  minimodel write-catalog-snapshot-with-announcement-feed <output-json> <feed-route> <announcement-feed-json> <catalog-entry-json>..."
     );

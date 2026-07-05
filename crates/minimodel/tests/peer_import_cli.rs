@@ -274,6 +274,25 @@ fn companion_peer_import_cli_executes_check_preflight_and_import_over_local_http
     assert!(status_report.contains("\"peer_piece_bytes_fetched\": false"));
     assert!(status_report.contains("\"artifact_bytes_fetched\": false"));
 
+    let inspect_status_output = Command::new(minimodel_bin())
+        .args([
+            "inspect-peer-status-check",
+            &status_path_text,
+            &manifest_path_text,
+        ])
+        .output()
+        .expect("run inspect-peer-status-check");
+    assert!(
+        inspect_status_output.status.success(),
+        "{}",
+        output_text(&inspect_status_output)
+    );
+    let inspect_status_text = output_text(&inspect_status_output);
+    assert!(inspect_status_text.contains("MiniModel peer status check validation: PASS"));
+    assert!(inspect_status_text.contains("peer_piece_bytes_fetched: false"));
+    assert!(inspect_status_text.contains("artifact_bytes_fetched: false"));
+    assert!(inspect_status_text.contains("status_check.sha256: sha256:"));
+
     let preflight_output = Command::new(minimodel_bin())
         .args([
             "preflight-peer-import-request",

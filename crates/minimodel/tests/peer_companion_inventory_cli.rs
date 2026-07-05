@@ -121,6 +121,7 @@ fn peer_companion_inventory_cli_round_trips_verified_local_metadata() {
     assert!(inventory_cli_text.contains("MiniModel peer companion inventory written"));
     assert!(inventory_cli_text.contains("model.id: tinyrustlm/tiny-test-model-q8"));
     assert!(inventory_cli_text.contains("peer_base_url: http://127.0.0.1:8123/peer-pieces/"));
+    assert!(inventory_cli_text.contains("serve_plan.status: ready-after-rust-reverify"));
     assert!(inventory_cli_text.contains("piece_store_byte_count: 8832"));
     assert!(inventory_cli_text.contains("piece_store_quota_bytes: 8832"));
     assert!(inventory_cli_text.contains("receipt_entry_count: 1"));
@@ -132,6 +133,11 @@ fn peer_companion_inventory_cli_round_trips_verified_local_metadata() {
     );
     assert!(inventory_text.contains("\"piece_store_quota_bytes\": 8832"));
     assert!(inventory_text.contains("\"quota_status\": \"within-quota\""));
+    assert!(inventory_text.contains("\"serve_plan\""));
+    assert!(inventory_text.contains("\"status\": \"ready-after-rust-reverify\""));
+    assert!(inventory_text.contains("\"peer_status_route\": \"minimodel.peer_status.v0.json\""));
+    assert!(inventory_text.contains("\"peer_piece_set_route\": \"minimodel.peer_piece_set.v0\""));
+    assert!(inventory_text.contains("\"rust_reverify_required_before_serving\": true"));
     assert!(inventory_text.contains("\"inventory_contains_model_bytes\": false"));
     assert!(inventory_text.contains("\"inventory_contains_peer_piece_bytes\": false"));
     assert!(inventory_text.contains("\"project_server_serves_model_bytes\": false"));
@@ -148,6 +154,7 @@ fn peer_companion_inventory_cli_round_trips_verified_local_metadata() {
     );
     let inspect_text = output_text(&inspect_output);
     assert!(inspect_text.contains("MiniModel peer companion inventory validation: PASS"));
+    assert!(inspect_text.contains("serve_plan.status: ready-after-rust-reverify"));
     assert!(inspect_text.contains("piece_store_byte_count: 8832"));
     assert!(inspect_text.contains("metadata-only peer companion inventory"));
 
@@ -193,6 +200,35 @@ fn peer_companion_inventory_cli_round_trips_verified_local_metadata() {
     );
     let drift_text = output_text(&drift_output);
     assert!(drift_text.contains("piece_count mismatch"), "{drift_text}");
+
+    let serve_plan_drift_path = dir.join("serve-plan-drift.peer-companion-inventory.v0.json");
+    let serve_plan_drift = serve_plan_drift_path.to_string_lossy().to_string();
+    std::fs::write(
+        &serve_plan_drift_path,
+        inventory_text.replace(
+            "\"rust_reverify_required_before_serving\": true",
+            "\"rust_reverify_required_before_serving\": false",
+        ),
+    )
+    .expect("write serve plan drifted inventory");
+    let serve_plan_drift_output = Command::new(minimodel_bin())
+        .args(["inspect-peer-companion-inventory", &serve_plan_drift])
+        .output()
+        .expect("run inspect-peer-companion-inventory serve plan drift");
+    assert!(
+        !serve_plan_drift_output.status.success(),
+        "{}",
+        output_text(&serve_plan_drift_output)
+    );
+    let serve_plan_drift_text = output_text(&serve_plan_drift_output);
+    assert!(
+        serve_plan_drift_text.contains("rust_reverify_required_before_serving"),
+        "{serve_plan_drift_text}"
+    );
+    assert!(
+        serve_plan_drift_text.contains("must be true"),
+        "{serve_plan_drift_text}"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

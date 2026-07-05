@@ -526,6 +526,33 @@ fn run() -> Result<(), String> {
             println!("peer_piece_bytes_fetched: false");
             println!("artifact_bytes_fetched: false");
         }
+        "inspect-peer-status-check" => {
+            let status_check_json = one_arg(&mut args, "status-check-json")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_peer_status_check_path(
+                Path::new(&status_check_json),
+                Path::new(&manifest),
+            )?;
+            println!("MiniModel peer status check validation: PASS");
+            println!("status_check: {}", report.check_path);
+            println!("manifest: {manifest}");
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("status_url: {}", report.status_url);
+            println!("model.id: {}", report.model_id);
+            println!("checked_utc: {}", report.checked_utc);
+            println!("artifact.byte_count: {}", report.artifact_byte_count);
+            println!("artifact.sha256: {}", report.artifact_sha256);
+            println!("piece_set.sha256: {}", report.piece_set_sha256);
+            println!("piece_count: {}", report.piece_count);
+            println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+            println!("companion_state_route: {}", report.companion_state_route);
+            println!("status_check.sha256: {}", report.check_sha256);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("peer_piece_bytes_fetched: false");
+            println!("artifact_bytes_fetched: false");
+            println!("boundary: saved peer-status metadata only; Rust reverify still required before browser import");
+        }
         "prepare-peer-share" => {
             let artifact = one_arg(&mut args, "artifact.slm")?;
             let output_dir = one_arg(&mut args, "output-dir")?;
@@ -732,6 +759,7 @@ fn run() -> Result<(), String> {
             println!("inventory: {}", report.inventory_path);
             println!("model.id: {}", report.model_id);
             println!("peer_base_url: {}", report.peer_base_url);
+            println!("serve_plan.status: {}", report.serve_plan_status);
             println!("piece_count: {}", report.piece_count);
             println!("piece_store_byte_count: {}", report.piece_store_byte_count);
             println!(
@@ -751,6 +779,7 @@ fn run() -> Result<(), String> {
             println!("inventory: {}", report.inventory_path);
             println!("model.id: {}", report.model_id);
             println!("peer_base_url: {}", report.peer_base_url);
+            println!("serve_plan.status: {}", report.serve_plan_status);
             println!("piece_count: {}", report.piece_count);
             println!("piece_store_byte_count: {}", report.piece_store_byte_count);
             println!(
@@ -1026,6 +1055,7 @@ fn print_usage() {
     );
     eprintln!("  minimodel inspect-peer-import-preflight <preflight> <request-json> <manifest>");
     eprintln!("  minimodel check-peer-status <manifest> <known-peer-base-url> <output-json>");
+    eprintln!("  minimodel inspect-peer-status-check <status-check-json> <manifest>");
     eprintln!(
         "  minimodel prepare-peer-share <artifact.slm> <output-dir> <model-id> [source-huggingface-model-id] [known-peer-base-url]"
     );

@@ -83,6 +83,29 @@ fn run() -> Result<(), String> {
             println!("slm.model_shape: {}", report.slm_model_shape);
             println!("slm.quantization: {}", report.slm_quantization);
             println!("peer_import: {}", report.peer_import);
+            if let Some(receiver_validation_contract_status) =
+                report.receiver_validation_contract_status
+            {
+                println!(
+                    "receiver_validation_contract.status: {receiver_validation_contract_status}"
+                );
+                println!(
+                    "receiver_validation.check_peer_status_before_piece_fetch: {}",
+                    report.check_peer_status_before_piece_fetch
+                );
+                println!(
+                    "receiver_validation.preflight_fetches_piece_set_before_pieces: {}",
+                    report.preflight_fetches_piece_set_before_pieces
+                );
+                println!(
+                    "receiver_validation.validate_advertised_companion_state_before_piece_fetch: {}",
+                    report.validate_advertised_companion_state_before_piece_fetch
+                );
+                println!(
+                    "receiver_validation.import_receipt_required_before_browser_load: {}",
+                    report.import_receipt_required_before_browser_load
+                );
+            }
             if let Some(peer_base_url) = report.peer_base_url {
                 println!("peer_base_url: {peer_base_url}");
             }
@@ -125,6 +148,26 @@ fn run() -> Result<(), String> {
             println!("manifest: {manifest}");
             println!("artifact: {}", report.artifact_path);
             println!("model.id: {}", report.model_id);
+            println!(
+                "receiver_validation_contract.status: {}",
+                report.receiver_validation_contract_status
+            );
+            println!(
+                "receiver_validation.check_peer_status_before_piece_fetch: {}",
+                report.check_peer_status_before_piece_fetch
+            );
+            println!(
+                "receiver_validation.preflight_fetches_piece_set_before_pieces: {}",
+                report.preflight_fetches_piece_set_before_pieces
+            );
+            println!(
+                "receiver_validation.validate_advertised_companion_state_before_piece_fetch: {}",
+                report.validate_advertised_companion_state_before_piece_fetch
+            );
+            println!(
+                "receiver_validation.import_receipt_required_before_browser_load: {}",
+                report.import_receipt_required_before_browser_load
+            );
             println!("peer_base_url: {}", report.peer_base_url);
             println!("companion_state_url: {}", report.companion_state_url);
             println!("companion_state_status: {}", report.companion_state_status);

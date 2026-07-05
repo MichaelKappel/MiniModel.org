@@ -397,6 +397,15 @@ fn companion_peer_import_cli_executes_check_preflight_and_import_over_local_http
     assert!(receipt.contains("peer_piece_bytes_fetched=true"));
     assert!(receipt.contains("artifact.assembled_from_peer_pieces=true"));
     assert!(receipt.contains("project_server_serves_model_bytes=false"));
+    assert!(receipt.contains("receiver_validation_contract.status=validated"));
+    assert!(receipt.contains("receiver_validation.check_peer_status_before_piece_fetch=true"));
+    assert!(receipt.contains("receiver_validation.preflight_fetches_piece_set_before_pieces=true"));
+    assert!(receipt.contains(
+        "receiver_validation.validate_advertised_companion_state_before_piece_fetch=true"
+    ));
+    assert!(
+        receipt.contains("receiver_validation.import_receipt_required_before_browser_load=true")
+    );
 
     let inspect_receipt_output = Command::new(minimodel_bin())
         .args([
@@ -418,6 +427,7 @@ fn companion_peer_import_cli_executes_check_preflight_and_import_over_local_http
     assert!(inspect_receipt_text.contains("companion_state_status: validated"));
     assert!(inspect_receipt_text.contains("peer_piece_bytes_fetched: true"));
     assert!(inspect_receipt_text.contains("artifact.assembled_from_peer_pieces: true"));
+    assert_receiver_validation_report_text(&inspect_receipt_text);
 
     let inspect_peer_receipt_output = Command::new(minimodel_bin())
         .args([
@@ -442,6 +452,7 @@ fn companion_peer_import_cli_executes_check_preflight_and_import_over_local_http
     assert!(inspect_peer_receipt_text.contains("companion_state_status: validated"));
     assert!(inspect_peer_receipt_text.contains("peer_piece_bytes_fetched: true"));
     assert!(inspect_peer_receipt_text.contains("preflight.sha256: sha256:"));
+    assert_receiver_validation_report_text(&inspect_peer_receipt_text);
 
     let piece_set_sha_line = receipt
         .lines()
@@ -476,6 +487,55 @@ fn companion_peer_import_cli_executes_check_preflight_and_import_over_local_http
         output_text(&drift_piece_set_output)
     );
     assert!(output_text(&drift_piece_set_output).contains("peer.piece_set_sha256"));
+
+    let receiver_validation_drift_receipt_path =
+        import_dir.join("tiny-test-model-q8.receiver-validation-drift.minimodel-receipt");
+    let receiver_validation_drift_receipt_path_text = receiver_validation_drift_receipt_path
+        .to_string_lossy()
+        .to_string();
+    std::fs::write(
+        &receiver_validation_drift_receipt_path,
+        receipt.replace(
+            "receiver_validation.import_receipt_required_before_browser_load=true",
+            "receiver_validation.import_receipt_required_before_browser_load=false",
+        ),
+    )
+    .expect("write receiver-validation drifted receipt");
+    let receiver_validation_drift_output = Command::new(minimodel_bin())
+        .args([
+            "inspect-import-receipt",
+            &receiver_validation_drift_receipt_path_text,
+            &manifest_path_text,
+            &output_artifact_path_text,
+        ])
+        .output()
+        .expect("run inspect-import-receipt on receiver-validation drifted receipt");
+    assert!(
+        !receiver_validation_drift_output.status.success(),
+        "{}",
+        output_text(&receiver_validation_drift_output)
+    );
+    assert!(output_text(&receiver_validation_drift_output)
+        .contains("receiver_validation.import_receipt_required_before_browser_load"));
+
+    let receiver_validation_chain_drift_output = Command::new(minimodel_bin())
+        .args([
+            "inspect-peer-import-receipt",
+            &receiver_validation_drift_receipt_path_text,
+            &request_path_text,
+            &preflight_path_text,
+            &manifest_path_text,
+            &output_artifact_path_text,
+        ])
+        .output()
+        .expect("run inspect-peer-import-receipt on receiver-validation drifted receipt");
+    assert!(
+        !receiver_validation_chain_drift_output.status.success(),
+        "{}",
+        output_text(&receiver_validation_chain_drift_output)
+    );
+    assert!(output_text(&receiver_validation_chain_drift_output)
+        .contains("receiver_validation.import_receipt_required_before_browser_load"));
 
     let future_preflight_path = dir.join("tiny-test-model-q8.future.peer-import.preflight");
     let future_preflight_path_text = future_preflight_path.to_string_lossy().to_string();
@@ -568,4 +628,14 @@ fn wait_for_peer_status(
         thread::sleep(Duration::from_millis(100));
     }
     panic!("peer status never became ready:\n{last_output}");
+}
+
+fn assert_receiver_validation_report_text(text: &str) {
+    assert!(text.contains("receiver_validation_contract.status: validated"));
+    assert!(text.contains("receiver_validation.check_peer_status_before_piece_fetch: true"));
+    assert!(text.contains("receiver_validation.preflight_fetches_piece_set_before_pieces: true"));
+    assert!(text.contains(
+        "receiver_validation.validate_advertised_companion_state_before_piece_fetch: true"
+    ));
+    assert!(text.contains("receiver_validation.import_receipt_required_before_browser_load: true"));
 }

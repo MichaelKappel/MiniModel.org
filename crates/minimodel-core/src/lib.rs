@@ -201,6 +201,11 @@ pub struct ImportReceiptInspection {
     pub slm_model_shape: String,
     pub slm_quantization: String,
     pub peer_import: bool,
+    pub receiver_validation_contract_status: Option<String>,
+    pub check_peer_status_before_piece_fetch: bool,
+    pub preflight_fetches_piece_set_before_pieces: bool,
+    pub validate_advertised_companion_state_before_piece_fetch: bool,
+    pub import_receipt_required_before_browser_load: bool,
     pub peer_base_url: Option<String>,
     pub companion_state_status: Option<String>,
     pub piece_count: Option<usize>,
@@ -221,6 +226,11 @@ pub struct PeerImportReceiptInspection {
     pub model_id: String,
     pub artifact_path: String,
     pub artifact_sha256: String,
+    pub receiver_validation_contract_status: String,
+    pub check_peer_status_before_piece_fetch: bool,
+    pub preflight_fetches_piece_set_before_pieces: bool,
+    pub validate_advertised_companion_state_before_piece_fetch: bool,
+    pub import_receipt_required_before_browser_load: bool,
     pub peer_base_url: String,
     pub companion_state_url: String,
     pub companion_state_status: String,
@@ -396,6 +406,11 @@ struct PeerCompanionMetadataCheck {
 #[derive(Debug, Clone)]
 struct PeerImportReceiptTransfer {
     request_path: String,
+    receiver_validation_contract_status: String,
+    check_peer_status_before_piece_fetch: bool,
+    preflight_fetches_piece_set_before_pieces: bool,
+    validate_advertised_companion_state_before_piece_fetch: bool,
+    import_receipt_required_before_browser_load: bool,
     peer_base_url: String,
     piece_dir_path: String,
     piece_set_path: String,
@@ -637,6 +652,7 @@ pub fn execute_peer_import_request_path(
     let request = read_peer_import_request_path(request_path)?;
     let bundle = read_valid_manifest_path(manifest_path)?;
     validate_peer_import_request_against_manifest(&request, &bundle.manifest)?;
+    let contract = peer_import_request_contract_summary(&request);
     create_empty_dir(output_dir)?;
     let piece_dir = output_dir.join(&request.expected_piece_dir);
     let output_artifact_path = output_dir.join(&request.assembled_output_slm);
@@ -650,6 +666,14 @@ pub fn execute_peer_import_request_path(
         &receipt_path,
         &PeerImportReceiptTransfer {
             request_path: request_path.display().to_string(),
+            receiver_validation_contract_status: contract.receiver_validation_contract_status,
+            check_peer_status_before_piece_fetch: contract.check_peer_status_before_piece_fetch,
+            preflight_fetches_piece_set_before_pieces: contract
+                .preflight_fetches_piece_set_before_pieces,
+            validate_advertised_companion_state_before_piece_fetch: contract
+                .validate_advertised_companion_state_before_piece_fetch,
+            import_receipt_required_before_browser_load: contract
+                .import_receipt_required_before_browser_load,
             peer_base_url: fetch.peer_base_url.clone(),
             piece_dir_path: piece_dir.display().to_string(),
             piece_set_path: fetch.piece_set_path.clone(),
@@ -738,6 +762,13 @@ pub fn inspect_import_receipt_path(
         slm_model_shape: artifact.slm.model_shape,
         slm_quantization: artifact.slm.quantization,
         peer_import: peer.peer_import,
+        receiver_validation_contract_status: peer.receiver_validation_contract_status,
+        check_peer_status_before_piece_fetch: peer.check_peer_status_before_piece_fetch,
+        preflight_fetches_piece_set_before_pieces: peer.preflight_fetches_piece_set_before_pieces,
+        validate_advertised_companion_state_before_piece_fetch: peer
+            .validate_advertised_companion_state_before_piece_fetch,
+        import_receipt_required_before_browser_load: peer
+            .import_receipt_required_before_browser_load,
         peer_base_url: peer.peer_base_url,
         companion_state_status: peer.companion_state_status,
         piece_count: peer.piece_count,
@@ -829,6 +860,31 @@ pub fn inspect_peer_import_receipt_path(
         "chunks.merkle_root_sha256",
         &preflight_report.merkle_root_sha256,
     )?;
+    require_receipt_equal(
+        &receipt,
+        "receiver_validation_contract.status",
+        &preflight_report.receiver_validation_contract_status,
+    )?;
+    let check_peer_status_before_piece_fetch = require_receipt_bool(
+        &receipt,
+        "receiver_validation.check_peer_status_before_piece_fetch",
+        preflight_report.check_peer_status_before_piece_fetch,
+    )?;
+    let preflight_fetches_piece_set_before_pieces = require_receipt_bool(
+        &receipt,
+        "receiver_validation.preflight_fetches_piece_set_before_pieces",
+        preflight_report.preflight_fetches_piece_set_before_pieces,
+    )?;
+    let validate_advertised_companion_state_before_piece_fetch = require_receipt_bool(
+        &receipt,
+        "receiver_validation.validate_advertised_companion_state_before_piece_fetch",
+        preflight_report.validate_advertised_companion_state_before_piece_fetch,
+    )?;
+    let import_receipt_required_before_browser_load = require_receipt_bool(
+        &receipt,
+        "receiver_validation.import_receipt_required_before_browser_load",
+        preflight_report.import_receipt_required_before_browser_load,
+    )?;
 
     let peer_piece_set_metadata_fetched =
         require_receipt_bool(&receipt, "peer_piece_set_metadata_fetched", true)?;
@@ -859,6 +915,11 @@ pub fn inspect_peer_import_receipt_path(
         model_id: receipt_report.model_id,
         artifact_path: receipt_report.artifact_path,
         artifact_sha256: receipt_report.artifact_sha256,
+        receiver_validation_contract_status: preflight_report.receiver_validation_contract_status,
+        check_peer_status_before_piece_fetch,
+        preflight_fetches_piece_set_before_pieces,
+        validate_advertised_companion_state_before_piece_fetch,
+        import_receipt_required_before_browser_load,
         peer_base_url: preflight_report.peer_base_url,
         companion_state_url: preflight_report.companion_state_url,
         companion_state_status: preflight_report.companion_state_status,
@@ -2425,6 +2486,11 @@ fn validate_peer_import_request_against_manifest(
 #[derive(Debug, Clone)]
 struct ImportReceiptPeerFields {
     peer_import: bool,
+    receiver_validation_contract_status: Option<String>,
+    check_peer_status_before_piece_fetch: bool,
+    preflight_fetches_piece_set_before_pieces: bool,
+    validate_advertised_companion_state_before_piece_fetch: bool,
+    import_receipt_required_before_browser_load: bool,
     peer_base_url: Option<String>,
     companion_state_status: Option<String>,
     piece_count: Option<usize>,
@@ -2500,6 +2566,11 @@ fn validate_import_receipt_peer_fields(
     if !has_peer_fields {
         return Ok(ImportReceiptPeerFields {
             peer_import: false,
+            receiver_validation_contract_status: None,
+            check_peer_status_before_piece_fetch: false,
+            preflight_fetches_piece_set_before_pieces: false,
+            validate_advertised_companion_state_before_piece_fetch: false,
+            import_receipt_required_before_browser_load: false,
             peer_base_url: None,
             companion_state_status: None,
             piece_count: None,
@@ -2516,6 +2587,34 @@ fn validate_import_receipt_peer_fields(
     )?;
     require_receipt_equal(receipt, "peer_import.verification_status", "passed")?;
     require_safe_piece_file_name(receipt_required(receipt, "peer_import.request_path_hint")?)?;
+    let receiver_validation_contract_status =
+        receipt_required(receipt, "receiver_validation_contract.status")?;
+    require_value_member(
+        receiver_validation_contract_status,
+        "receiver_validation_contract.status",
+        &["validated", "not-declared"],
+    )?;
+    let receiver_validation_contract_validated = receiver_validation_contract_status == "validated";
+    let check_peer_status_before_piece_fetch = require_receipt_bool(
+        receipt,
+        "receiver_validation.check_peer_status_before_piece_fetch",
+        receiver_validation_contract_validated,
+    )?;
+    let preflight_fetches_piece_set_before_pieces = require_receipt_bool(
+        receipt,
+        "receiver_validation.preflight_fetches_piece_set_before_pieces",
+        receiver_validation_contract_validated,
+    )?;
+    let validate_advertised_companion_state_before_piece_fetch = require_receipt_bool(
+        receipt,
+        "receiver_validation.validate_advertised_companion_state_before_piece_fetch",
+        receiver_validation_contract_validated,
+    )?;
+    let import_receipt_required_before_browser_load = require_receipt_bool(
+        receipt,
+        "receiver_validation.import_receipt_required_before_browser_load",
+        receiver_validation_contract_validated,
+    )?;
 
     let peer_base_url = normalize_known_peer_base_url(receipt_required(receipt, "peer.base_url")?)?;
     require_safe_import_name(
@@ -2579,6 +2678,11 @@ fn validate_import_receipt_peer_fields(
 
     Ok(ImportReceiptPeerFields {
         peer_import: true,
+        receiver_validation_contract_status: Some(receiver_validation_contract_status.to_string()),
+        check_peer_status_before_piece_fetch,
+        preflight_fetches_piece_set_before_pieces,
+        validate_advertised_companion_state_before_piece_fetch,
+        import_receipt_required_before_browser_load,
         peer_base_url: Some(peer_base_url),
         companion_state_status: Some(companion_state_status.to_string()),
         piece_count: Some(piece_count),
@@ -2789,6 +2893,47 @@ fn peer_import_receipt_text(
         "known-direct-http-peer-v0",
     );
     push_line(&mut text, "peer_import.verification_status", "passed");
+    push_line(
+        &mut text,
+        "receiver_validation_contract.status",
+        &transfer.receiver_validation_contract_status,
+    );
+    push_line(
+        &mut text,
+        "receiver_validation.check_peer_status_before_piece_fetch",
+        if transfer.check_peer_status_before_piece_fetch {
+            "true"
+        } else {
+            "false"
+        },
+    );
+    push_line(
+        &mut text,
+        "receiver_validation.preflight_fetches_piece_set_before_pieces",
+        if transfer.preflight_fetches_piece_set_before_pieces {
+            "true"
+        } else {
+            "false"
+        },
+    );
+    push_line(
+        &mut text,
+        "receiver_validation.validate_advertised_companion_state_before_piece_fetch",
+        if transfer.validate_advertised_companion_state_before_piece_fetch {
+            "true"
+        } else {
+            "false"
+        },
+    );
+    push_line(
+        &mut text,
+        "receiver_validation.import_receipt_required_before_browser_load",
+        if transfer.import_receipt_required_before_browser_load {
+            "true"
+        } else {
+            "false"
+        },
+    );
     push_line(&mut text, "peer.base_url", &transfer.peer_base_url);
     push_line(
         &mut text,
@@ -6800,6 +6945,16 @@ mod tests {
         assert!(receipt.contains("artifact.local_path_hint=tiny-test-model-q8.slm"));
         assert!(receipt.contains("peer_import.transport=known-direct-http-peer-v0"));
         assert!(receipt.contains("peer_import.verification_status=passed"));
+        assert!(receipt.contains("receiver_validation_contract.status=validated"));
+        assert!(receipt.contains("receiver_validation.check_peer_status_before_piece_fetch=true"));
+        assert!(
+            receipt.contains("receiver_validation.preflight_fetches_piece_set_before_pieces=true")
+        );
+        assert!(receipt.contains(
+            "receiver_validation.validate_advertised_companion_state_before_piece_fetch=true"
+        ));
+        assert!(receipt
+            .contains("receiver_validation.import_receipt_required_before_browser_load=true"));
         assert!(receipt.contains("peer.base_url="));
         assert!(receipt.contains("peer.piece_dir_path_hint=tiny-test-model-q8-peer-pieces"));
         assert!(receipt.contains("peer.piece_set_path_hint=minimodel.peer_piece_set.v0"));
@@ -6856,6 +7011,16 @@ mod tests {
         let receipt = std::fs::read_to_string(&report.receipt_path).unwrap();
         let preflight_text = std::fs::read_to_string(&preflight_path).unwrap();
         assert!(receipt.contains("peer.companion_state_status=validated"));
+        assert!(receipt.contains("receiver_validation_contract.status=validated"));
+        assert!(receipt.contains("receiver_validation.check_peer_status_before_piece_fetch=true"));
+        assert!(
+            receipt.contains("receiver_validation.preflight_fetches_piece_set_before_pieces=true")
+        );
+        assert!(receipt.contains(
+            "receiver_validation.validate_advertised_companion_state_before_piece_fetch=true"
+        ));
+        assert!(receipt
+            .contains("receiver_validation.import_receipt_required_before_browser_load=true"));
         assert!(receipt.contains("peer_companion_state_metadata_fetched=true"));
         assert!(receipt.contains("peer_piece_bytes_fetched=true"));
         assert!(receipt.contains("chunks.merkle_root_sha256=sha256:"));
@@ -6873,6 +7038,11 @@ mod tests {
             sha256_prefixed(&std::fs::read(&preflight_path).unwrap())
         );
         assert_eq!(chain.piece_set_sha256, preflight.piece_set_sha256);
+        assert_eq!(chain.receiver_validation_contract_status, "validated");
+        assert!(chain.check_peer_status_before_piece_fetch);
+        assert!(chain.preflight_fetches_piece_set_before_pieces);
+        assert!(chain.validate_advertised_companion_state_before_piece_fetch);
+        assert!(chain.import_receipt_required_before_browser_load);
         assert!(chain.peer_companion_state_metadata_fetched);
         assert!(chain.peer_piece_bytes_fetched);
         assert!(chain.artifact_assembled_from_peer_pieces);
@@ -6897,6 +7067,29 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.contains("peer.piece_set_sha256"), "{error}");
+
+        let receiver_validation_drift_receipt_path =
+            output_dir.join("tiny-test-model-q8.receiver-validation-drift.minimodel-receipt");
+        std::fs::write(
+            &receiver_validation_drift_receipt_path,
+            receipt.replace(
+                "receiver_validation.import_receipt_required_before_browser_load=true",
+                "receiver_validation.import_receipt_required_before_browser_load=false",
+            ),
+        )
+        .unwrap();
+        let error = inspect_peer_import_receipt_path(
+            &receiver_validation_drift_receipt_path,
+            &request_path,
+            &preflight_path,
+            &manifest_path,
+            Path::new(&report.output_artifact_path),
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("receiver_validation.import_receipt_required_before_browser_load"),
+            "{error}"
+        );
 
         let future_preflight_path =
             output_dir.join("tiny-test-model-q8.future.peer-import.preflight");

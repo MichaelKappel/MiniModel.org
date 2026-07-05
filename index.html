@@ -97,7 +97,7 @@
         <li>
           <span class="step">05</span>
           <h3>Peer App</h3>
-          <p>Use the first direct peer-piece fetch prototype for known consenting HTTP peers, then build toward an optional user-run MiniModel Peer Companion for local identity, piece stores, consent prompts, cache quotas, receipts, and TinyRustLM handoff.</p>
+          <p>Use the first direct peer-piece fetch prototype for known consenting HTTP peers, then build toward an optional user-run MiniModel Peer Companion for local identity, piece stores, consent prompts, cache quotas, receipts, receipt ledgers, and TinyRustLM handoff.</p>
         </li>
         <li>
           <span class="step">06</span>
@@ -126,7 +126,7 @@
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>P2P</h3>
-          <p>Today Rust can export, serve to a known direct HTTP peer, fetch, reassemble, and execute TinyRustLM peer-import request JSON from a verified `.slm`; broader peer discovery comes later, with consent and re-verification still required.</p>
+          <p>Today Rust can export, serve to a known direct HTTP peer, fetch, reassemble, execute TinyRustLM peer-import request JSON from a verified `.slm`, and write metadata-only receipt ledgers; broader peer discovery comes later, with consent and re-verification still required.</p>
         </a>
       </div>
     </section>
@@ -143,7 +143,7 @@
         </a>
         <a href="docs/verifier-mvp.md">
           <h3>Rust verifier</h3>
-          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, generated catalog entries, companion-readable peer-share state, direct peer-piece serve/fetch, peer-piece export/reassembly, one-command peer import requests, TinyRustLM compatibility, and import receipts.</p>
+          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, generated catalog entries, companion-readable peer-share state, direct peer-piece serve/fetch, peer-piece export/reassembly, one-command peer import requests, TinyRustLM compatibility, import receipts, and metadata-only receipt ledgers.</p>
         </a>
         <a href="examples/tiny-test-model-q8.minimodel.manifest.v0">
           <h3>Fixture manifest</h3>
@@ -155,7 +155,7 @@
         </a>
         <a href="docs/peer-companion.md">
           <h3>Peer Companion spec</h3>
-          <p>Roadmap design for a future user-run local companion: source lanes, Rust command contracts, accepted/deferred/rejected intake findings, local state, piece-store rules, consent gates, UI requirements, tests, and completion criteria.</p>
+          <p>Roadmap design for a future user-run local companion: source lanes, Rust command contracts, local receipt ledgers, accepted/deferred/rejected intake findings, local state, piece-store rules, consent gates, UI requirements, tests, and completion criteria.</p>
         </a>
         <a href="catalog/models.v0.json">
           <h3>Catalog endpoint</h3>
@@ -183,7 +183,7 @@
         </a>
         <a href="docs/peer-companion.md">
           <h3>Companion state</h3>
-          <p>`write-peer-companion-state` validates a prepared share and writes local metadata for future peer companion UI without embedding model bytes.</p>
+          <p>`write-peer-companion-state`, `write-peer-companion-inventory`, and `write-peer-contact-book` validate prepared-share state, receipt-ledger evidence, quota metadata, and reviewed peer contacts for future peer companion UI without embedding model bytes.</p>
         </a>
       </div>
     </section>

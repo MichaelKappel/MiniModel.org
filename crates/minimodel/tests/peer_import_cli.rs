@@ -454,6 +454,73 @@ fn companion_peer_import_cli_executes_check_preflight_and_import_over_local_http
     assert!(inspect_peer_receipt_text.contains("preflight.sha256: sha256:"));
     assert_receiver_validation_report_text(&inspect_peer_receipt_text);
 
+    let ledger_path = import_dir.join("tiny-test-model-q8.import-receipts.v0.json");
+    let ledger_path_text = ledger_path.to_string_lossy().to_string();
+    let write_ledger_output = Command::new(minimodel_bin())
+        .args([
+            "write-import-receipt-ledger",
+            &ledger_path_text,
+            &receipt_path_text,
+            &manifest_path_text,
+            &output_artifact_path_text,
+        ])
+        .output()
+        .expect("run write-import-receipt-ledger");
+    assert!(
+        write_ledger_output.status.success(),
+        "{}",
+        output_text(&write_ledger_output)
+    );
+    let write_ledger_text = output_text(&write_ledger_output);
+    assert!(write_ledger_text.contains("MiniModel import receipt ledger written"));
+    assert!(write_ledger_text.contains("entry_count: 1"));
+    assert!(write_ledger_text.contains("peer_import_count: 1"));
+    assert!(write_ledger_text.contains("ledger.sha256: sha256:"));
+
+    let inspect_ledger_output = Command::new(minimodel_bin())
+        .args(["inspect-import-receipt-ledger", &ledger_path_text])
+        .output()
+        .expect("run inspect-import-receipt-ledger");
+    assert!(
+        inspect_ledger_output.status.success(),
+        "{}",
+        output_text(&inspect_ledger_output)
+    );
+    let inspect_ledger_text = output_text(&inspect_ledger_output);
+    assert!(inspect_ledger_text.contains("MiniModel import receipt ledger validation: PASS"));
+    assert!(inspect_ledger_text.contains("entry_count: 1"));
+    assert!(inspect_ledger_text.contains("peer_import_count: 1"));
+
+    let ledger_text = std::fs::read_to_string(&ledger_path).expect("read receipt ledger");
+    assert!(ledger_text.contains(r#""ledger_kind": "minimodel.import_receipt_ledger.v0""#));
+    assert!(ledger_text.contains(r#""metadata_only": true"#));
+    assert!(ledger_text.contains(r#""contains_model_bytes": false"#));
+    assert!(ledger_text.contains(r#""peer_piece_bytes_fetched": true"#));
+    let receipt_sha_line = ledger_text
+        .lines()
+        .find(|line| line.contains(r#""receipt_sha256""#))
+        .expect("ledger includes receipt sha");
+    let drift_ledger_path = import_dir.join("tiny-test-model-q8.import-receipts-drift.v0.json");
+    let drift_ledger_path_text = drift_ledger_path.to_string_lossy().to_string();
+    std::fs::write(
+        &drift_ledger_path,
+        ledger_text.replace(
+            receipt_sha_line,
+            r#"      "receipt_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","#,
+        ),
+    )
+    .expect("write drifted receipt ledger");
+    let drift_ledger_output = Command::new(minimodel_bin())
+        .args(["inspect-import-receipt-ledger", &drift_ledger_path_text])
+        .output()
+        .expect("run inspect-import-receipt-ledger on drifted ledger");
+    assert!(
+        !drift_ledger_output.status.success(),
+        "{}",
+        output_text(&drift_ledger_output)
+    );
+    assert!(output_text(&drift_ledger_output).contains("receipt_sha256"));
+
     let piece_set_sha_line = receipt
         .lines()
         .find(|line| line.starts_with("peer.piece_set_sha256="))

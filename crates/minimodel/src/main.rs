@@ -208,6 +208,32 @@ fn run() -> Result<(), String> {
                 report.project_server_proxies_huggingface_bytes
             );
         }
+        "write-import-receipt-ledger" => {
+            let output_json = one_arg(&mut args, "output-json")?;
+            let entries = receipt_ledger_entries(args.collect())?;
+            let report = minimodel_core::write_import_receipt_ledger_path(
+                Path::new(&output_json),
+                &entries,
+            )?;
+            println!("MiniModel import receipt ledger written: {output_json}");
+            println!("ledger: {}", report.ledger_path);
+            println!("entry_count: {}", report.entry_count);
+            println!("peer_import_count: {}", report.peer_import_count);
+            println!("model_count: {}", report.model_count);
+            println!("ledger.sha256: {}", report.ledger_sha256);
+        }
+        "inspect-import-receipt-ledger" => {
+            let ledger_json = one_arg(&mut args, "ledger-json")?;
+            no_more_args(&mut args)?;
+            let report =
+                minimodel_core::inspect_import_receipt_ledger_path(Path::new(&ledger_json))?;
+            println!("MiniModel import receipt ledger validation: PASS");
+            println!("ledger: {}", report.ledger_path);
+            println!("entry_count: {}", report.entry_count);
+            println!("peer_import_count: {}", report.peer_import_count);
+            println!("model_count: {}", report.model_count);
+            println!("ledger.sha256: {}", report.ledger_sha256);
+        }
         "export-peer-pieces" => {
             let manifest = one_arg(&mut args, "manifest")?;
             let artifact = one_arg(&mut args, "artifact.slm")?;
@@ -654,6 +680,88 @@ fn run() -> Result<(), String> {
             println!("peer_label: {}", report.peer_label);
             println!("peer_base_url: {}", report.peer_base_url);
         }
+        "write-peer-contact-book" => {
+            let output_json = one_arg(&mut args, "output-json")?;
+            let contact_cards: Vec<PathBuf> = args.map(PathBuf::from).collect();
+            let report = minimodel_core::write_peer_contact_book_path(
+                Path::new(&output_json),
+                &contact_cards,
+            )?;
+            println!("MiniModel peer contact book written: {output_json}");
+            println!("book: {}", report.book_path);
+            println!("contact_card_count: {}", report.contact_card_count);
+            println!("first_peer_label: {}", report.first_peer_label);
+            println!("first_peer_base_url: {}", report.first_peer_base_url);
+            println!("book.sha256: {}", report.book_sha256);
+        }
+        "inspect-peer-contact-book" => {
+            let book_json = one_arg(&mut args, "book-json")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_peer_contact_book_path(Path::new(&book_json))?;
+            println!("MiniModel peer contact book validation: PASS");
+            println!("book: {}", report.book_path);
+            println!("contact_card_count: {}", report.contact_card_count);
+            println!("first_peer_label: {}", report.first_peer_label);
+            println!("first_peer_base_url: {}", report.first_peer_base_url);
+            println!("book.sha256: {}", report.book_sha256);
+            println!(
+                "boundary: metadata-only peer contact book; no model or peer-piece bytes embedded"
+            );
+        }
+        "write-peer-companion-inventory" => {
+            let output_json = one_arg(&mut args, "output-json")?;
+            let state_json = one_arg(&mut args, "state-json")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            let piece_dir = one_arg(&mut args, "piece-dir")?;
+            let receipt_ledger_json = one_arg(&mut args, "receipt-ledger-json")?;
+            let piece_store_quota_bytes = parse_u64_arg(
+                &one_arg(&mut args, "piece-store-quota-bytes")?,
+                "piece-store-quota-bytes",
+            )?;
+            let contact_cards: Vec<PathBuf> = args.map(PathBuf::from).collect();
+            let report = minimodel_core::write_peer_companion_inventory_path(
+                Path::new(&output_json),
+                Path::new(&state_json),
+                Path::new(&manifest),
+                Path::new(&piece_dir),
+                Path::new(&receipt_ledger_json),
+                piece_store_quota_bytes,
+                &contact_cards,
+            )?;
+            println!("MiniModel peer companion inventory written: {output_json}");
+            println!("inventory: {}", report.inventory_path);
+            println!("model.id: {}", report.model_id);
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("piece_count: {}", report.piece_count);
+            println!("piece_store_byte_count: {}", report.piece_store_byte_count);
+            println!(
+                "piece_store_quota_bytes: {}",
+                report.piece_store_quota_bytes
+            );
+            println!("receipt_entry_count: {}", report.receipt_entry_count);
+            println!("contact_card_count: {}", report.contact_card_count);
+            println!("inventory.sha256: {}", report.inventory_sha256);
+        }
+        "inspect-peer-companion-inventory" => {
+            let inventory_json = one_arg(&mut args, "inventory-json")?;
+            no_more_args(&mut args)?;
+            let report =
+                minimodel_core::inspect_peer_companion_inventory_path(Path::new(&inventory_json))?;
+            println!("MiniModel peer companion inventory validation: PASS");
+            println!("inventory: {}", report.inventory_path);
+            println!("model.id: {}", report.model_id);
+            println!("peer_base_url: {}", report.peer_base_url);
+            println!("piece_count: {}", report.piece_count);
+            println!("piece_store_byte_count: {}", report.piece_store_byte_count);
+            println!(
+                "piece_store_quota_bytes: {}",
+                report.piece_store_quota_bytes
+            );
+            println!("receipt_entry_count: {}", report.receipt_entry_count);
+            println!("contact_card_count: {}", report.contact_card_count);
+            println!("inventory.sha256: {}", report.inventory_sha256);
+            println!("boundary: metadata-only peer companion inventory; no model or peer-piece bytes embedded");
+        }
         "inspect-share-metadata" => {
             let bundle_json = one_arg(&mut args, "bundle-json")?;
             no_more_args(&mut args)?;
@@ -885,6 +993,12 @@ fn no_more_args(args: &mut impl Iterator<Item = String>) -> Result<(), String> {
     Ok(())
 }
 
+fn parse_u64_arg(value: &str, label: &str) -> Result<u64, String> {
+    value
+        .parse::<u64>()
+        .map_err(|_| format!("{label} must be a non-negative decimal integer"))
+}
+
 fn print_usage() {
     eprintln!("usage:");
     eprintln!("  minimodel verify-manifest <manifest>");
@@ -898,6 +1012,10 @@ fn print_usage() {
     eprintln!(
         "  minimodel inspect-peer-import-receipt <receipt.minimodel-receipt> <request-json> <preflight> <manifest> <artifact.slm>"
     );
+    eprintln!(
+        "  minimodel write-import-receipt-ledger <output-json> <receipt> <manifest> <artifact.slm> [<receipt> <manifest> <artifact.slm>...]"
+    );
+    eprintln!("  minimodel inspect-import-receipt-ledger <ledger-json>");
     eprintln!("  minimodel export-peer-pieces <manifest> <artifact.slm> <output-dir>");
     eprintln!("  minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>");
     eprintln!("  minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>");
@@ -921,6 +1039,12 @@ fn print_usage() {
         "  minimodel write-peer-contact-card <output-json> <known-peer-base-url> [peer-label]"
     );
     eprintln!("  minimodel inspect-peer-contact-card <card-json>");
+    eprintln!("  minimodel write-peer-contact-book <output-json> <contact-card-json>...");
+    eprintln!("  minimodel inspect-peer-contact-book <book-json>");
+    eprintln!(
+        "  minimodel write-peer-companion-inventory <output-json> <state-json> <manifest> <piece-dir> <receipt-ledger-json> <piece-store-quota-bytes> [contact-card-json...]"
+    );
+    eprintln!("  minimodel inspect-peer-companion-inventory <inventory-json>");
     eprintln!("  minimodel inspect-share-metadata <bundle-json>");
     eprintln!(
         "  minimodel write-catalog-entry <manifest> <peer-offer> <output-json> [source-huggingface-model-id] [known-peer-base-url]"
@@ -960,6 +1084,31 @@ fn split_catalog_entry_optional_args(
 
 fn is_peer_url_arg(value: &str) -> bool {
     value.trim_start().starts_with("http://")
+}
+
+fn receipt_ledger_entries(args: Vec<String>) -> Result<Vec<(PathBuf, PathBuf, PathBuf)>, String> {
+    if args.is_empty() {
+        return Err(
+            "write-import-receipt-ledger requires at least one <receipt> <manifest> <artifact.slm> triple"
+                .to_string(),
+        );
+    }
+    if args.len() % 3 != 0 {
+        return Err(
+            "write-import-receipt-ledger entries must be <receipt> <manifest> <artifact.slm> triples"
+                .to_string(),
+        );
+    }
+    Ok(args
+        .chunks_exact(3)
+        .map(|chunk| {
+            (
+                PathBuf::from(&chunk[0]),
+                PathBuf::from(&chunk[1]),
+                PathBuf::from(&chunk[2]),
+            )
+        })
+        .collect())
 }
 
 fn split_catalog_snapshot_announcement_args(

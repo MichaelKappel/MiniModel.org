@@ -247,6 +247,15 @@ pub struct PeerImportReceiptInspection {
 }
 
 #[derive(Debug, Clone)]
+pub struct ImportReceiptLedgerReport {
+    pub ledger_path: String,
+    pub ledger_sha256: String,
+    pub entry_count: usize,
+    pub peer_import_count: usize,
+    pub model_count: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct PeerImportPreflight {
     pub request_path: String,
     pub preflight_path: String,
@@ -366,6 +375,30 @@ pub struct PeerContactCardReport {
     pub card_path: String,
     pub peer_label: String,
     pub peer_base_url: String,
+}
+
+/// Summary returned after writing or validating a metadata-only peer contact book.
+#[derive(Debug, Clone)]
+pub struct PeerContactBookReport {
+    pub book_path: String,
+    pub book_sha256: String,
+    pub contact_card_count: usize,
+    pub first_peer_label: String,
+    pub first_peer_base_url: String,
+}
+
+/// Summary returned after writing or validating a local companion inventory.
+#[derive(Debug, Clone)]
+pub struct PeerCompanionInventoryReport {
+    pub inventory_path: String,
+    pub inventory_sha256: String,
+    pub model_id: String,
+    pub peer_base_url: String,
+    pub piece_count: usize,
+    pub piece_store_byte_count: u64,
+    pub piece_store_quota_bytes: u64,
+    pub receipt_entry_count: usize,
+    pub contact_card_count: usize,
 }
 
 /// Summary returned after validating a TinyRustLM local share metadata bundle.
@@ -936,6 +969,165 @@ pub fn inspect_peer_import_receipt_path(
     })
 }
 
+pub fn write_import_receipt_ledger_path(
+    ledger_path: &Path,
+    receipt_entries: &[(PathBuf, PathBuf, PathBuf)],
+) -> Result<ImportReceiptLedgerReport, String> {
+    if receipt_entries.is_empty() {
+        return Err("import receipt ledger requires at least one receipt entry".to_string());
+    }
+    let generated_at = utc_now()?;
+    let mut model_ids = BTreeSet::new();
+    let mut peer_import_count = 0usize;
+    let mut entries = Vec::with_capacity(receipt_entries.len());
+    for (index, (receipt_path, manifest_path, artifact_path)) in receipt_entries.iter().enumerate()
+    {
+        validate_local_path_hint(receipt_path, "receipt path")?;
+        validate_local_path_hint(manifest_path, "manifest path")?;
+        validate_local_path_hint(artifact_path, "artifact path")?;
+        let report = inspect_import_receipt_path(receipt_path, manifest_path, artifact_path)?;
+        if report.peer_import {
+            peer_import_count += 1;
+        }
+        model_ids.insert(report.model_id.clone());
+        entries.push(import_receipt_ledger_entry_json(
+            index,
+            receipt_path,
+            manifest_path,
+            artifact_path,
+            &report,
+        ));
+    }
+
+    let ledger = serde_json::json!({
+        "ledger_kind": "minimodel.import_receipt_ledger.v0",
+        "ledger_version": 1,
+        "generated_at": generated_at,
+        "entry_count": entries.len(),
+        "peer_import_count": peer_import_count,
+        "model_count": model_ids.len(),
+        "boundary": {
+            "metadata_only": true,
+            "contains_model_bytes": false,
+            "contains_peer_piece_bytes": false,
+            "project_server_serves_model_bytes": false,
+            "project_server_runs_model_bytes": false,
+            "project_server_proxies_huggingface_bytes": false,
+            "local_companion_receipt_index": true,
+            "rust_reverify_required_before_trust": true
+        },
+        "entries": entries
+    });
+    let mut text = serde_json::to_string_pretty(&ledger)
+        .map_err(|error| format!("failed to serialize import receipt ledger: {error}"))?;
+    text.push('\n');
+    ensure_parent_dir(ledger_path, "import receipt ledger")?;
+    fs::write(ledger_path, text.as_bytes())
+        .map_err(|error| format!("failed to write import receipt ledger: {error}"))?;
+    Ok(ImportReceiptLedgerReport {
+        ledger_path: ledger_path.display().to_string(),
+        ledger_sha256: sha256_prefixed(text.as_bytes()),
+        entry_count: receipt_entries.len(),
+        peer_import_count,
+        model_count: model_ids.len(),
+    })
+}
+
+pub fn inspect_import_receipt_ledger_path(
+    ledger_path: &Path,
+) -> Result<ImportReceiptLedgerReport, String> {
+    let ledger_bytes = fs::read(ledger_path)
+        .map_err(|error| format!("failed to read import receipt ledger: {error}"))?;
+    let ledger_text = std::str::from_utf8(&ledger_bytes)
+        .map_err(|_| "import receipt ledger must be valid UTF-8".to_string())?;
+    let value: Value = serde_json::from_str(ledger_text)
+        .map_err(|error| format!("failed to parse import receipt ledger JSON: {error}"))?;
+    let label = ledger_path.display().to_string();
+    require_json_string_field(
+        &value,
+        "ledger_kind",
+        &label,
+        "minimodel.import_receipt_ledger.v0",
+    )?;
+    require_json_u64_field(&value, "ledger_version", &label, 1)?;
+    json_required_string(&value, "generated_at", &label)?;
+    let entry_count = json_required_usize(&value, "entry_count", &label)?;
+    let peer_import_count = json_required_usize(&value, "peer_import_count", &label)?;
+    let model_count = json_required_usize(&value, "model_count", &label)?;
+    let boundary = json_required_object(&value, "boundary", &label)?;
+    require_json_bool_true(boundary, "metadata_only", &label)?;
+    require_json_bool_false(boundary, "contains_model_bytes", &label)?;
+    require_json_bool_false(boundary, "contains_peer_piece_bytes", &label)?;
+    require_json_bool_false(boundary, "project_server_serves_model_bytes", &label)?;
+    require_json_bool_false(boundary, "project_server_runs_model_bytes", &label)?;
+    require_json_bool_false(boundary, "project_server_proxies_huggingface_bytes", &label)?;
+    require_json_bool_true(boundary, "local_companion_receipt_index", &label)?;
+    require_json_bool_true(boundary, "rust_reverify_required_before_trust", &label)?;
+
+    let entries = json_required_array(&value, "entries", &label)?;
+    if entries.is_empty() {
+        return Err(format!("{label} entries must not be empty"));
+    }
+    if entry_count != entries.len() {
+        return Err(format!(
+            "{label} entry_count was {entry_count}, expected {}",
+            entries.len()
+        ));
+    }
+
+    let base_dir = ledger_path.parent().unwrap_or_else(|| Path::new(""));
+    let mut seen_receipts = BTreeSet::new();
+    let mut seen_models = BTreeSet::new();
+    let mut actual_peer_import_count = 0usize;
+    for (index, entry) in entries.iter().enumerate() {
+        let entry_label = format!("{label} entry {index}");
+        let entry_index = json_required_usize(entry, "entry_index", &entry_label)?;
+        if entry_index != index {
+            return Err(format!(
+                "{entry_label} entry_index was {entry_index}, expected {index}"
+            ));
+        }
+        let receipt_hint = json_required_string(entry, "receipt_path", &entry_label)?;
+        let manifest_hint = json_required_string(entry, "manifest_path", &entry_label)?;
+        let artifact_hint = json_required_string(entry, "artifact_path", &entry_label)?;
+        validate_local_path_hint(Path::new(&receipt_hint), "receipt path")?;
+        validate_local_path_hint(Path::new(&manifest_hint), "manifest path")?;
+        validate_local_path_hint(Path::new(&artifact_hint), "artifact path")?;
+        if !seen_receipts.insert(receipt_hint.to_ascii_lowercase()) {
+            return Err(format!(
+                "{entry_label} duplicate receipt_path {receipt_hint}"
+            ));
+        }
+        let receipt_path = resolve_ledger_path(base_dir, &receipt_hint);
+        let manifest_path = resolve_ledger_path(base_dir, &manifest_hint);
+        let artifact_path = resolve_ledger_path(base_dir, &artifact_hint);
+        let report = inspect_import_receipt_path(&receipt_path, &manifest_path, &artifact_path)?;
+        compare_ledger_entry(entry, &entry_label, &report)?;
+        if report.peer_import {
+            actual_peer_import_count += 1;
+        }
+        seen_models.insert(report.model_id);
+    }
+    if peer_import_count != actual_peer_import_count {
+        return Err(format!(
+            "{label} peer_import_count was {peer_import_count}, expected {actual_peer_import_count}"
+        ));
+    }
+    if model_count != seen_models.len() {
+        return Err(format!(
+            "{label} model_count was {model_count}, expected {}",
+            seen_models.len()
+        ));
+    }
+    Ok(ImportReceiptLedgerReport {
+        ledger_path: ledger_path.display().to_string(),
+        ledger_sha256: sha256_prefixed(&ledger_bytes),
+        entry_count,
+        peer_import_count,
+        model_count,
+    })
+}
+
 pub fn preflight_peer_import_request_path(
     request_path: &Path,
     manifest_path: &Path,
@@ -1435,6 +1627,605 @@ pub fn inspect_peer_contact_card_path(card_path: &Path) -> Result<PeerContactCar
         card_path: label,
         peer_label,
         peer_base_url,
+    })
+}
+
+/// Write a portable metadata-only book of reviewed peer contact cards.
+pub fn write_peer_contact_book_path(
+    output_path: &Path,
+    contact_card_paths: &[PathBuf],
+) -> Result<PeerContactBookReport, String> {
+    if contact_card_paths.is_empty() {
+        return Err("peer contact book requires at least one contact card".to_string());
+    }
+    if contact_card_paths.len() > 64 {
+        return Err("peer contact book supports at most 64 contact cards".to_string());
+    }
+    validate_local_path_hint(output_path, "peer contact book output path")?;
+
+    let mut contacts = Vec::with_capacity(contact_card_paths.len());
+    let mut seen_peer_urls = BTreeSet::new();
+    let mut first_peer_label = String::new();
+    let mut first_peer_base_url = String::new();
+    for (index, contact_card_path) in contact_card_paths.iter().enumerate() {
+        validate_local_path_hint(contact_card_path, "peer contact card path")?;
+        let label = contact_card_path.display().to_string();
+        let text = fs::read_to_string(contact_card_path)
+            .map_err(|error| format!("failed to read peer contact card {label}: {error}"))?;
+        let value: Value = serde_json::from_str(&text)
+            .map_err(|error| format!("failed to parse peer contact card {label}: {error}"))?;
+        let (peer_label, peer_base_url) = validate_peer_contact_card_value(&value, &label)?;
+        if !seen_peer_urls.insert(peer_base_url.clone()) {
+            return Err(format!(
+                "peer contact book duplicate peer_base_url {peer_base_url}"
+            ));
+        }
+        if index == 0 {
+            first_peer_label = peer_label.clone();
+            first_peer_base_url = peer_base_url.clone();
+        }
+        let card_text = serde_json::to_string_pretty(&value)
+            .map_err(|error| format!("failed to encode peer contact card for book: {error}"))?
+            + "\n";
+        contacts.push(serde_json::json!({
+            "card_sha256": sha256_prefixed(card_text.as_bytes()),
+            "card": value,
+        }));
+    }
+
+    let book = serde_json::json!({
+        "book_kind": "minimodel.peer_contact_book.v0",
+        "book_version": 1,
+        "generated_at": utc_now()?,
+        "contact_card_count": contacts.len(),
+        "contacts": contacts,
+        "commands": {
+            "inspect_contact_book": "minimodel inspect-peer-contact-book <book-json>",
+            "write_contact_card": "minimodel write-peer-contact-card <output-json> <known-peer-base-url> [peer-label]",
+            "import_peer_request": "minimodel import-peer-request <request-json> <manifest> <output-dir>",
+        },
+        "boundary": {
+            "metadata_only": true,
+            "peer_contact_book_embeds_model_bytes": false,
+            "peer_contact_book_embeds_peer_piece_bytes": false,
+            "peer_contact_book_contains_catalog_availability_claims": false,
+            "project_server_serves_model_bytes": false,
+            "project_server_runs_model_bytes": false,
+            "project_server_proxies_model_bytes": false,
+            "requires_rust_reverify_before_browser_import": true,
+        }
+    });
+    let book_text = serde_json::to_string_pretty(&book)
+        .map_err(|error| format!("failed to encode peer contact book JSON: {error}"))?
+        + "\n";
+    ensure_parent_dir(output_path, "peer contact book")?;
+    fs::write(output_path, book_text.as_bytes())
+        .map_err(|error| format!("failed to write peer contact book: {error}"))?;
+
+    Ok(PeerContactBookReport {
+        book_path: output_path.display().to_string(),
+        book_sha256: sha256_prefixed(book_text.as_bytes()),
+        contact_card_count: contact_card_paths.len(),
+        first_peer_label,
+        first_peer_base_url,
+    })
+}
+
+/// Validate a portable metadata-only peer contact book.
+pub fn inspect_peer_contact_book_path(book_path: &Path) -> Result<PeerContactBookReport, String> {
+    let book_bytes = fs::read(book_path)
+        .map_err(|error| format!("failed to read peer contact book: {error}"))?;
+    let book_text = std::str::from_utf8(&book_bytes)
+        .map_err(|_| "peer contact book must be valid UTF-8".to_string())?;
+    let value: Value = serde_json::from_str(book_text)
+        .map_err(|error| format!("failed to parse peer contact book JSON: {error}"))?;
+    let label = book_path.display().to_string();
+    require_json_string_field(
+        &value,
+        "book_kind",
+        &label,
+        "minimodel.peer_contact_book.v0",
+    )?;
+    require_json_u64_field(&value, "book_version", &label, 1)?;
+    parse_utc_timestamp_seconds(
+        &json_required_string(&value, "generated_at", &label)?,
+        &label,
+    )?;
+
+    let contacts = json_required_array(&value, "contacts", &label)?;
+    if contacts.is_empty() {
+        return Err(format!("{label} contacts must not be empty"));
+    }
+    if contacts.len() > 64 {
+        return Err(format!("{label} contacts exceeded 64 entries"));
+    }
+    let contact_card_count = json_required_usize(&value, "contact_card_count", &label)?;
+    if contacts.len() != contact_card_count {
+        return Err(format!(
+            "{label} contact_card_count was {contact_card_count}, expected {}",
+            contacts.len()
+        ));
+    }
+
+    let mut seen_peer_urls = BTreeSet::new();
+    let mut first_peer_label = String::new();
+    let mut first_peer_base_url = String::new();
+    for (index, contact) in contacts.iter().enumerate() {
+        let contact_label = format!("peer contact book contacts[{index}]");
+        let card_sha256 = normalize_sha256(&json_required_string(
+            contact,
+            "card_sha256",
+            &contact_label,
+        )?)?;
+        compare_inventory_string(contact, "card_sha256", &contact_label, &card_sha256)?;
+        let card = json_required_object(contact, "card", &contact_label)?;
+        let card_text = serde_json::to_string_pretty(card)
+            .map_err(|error| format!("failed to encode {contact_label} for hashing: {error}"))?
+            + "\n";
+        if sha256_prefixed(card_text.as_bytes()) != card_sha256 {
+            return Err(format!("{contact_label} card_sha256 mismatch"));
+        }
+        let (peer_label, peer_base_url) = validate_peer_contact_card_value(card, &contact_label)?;
+        if !seen_peer_urls.insert(peer_base_url.clone()) {
+            return Err(format!(
+                "peer contact book duplicate peer_base_url {peer_base_url}"
+            ));
+        }
+        if index == 0 {
+            first_peer_label = peer_label;
+            first_peer_base_url = peer_base_url;
+        }
+    }
+
+    let boundary = json_required_object(&value, "boundary", &label)?;
+    require_json_bool_true(boundary, "metadata_only", &label)?;
+    require_json_bool_false(boundary, "peer_contact_book_embeds_model_bytes", &label)?;
+    require_json_bool_false(
+        boundary,
+        "peer_contact_book_embeds_peer_piece_bytes",
+        &label,
+    )?;
+    require_json_bool_false(
+        boundary,
+        "peer_contact_book_contains_catalog_availability_claims",
+        &label,
+    )?;
+    require_json_bool_false(boundary, "project_server_serves_model_bytes", &label)?;
+    require_json_bool_false(boundary, "project_server_runs_model_bytes", &label)?;
+    require_json_bool_false(boundary, "project_server_proxies_model_bytes", &label)?;
+    require_json_bool_true(
+        boundary,
+        "requires_rust_reverify_before_browser_import",
+        &label,
+    )?;
+
+    Ok(PeerContactBookReport {
+        book_path: label,
+        book_sha256: sha256_prefixed(&book_bytes),
+        contact_card_count,
+        first_peer_label,
+        first_peer_base_url,
+    })
+}
+
+/// Write a metadata-only inventory for a user-run local companion.
+pub fn write_peer_companion_inventory_path(
+    output_path: &Path,
+    state_path: &Path,
+    manifest_path: &Path,
+    piece_dir: &Path,
+    receipt_ledger_path: &Path,
+    piece_store_quota_bytes: u64,
+    contact_card_paths: &[PathBuf],
+) -> Result<PeerCompanionInventoryReport, String> {
+    if piece_store_quota_bytes == 0 {
+        return Err("peer companion inventory piece-store quota must be positive".to_string());
+    }
+    if contact_card_paths.len() > 16 {
+        return Err("peer companion inventory supports at most 16 contact cards".to_string());
+    }
+    validate_local_path_hint(output_path, "peer companion inventory output path")?;
+    validate_local_path_hint(state_path, "peer companion state path")?;
+    validate_local_path_hint(manifest_path, "manifest path")?;
+    validate_local_path_hint(piece_dir, "piece directory path")?;
+    validate_local_path_hint(receipt_ledger_path, "receipt ledger path")?;
+
+    let share = inspect_peer_companion_state_path(state_path, manifest_path, piece_dir)?;
+    let piece_store_byte_count = peer_piece_store_byte_count_path(manifest_path, piece_dir)?;
+    if piece_store_byte_count > piece_store_quota_bytes {
+        return Err(format!(
+            "peer companion inventory piece store byte count {piece_store_byte_count} exceeds quota {piece_store_quota_bytes}"
+        ));
+    }
+
+    let ledger = inspect_import_receipt_ledger_path(receipt_ledger_path)?;
+    let ledger_models = receipt_ledger_model_ids(receipt_ledger_path)?;
+    if !ledger_models.contains(&share.model_id) {
+        return Err(format!(
+            "peer companion inventory receipt ledger does not include model_id {}",
+            share.model_id
+        ));
+    }
+
+    let state_sha256 = file_sha256_prefixed(state_path, "peer companion state")?;
+    let manifest_sha256 = file_sha256_prefixed(manifest_path, "manifest")?;
+    if manifest_sha256 != share.manifest_sha256 {
+        return Err(format!(
+            "peer companion inventory manifest SHA mismatch: expected {}, got {manifest_sha256}",
+            share.manifest_sha256
+        ));
+    }
+    let receipt_ledger_sha256 = file_sha256_prefixed(receipt_ledger_path, "receipt ledger")?;
+    if receipt_ledger_sha256 != ledger.ledger_sha256 {
+        return Err(format!(
+            "peer companion inventory receipt ledger SHA mismatch: expected {}, got {receipt_ledger_sha256}",
+            ledger.ledger_sha256
+        ));
+    }
+
+    let mut contact_cards = Vec::with_capacity(contact_card_paths.len());
+    let mut seen_contact_cards = BTreeSet::new();
+    for (index, contact_card_path) in contact_card_paths.iter().enumerate() {
+        validate_local_path_hint(contact_card_path, "peer contact card path")?;
+        let contact = inspect_peer_contact_card_path(contact_card_path)?;
+        if contact.peer_base_url != share.peer_base_url {
+            return Err(format!(
+                "peer companion inventory contact card {index} peer_base_url mismatch: expected {}, got {}",
+                share.peer_base_url, contact.peer_base_url
+            ));
+        }
+        let contact_path_text = contact_card_path.display().to_string();
+        if !seen_contact_cards.insert(contact_path_text.to_ascii_lowercase()) {
+            return Err(format!(
+                "peer companion inventory duplicate contact card path {contact_path_text}"
+            ));
+        }
+        contact_cards.push(serde_json::json!({
+            "path": contact_path_text,
+            "sha256": file_sha256_prefixed(contact_card_path, "peer contact card")?,
+            "peer_label": contact.peer_label,
+            "peer_base_url": contact.peer_base_url,
+        }));
+    }
+
+    let inventory = serde_json::json!({
+        "inventory_kind": "minimodel.peer_companion_inventory.v0",
+        "inventory_version": 1,
+        "generated_at": utc_now()?,
+        "model_id": share.model_id,
+        "peer_base_url": share.peer_base_url,
+        "share_state": {
+            "path": state_path.display().to_string(),
+            "sha256": state_sha256,
+            "state_route": share.state_route,
+            "manifest_path": manifest_path.display().to_string(),
+            "manifest_sha256": share.manifest_sha256,
+            "piece_dir_path": piece_dir.display().to_string(),
+            "piece_set_path_hint": "minimodel.peer_piece_set.v0",
+            "piece_set_sha256": share.piece_set_sha256,
+            "artifact_sha256": share.artifact_sha256,
+            "artifact_byte_count": share.artifact_byte_count,
+            "piece_count": share.piece_count,
+            "merkle_root_sha256": share.merkle_root_sha256,
+        },
+        "piece_store": {
+            "directory_path": piece_dir.display().to_string(),
+            "piece_store_byte_count": piece_store_byte_count,
+            "piece_store_quota_bytes": piece_store_quota_bytes,
+            "quota_status": "within-quota",
+            "piece_store_user_controlled": true,
+        },
+        "receipt_ledger": {
+            "path": receipt_ledger_path.display().to_string(),
+            "sha256": ledger.ledger_sha256,
+            "entry_count": ledger.entry_count,
+            "peer_import_count": ledger.peer_import_count,
+            "model_count": ledger.model_count,
+            "contains_model_id": true,
+        },
+        "contact_card_count": contact_cards.len(),
+        "contact_cards": contact_cards,
+        "commands": {
+            "inspect_inventory": "minimodel inspect-peer-companion-inventory <inventory-json>",
+            "inspect_state": "minimodel inspect-peer-companion-state <state-json> <manifest> <piece-dir>",
+            "inspect_receipt_ledger": "minimodel inspect-import-receipt-ledger <ledger-json>",
+            "serve_peer_companion": "minimodel serve-peer-companion <state-json> <manifest> <piece-dir> <bind-addr>",
+        },
+        "boundary": {
+            "metadata_only": true,
+            "user_run_local_software": true,
+            "inventory_contains_model_bytes": false,
+            "inventory_contains_peer_piece_bytes": false,
+            "project_server_serves_model_bytes": false,
+            "project_server_runs_model_bytes": false,
+            "project_server_proxies_model_bytes": false,
+            "local_piece_store_user_controlled": true,
+            "rust_reverify_required_before_trust": true,
+            "tinyrustlm_import_gate": "user-selected-local-slm-after-rust-receipt",
+        }
+    });
+
+    let text = serde_json::to_string_pretty(&inventory)
+        .map_err(|error| format!("failed to encode peer companion inventory JSON: {error}"))?
+        + "\n";
+    ensure_parent_dir(output_path, "peer companion inventory")?;
+    fs::write(output_path, text.as_bytes())
+        .map_err(|error| format!("failed to write peer companion inventory: {error}"))?;
+    Ok(PeerCompanionInventoryReport {
+        inventory_path: output_path.display().to_string(),
+        inventory_sha256: sha256_prefixed(text.as_bytes()),
+        model_id: share.model_id,
+        peer_base_url: share.peer_base_url,
+        piece_count: share.piece_count,
+        piece_store_byte_count,
+        piece_store_quota_bytes,
+        receipt_entry_count: ledger.entry_count,
+        contact_card_count: contact_cards.len(),
+    })
+}
+
+/// Validate a local companion inventory by reopening every referenced metadata file.
+pub fn inspect_peer_companion_inventory_path(
+    inventory_path: &Path,
+) -> Result<PeerCompanionInventoryReport, String> {
+    let inventory_bytes = fs::read(inventory_path)
+        .map_err(|error| format!("failed to read peer companion inventory: {error}"))?;
+    let inventory_text = std::str::from_utf8(&inventory_bytes)
+        .map_err(|_| "peer companion inventory must be valid UTF-8".to_string())?;
+    let value: Value = serde_json::from_str(inventory_text)
+        .map_err(|error| format!("failed to parse peer companion inventory JSON: {error}"))?;
+    let label = inventory_path.display().to_string();
+    require_json_string_field(
+        &value,
+        "inventory_kind",
+        &label,
+        "minimodel.peer_companion_inventory.v0",
+    )?;
+    require_json_u64_field(&value, "inventory_version", &label, 1)?;
+    parse_utc_timestamp_seconds(
+        &json_required_string(&value, "generated_at", &label)?,
+        &label,
+    )?;
+    let model_id = json_required_string(&value, "model_id", &label)?;
+    let peer_base_url =
+        normalize_known_peer_base_url(&json_required_string(&value, "peer_base_url", &label)?)?;
+    let base_dir = inventory_path.parent().unwrap_or_else(|| Path::new(""));
+
+    let state = json_required_object(&value, "share_state", &label)?;
+    let state_path_hint = json_required_string(state, "path", "peer companion inventory state")?;
+    let manifest_path_hint =
+        json_required_string(state, "manifest_path", "peer companion inventory state")?;
+    let piece_dir_path_hint =
+        json_required_string(state, "piece_dir_path", "peer companion inventory state")?;
+    validate_local_path_hint(Path::new(&state_path_hint), "peer companion state path")?;
+    validate_local_path_hint(Path::new(&manifest_path_hint), "manifest path")?;
+    validate_local_path_hint(Path::new(&piece_dir_path_hint), "piece directory path")?;
+    let state_path = resolve_ledger_path(base_dir, &state_path_hint);
+    let manifest_path = resolve_ledger_path(base_dir, &manifest_path_hint);
+    let piece_dir = resolve_ledger_path(base_dir, &piece_dir_path_hint);
+    let share = inspect_peer_companion_state_path(&state_path, &manifest_path, &piece_dir)?;
+    if share.model_id != model_id {
+        return Err(format!(
+            "peer companion inventory model_id mismatch: expected {}, got {model_id}",
+            share.model_id
+        ));
+    }
+    if share.peer_base_url != peer_base_url {
+        return Err(format!(
+            "peer companion inventory peer_base_url mismatch: expected {}, got {peer_base_url}",
+            share.peer_base_url
+        ));
+    }
+    compare_inventory_string(
+        state,
+        "sha256",
+        "peer companion inventory state",
+        &file_sha256_prefixed(&state_path, "peer companion state")?,
+    )?;
+    compare_inventory_string(
+        state,
+        "state_route",
+        "peer companion inventory state",
+        &share.state_route,
+    )?;
+    compare_inventory_string(
+        state,
+        "manifest_sha256",
+        "peer companion inventory state",
+        &share.manifest_sha256,
+    )?;
+    compare_inventory_string(
+        state,
+        "piece_set_path_hint",
+        "peer companion inventory state",
+        PEER_PIECE_SET_ROUTE,
+    )?;
+    compare_inventory_string(
+        state,
+        "piece_set_sha256",
+        "peer companion inventory state",
+        &share.piece_set_sha256,
+    )?;
+    compare_inventory_string(
+        state,
+        "artifact_sha256",
+        "peer companion inventory state",
+        &share.artifact_sha256,
+    )?;
+    compare_inventory_usize(
+        state,
+        "artifact_byte_count",
+        "peer companion inventory state",
+        usize::try_from(share.artifact_byte_count)
+            .map_err(|_| "artifact byte count is too large for this platform".to_string())?,
+    )?;
+    compare_inventory_usize(
+        state,
+        "piece_count",
+        "peer companion inventory state",
+        share.piece_count,
+    )?;
+    compare_inventory_string(
+        state,
+        "merkle_root_sha256",
+        "peer companion inventory state",
+        &share.merkle_root_sha256,
+    )?;
+
+    let piece_store = json_required_object(&value, "piece_store", &label)?;
+    let piece_store_dir = json_required_string(
+        piece_store,
+        "directory_path",
+        "peer companion inventory piece_store",
+    )?;
+    validate_local_path_hint(Path::new(&piece_store_dir), "piece store directory path")?;
+    if resolve_ledger_path(base_dir, &piece_store_dir) != piece_dir {
+        return Err("peer companion inventory piece_store directory_path must match share_state piece_dir_path".to_string());
+    }
+    let piece_store_byte_count = peer_piece_store_byte_count_path(&manifest_path, &piece_dir)?;
+    let recorded_piece_store_byte_count = json_required_usize(
+        piece_store,
+        "piece_store_byte_count",
+        "peer companion inventory piece_store",
+    )? as u64;
+    if recorded_piece_store_byte_count != piece_store_byte_count {
+        return Err(format!(
+            "peer companion inventory piece_store_byte_count mismatch: expected {piece_store_byte_count}, got {recorded_piece_store_byte_count}"
+        ));
+    }
+    let piece_store_quota_bytes = json_required_usize(
+        piece_store,
+        "piece_store_quota_bytes",
+        "peer companion inventory piece_store",
+    )? as u64;
+    if piece_store_quota_bytes < piece_store_byte_count {
+        return Err(format!(
+            "peer companion inventory piece store byte count {piece_store_byte_count} exceeds quota {piece_store_quota_bytes}"
+        ));
+    }
+    require_json_string_field(
+        piece_store,
+        "quota_status",
+        "peer companion inventory piece_store",
+        "within-quota",
+    )?;
+    require_json_bool_true(
+        piece_store,
+        "piece_store_user_controlled",
+        "peer companion inventory piece_store",
+    )?;
+
+    let receipt_ledger = json_required_object(&value, "receipt_ledger", &label)?;
+    let receipt_ledger_path_hint = json_required_string(
+        receipt_ledger,
+        "path",
+        "peer companion inventory receipt_ledger",
+    )?;
+    validate_local_path_hint(Path::new(&receipt_ledger_path_hint), "receipt ledger path")?;
+    let receipt_ledger_path = resolve_ledger_path(base_dir, &receipt_ledger_path_hint);
+    let ledger = inspect_import_receipt_ledger_path(&receipt_ledger_path)?;
+    compare_inventory_string(
+        receipt_ledger,
+        "sha256",
+        "peer companion inventory receipt_ledger",
+        &ledger.ledger_sha256,
+    )?;
+    compare_inventory_usize(
+        receipt_ledger,
+        "entry_count",
+        "peer companion inventory receipt_ledger",
+        ledger.entry_count,
+    )?;
+    compare_inventory_usize(
+        receipt_ledger,
+        "peer_import_count",
+        "peer companion inventory receipt_ledger",
+        ledger.peer_import_count,
+    )?;
+    compare_inventory_usize(
+        receipt_ledger,
+        "model_count",
+        "peer companion inventory receipt_ledger",
+        ledger.model_count,
+    )?;
+    require_json_bool_true(
+        receipt_ledger,
+        "contains_model_id",
+        "peer companion inventory receipt_ledger",
+    )?;
+    let ledger_models = receipt_ledger_model_ids(&receipt_ledger_path)?;
+    if !ledger_models.contains(&share.model_id) {
+        return Err(format!(
+            "peer companion inventory receipt ledger does not include model_id {}",
+            share.model_id
+        ));
+    }
+
+    let contact_cards = json_required_array(&value, "contact_cards", &label)?;
+    let contact_card_count = json_required_usize(&value, "contact_card_count", &label)?;
+    if contact_cards.len() != contact_card_count {
+        return Err(format!(
+            "{label} contact_card_count was {contact_card_count}, expected {}",
+            contact_cards.len()
+        ));
+    }
+    if contact_cards.len() > 16 {
+        return Err(format!("{label} contact_cards exceeded 16 entries"));
+    }
+    let mut seen_contact_cards = BTreeSet::new();
+    for (index, contact_card) in contact_cards.iter().enumerate() {
+        let card_label = format!("peer companion inventory contact_cards[{index}]");
+        let card_path_hint = json_required_string(contact_card, "path", &card_label)?;
+        validate_local_path_hint(Path::new(&card_path_hint), "peer contact card path")?;
+        if !seen_contact_cards.insert(card_path_hint.to_ascii_lowercase()) {
+            return Err(format!(
+                "peer companion inventory duplicate contact card path {card_path_hint}"
+            ));
+        }
+        let card_path = resolve_ledger_path(base_dir, &card_path_hint);
+        let contact = inspect_peer_contact_card_path(&card_path)?;
+        if contact.peer_base_url != share.peer_base_url {
+            return Err(format!(
+                "{card_label} peer_base_url mismatch: expected {}, got {}",
+                share.peer_base_url, contact.peer_base_url
+            ));
+        }
+        compare_inventory_string(
+            contact_card,
+            "sha256",
+            &card_label,
+            &file_sha256_prefixed(&card_path, "peer contact card")?,
+        )?;
+        compare_inventory_string(contact_card, "peer_label", &card_label, &contact.peer_label)?;
+        compare_inventory_string(
+            contact_card,
+            "peer_base_url",
+            &card_label,
+            &contact.peer_base_url,
+        )?;
+    }
+
+    let boundary = json_required_object(&value, "boundary", &label)?;
+    require_json_bool_true(boundary, "metadata_only", &label)?;
+    require_json_bool_true(boundary, "user_run_local_software", &label)?;
+    require_json_bool_false(boundary, "inventory_contains_model_bytes", &label)?;
+    require_json_bool_false(boundary, "inventory_contains_peer_piece_bytes", &label)?;
+    require_json_bool_false(boundary, "project_server_serves_model_bytes", &label)?;
+    require_json_bool_false(boundary, "project_server_runs_model_bytes", &label)?;
+    require_json_bool_false(boundary, "project_server_proxies_model_bytes", &label)?;
+    require_json_bool_true(boundary, "local_piece_store_user_controlled", &label)?;
+    require_json_bool_true(boundary, "rust_reverify_required_before_trust", &label)?;
+
+    Ok(PeerCompanionInventoryReport {
+        inventory_path: inventory_path.display().to_string(),
+        inventory_sha256: sha256_prefixed(&inventory_bytes),
+        model_id: share.model_id,
+        peer_base_url: share.peer_base_url,
+        piece_count: share.piece_count,
+        piece_store_byte_count,
+        piece_store_quota_bytes,
+        receipt_entry_count: ledger.entry_count,
+        contact_card_count,
     })
 }
 
@@ -4656,6 +5447,78 @@ fn validate_peer_companion_state_value(
     Ok(peer_base_url)
 }
 
+fn file_sha256_prefixed(path: &Path, label: &str) -> Result<String, String> {
+    let bytes = fs::read(path).map_err(|error| format!("failed to read {label}: {error}"))?;
+    Ok(sha256_prefixed(&bytes))
+}
+
+fn peer_piece_store_byte_count_path(manifest_path: &Path, piece_dir: &Path) -> Result<u64, String> {
+    inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
+    let piece_set_path = piece_dir.join(PEER_PIECE_SET_ROUTE);
+    let piece_set_text = fs::read_to_string(&piece_set_path)
+        .map_err(|error| format!("failed to read peer piece set for inventory: {error}"))?;
+    let piece_set = Manifest::parse(&piece_set_text)?;
+    let chunk_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
+    let mut byte_count = 0u64;
+    for index in 0..chunk_count {
+        let spec = peer_piece_spec(&piece_set, index)?;
+        byte_count = byte_count
+            .checked_add(spec.byte_count as u64)
+            .ok_or_else(|| {
+                "peer companion inventory piece store byte count overflow".to_string()
+            })?;
+    }
+    Ok(byte_count)
+}
+
+fn receipt_ledger_model_ids(ledger_path: &Path) -> Result<BTreeSet<String>, String> {
+    let ledger_text = fs::read_to_string(ledger_path)
+        .map_err(|error| format!("failed to read import receipt ledger: {error}"))?;
+    let value: Value = serde_json::from_str(&ledger_text)
+        .map_err(|error| format!("failed to parse import receipt ledger JSON: {error}"))?;
+    let label = ledger_path.display().to_string();
+    let entries = json_required_array(&value, "entries", &label)?;
+    let mut model_ids = BTreeSet::new();
+    for (index, entry) in entries.iter().enumerate() {
+        model_ids.insert(json_required_string(
+            entry,
+            "model_id",
+            &format!("{label} entry {index}"),
+        )?);
+    }
+    Ok(model_ids)
+}
+
+fn compare_inventory_string(
+    value: &Value,
+    key: &str,
+    label: &str,
+    expected: &str,
+) -> Result<(), String> {
+    let actual = json_required_string(value, key, label)?;
+    if actual == expected {
+        return Ok(());
+    }
+    Err(format!(
+        "{label} {key} mismatch: expected {expected}, got {actual}"
+    ))
+}
+
+fn compare_inventory_usize(
+    value: &Value,
+    key: &str,
+    label: &str,
+    expected: usize,
+) -> Result<(), String> {
+    let actual = json_required_usize(value, key, label)?;
+    if actual == expected {
+        return Ok(());
+    }
+    Err(format!(
+        "{label} {key} mismatch: expected {expected}, got {actual}"
+    ))
+}
+
 fn expected_peer_status_share(
     manifest: &Manifest,
     manifest_bytes: &[u8],
@@ -5561,6 +6424,204 @@ fn require_fixed_chunk_mode(manifest: &Manifest) -> Result<(), String> {
     }
 }
 
+fn import_receipt_ledger_entry_json(
+    index: usize,
+    receipt_path: &Path,
+    manifest_path: &Path,
+    artifact_path: &Path,
+    report: &ImportReceiptInspection,
+) -> Value {
+    serde_json::json!({
+        "entry_index": index,
+        "entry_kind": "minimodel.import_receipt_ledger_entry.v0",
+        "receipt_path": receipt_path.display().to_string(),
+        "receipt_sha256": report.receipt_sha256,
+        "manifest_path": manifest_path.display().to_string(),
+        "manifest_sha256": report.manifest_sha256,
+        "artifact_path": artifact_path.display().to_string(),
+        "artifact_sha256": report.artifact_sha256,
+        "artifact_byte_count": report.artifact_byte_count,
+        "model_id": report.model_id,
+        "slm_model_shape": report.slm_model_shape,
+        "slm_quantization": report.slm_quantization,
+        "peer_import": report.peer_import,
+        "receiver_validation_contract_status": report.receiver_validation_contract_status,
+        "check_peer_status_before_piece_fetch": report.check_peer_status_before_piece_fetch,
+        "preflight_fetches_piece_set_before_pieces": report.preflight_fetches_piece_set_before_pieces,
+        "validate_advertised_companion_state_before_piece_fetch": report.validate_advertised_companion_state_before_piece_fetch,
+        "import_receipt_required_before_browser_load": report.import_receipt_required_before_browser_load,
+        "peer_base_url": report.peer_base_url,
+        "companion_state_status": report.companion_state_status,
+        "piece_count": report.piece_count,
+        "merkle_root_sha256": report.merkle_root_sha256,
+        "peer_piece_bytes_fetched": report.peer_piece_bytes_fetched,
+        "artifact_assembled_from_peer_pieces": report.artifact_assembled_from_peer_pieces,
+        "project_server_serves_model_bytes": false,
+        "project_server_runs_model_bytes": false,
+        "project_server_proxies_huggingface_bytes": false
+    })
+}
+
+fn compare_ledger_entry(
+    entry: &Value,
+    label: &str,
+    report: &ImportReceiptInspection,
+) -> Result<(), String> {
+    require_json_string_field(
+        entry,
+        "entry_kind",
+        label,
+        "minimodel.import_receipt_ledger_entry.v0",
+    )?;
+    require_json_string_field(entry, "receipt_sha256", label, &report.receipt_sha256)?;
+    require_json_string_field(entry, "manifest_sha256", label, &report.manifest_sha256)?;
+    require_json_string_field(entry, "artifact_sha256", label, &report.artifact_sha256)?;
+    require_json_u64_field(
+        entry,
+        "artifact_byte_count",
+        label,
+        report.artifact_byte_count,
+    )?;
+    require_json_string_field(entry, "model_id", label, &report.model_id)?;
+    require_json_string_field(entry, "slm_model_shape", label, &report.slm_model_shape)?;
+    require_json_string_field(entry, "slm_quantization", label, &report.slm_quantization)?;
+    require_json_bool_field(entry, "peer_import", report.peer_import, label)?;
+    require_json_optional_string_field(
+        entry,
+        "receiver_validation_contract_status",
+        report.receiver_validation_contract_status.as_deref(),
+        label,
+    )?;
+    require_json_bool_field(
+        entry,
+        "check_peer_status_before_piece_fetch",
+        report.check_peer_status_before_piece_fetch,
+        label,
+    )?;
+    require_json_bool_field(
+        entry,
+        "preflight_fetches_piece_set_before_pieces",
+        report.preflight_fetches_piece_set_before_pieces,
+        label,
+    )?;
+    require_json_bool_field(
+        entry,
+        "validate_advertised_companion_state_before_piece_fetch",
+        report.validate_advertised_companion_state_before_piece_fetch,
+        label,
+    )?;
+    require_json_bool_field(
+        entry,
+        "import_receipt_required_before_browser_load",
+        report.import_receipt_required_before_browser_load,
+        label,
+    )?;
+    require_json_optional_string_field(
+        entry,
+        "peer_base_url",
+        report.peer_base_url.as_deref(),
+        label,
+    )?;
+    require_json_optional_string_field(
+        entry,
+        "companion_state_status",
+        report.companion_state_status.as_deref(),
+        label,
+    )?;
+    require_json_optional_usize_field(entry, "piece_count", report.piece_count, label)?;
+    require_json_optional_string_field(
+        entry,
+        "merkle_root_sha256",
+        report.merkle_root_sha256.as_deref(),
+        label,
+    )?;
+    require_json_bool_field(
+        entry,
+        "peer_piece_bytes_fetched",
+        report.peer_piece_bytes_fetched,
+        label,
+    )?;
+    require_json_bool_field(
+        entry,
+        "artifact_assembled_from_peer_pieces",
+        report.artifact_assembled_from_peer_pieces,
+        label,
+    )?;
+    require_json_bool_false(entry, "project_server_serves_model_bytes", label)?;
+    require_json_bool_false(entry, "project_server_runs_model_bytes", label)?;
+    require_json_bool_false(entry, "project_server_proxies_huggingface_bytes", label)?;
+    Ok(())
+}
+
+fn require_json_bool_field(
+    value: &Value,
+    key: &str,
+    expected: bool,
+    label: &str,
+) -> Result<(), String> {
+    let actual = json_required_bool(value, key, label)?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(format!("{label} {key} was {actual}, expected {expected}"))
+    }
+}
+
+fn require_json_optional_string_field(
+    value: &Value,
+    key: &str,
+    expected: Option<&str>,
+    label: &str,
+) -> Result<(), String> {
+    let actual = value
+        .get(key)
+        .ok_or_else(|| format!("{label} missing {key}"))?;
+    match (actual, expected) {
+        (Value::Null, None) => Ok(()),
+        (Value::String(actual), Some(expected)) if actual == expected => Ok(()),
+        _ => Err(format!(
+            "{label} {key} was {}, expected {}",
+            json_value_summary(actual),
+            expected.unwrap_or("null")
+        )),
+    }
+}
+
+fn require_json_optional_usize_field(
+    value: &Value,
+    key: &str,
+    expected: Option<usize>,
+    label: &str,
+) -> Result<(), String> {
+    let actual = value
+        .get(key)
+        .ok_or_else(|| format!("{label} missing {key}"))?;
+    match (actual, expected) {
+        (Value::Null, None) => Ok(()),
+        (Value::Number(number), Some(expected)) if number.as_u64() == Some(expected as u64) => {
+            Ok(())
+        }
+        _ => Err(format!(
+            "{label} {key} was {}, expected {}",
+            json_value_summary(actual),
+            expected
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "null".to_string())
+        )),
+    }
+}
+
+fn json_value_summary(value: &Value) -> String {
+    match value {
+        Value::Null => "null".to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => value.clone(),
+        Value::Array(_) => "array".to_string(),
+        Value::Object(_) => "object".to_string(),
+    }
+}
+
 fn validate_piece_set(
     manifest: &Manifest,
     manifest_bytes: &[u8],
@@ -6114,6 +7175,28 @@ fn ensure_parent_dir(path: &Path, label: &str) -> Result<(), String> {
     };
     fs::create_dir_all(parent)
         .map_err(|error| format!("failed to create {label} directory: {error}"))
+}
+
+fn validate_local_path_hint(path: &Path, label: &str) -> Result<(), String> {
+    let text = path.to_string_lossy();
+    if text.trim().is_empty() {
+        return Err(format!("{label} cannot be empty"));
+    }
+    if text.contains("://") || text.chars().any(|ch| ch.is_control()) {
+        return Err(format!(
+            "{label} must be a local filesystem path, not a URL or control text"
+        ));
+    }
+    Ok(())
+}
+
+fn resolve_ledger_path(base_dir: &Path, path_hint: &str) -> PathBuf {
+    let path = Path::new(path_hint);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base_dir.join(path)
+    }
 }
 
 fn piece_file_name(index: usize) -> String {
@@ -7608,6 +8691,109 @@ mod tests {
         let error = inspect_peer_contact_card_path(&card_path).unwrap_err();
 
         assert!(error.contains("project_server_serves_model_bytes"));
+        assert!(error.contains("must be false"));
+    }
+
+    #[test]
+    fn writes_and_inspects_peer_contact_book() {
+        let dir = unique_dir("peer-contact-book");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let first_card_path = dir.join("first.card.json");
+        let second_card_path = dir.join("second.card.json");
+        let book_path = dir.join("peers.contact-book.json");
+        write_peer_contact_card_path(
+            &first_card_path,
+            "http://127.0.0.1:8123/peer-pieces",
+            Some("Local lab peer"),
+        )
+        .unwrap();
+        write_peer_contact_card_path(
+            &second_card_path,
+            "http://192.0.2.42:8123/peer-pieces",
+            Some("Office lab peer"),
+        )
+        .unwrap();
+
+        let report = write_peer_contact_book_path(
+            &book_path,
+            &[first_card_path.clone(), second_card_path.clone()],
+        )
+        .unwrap();
+        let inspect = inspect_peer_contact_book_path(&book_path).unwrap();
+        let text = std::fs::read_to_string(&book_path).unwrap();
+        let value: Value = serde_json::from_str(&text).unwrap();
+
+        assert_eq!(report.contact_card_count, 2);
+        assert_eq!(inspect.contact_card_count, 2);
+        assert_eq!(inspect.first_peer_label, "Local lab peer");
+        assert_eq!(
+            inspect.first_peer_base_url,
+            "http://127.0.0.1:8123/peer-pieces/"
+        );
+        assert_eq!(
+            value["book_kind"].as_str(),
+            Some("minimodel.peer_contact_book.v0")
+        );
+        assert_eq!(value["boundary"]["metadata_only"].as_bool(), Some(true));
+        assert_eq!(
+            value["boundary"]["peer_contact_book_embeds_model_bytes"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            value["boundary"]["peer_contact_book_embeds_peer_piece_bytes"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            value["contacts"][0]["card"]["card_kind"].as_str(),
+            Some("minimodel.peer_contact_card")
+        );
+        assert!(!text.contains(&first_card_path.display().to_string()));
+        assert!(!text.contains(".slm"));
+    }
+
+    #[test]
+    fn rejects_peer_contact_book_duplicate_peer_url() {
+        let dir = unique_dir("peer-contact-book-duplicate");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let card_path = dir.join("known-peer.card.json");
+        let book_path = dir.join("peers.contact-book.json");
+        write_peer_contact_card_path(&card_path, "http://127.0.0.1:8123/", None).unwrap();
+
+        let error =
+            write_peer_contact_book_path(&book_path, &[card_path.clone(), card_path]).unwrap_err();
+
+        assert!(error.contains("duplicate peer_base_url"));
+        assert!(!book_path.exists());
+    }
+
+    #[test]
+    fn rejects_peer_contact_book_card_hash_and_boundary_drift() {
+        let dir = unique_dir("peer-contact-book-drift");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let card_path = dir.join("known-peer.card.json");
+        let book_path = dir.join("peers.contact-book.json");
+        write_peer_contact_card_path(&card_path, "http://127.0.0.1:8123/", None).unwrap();
+        write_peer_contact_book_path(&book_path, &[card_path]).unwrap();
+        let mut value: Value =
+            serde_json::from_str(&std::fs::read_to_string(&book_path).unwrap()).unwrap();
+        value["contacts"][0]["card"]["peer_label"] = Value::String("Tampered".to_string());
+        std::fs::write(&book_path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+
+        let error = inspect_peer_contact_book_path(&book_path).unwrap_err();
+        assert!(error.contains("card_sha256 mismatch"));
+
+        value["contacts"][0]["card_sha256"] = Value::String(sha256_prefixed(
+            (serde_json::to_string_pretty(&value["contacts"][0]["card"]).unwrap() + "\n")
+                .as_bytes(),
+        ));
+        value["boundary"]["peer_contact_book_embeds_model_bytes"] = Value::Bool(true);
+        std::fs::write(&book_path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+
+        let error = inspect_peer_contact_book_path(&book_path).unwrap_err();
+        assert!(error.contains("peer_contact_book_embeds_model_bytes"));
         assert!(error.contains("must be false"));
     }
 

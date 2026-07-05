@@ -19,7 +19,13 @@ The companion exists to make step 2 through step 4 understandable for power user
 
 ## Status
 
-The full local companion application remains roadmap only. Do not claim a signed MiniModel Peer Companion app is live until that application, consent flows, and release documentation exist. The Rust CLI now has companion-shaped primitives: `prepare-peer-share` writes a verified sender share package from a local `.slm`, `inspect-share-metadata` validates TinyRustLM metadata-only and share-kit-ready local share bundles, `write-peer-companion-state` writes verified metadata-only state, `inspect-peer-companion-state` revalidates that state against the manifest and piece directory, `write-peer-contact-card` writes a metadata-only reviewed known-peer URL card, `inspect-peer-contact-card` revalidates that card, `inspect-peer-source-announcement-feed` preflights existing metadata-only peer-source announcement feeds, `inspect-catalog-snapshot` preflights existing `models.v0.json` catalog snapshots, `inspect-peer-import-request` validates saved receiver handoff JSON against the manifest before network access, `inspect-import-receipt` revalidates completed local import receipts against the manifest and assembled `.slm`, `serve-peer-companion` validates companion state before serving the fixed companion-state route plus the existing peer-piece routes from a user-run local process, and `check-peer-status` fetches only `minimodel.peer_status.v0.json` to validate a running peer's metadata before piece preflight or transfer. CLI integration coverage now exercises the public `prepare-peer-share` command from the q8 fixture, including manifest, peer-offer, peer-piece, and catalog output; it validates public `inspect-peer-import-request` offline, starts the public `serve-peer-companion` binary, and runs public `check-peer-status`, `preflight-peer-import-request`, `import-peer-request`, and `inspect-import-receipt` commands against it to prove the receiver path; it exercises `inspect-share-metadata` against both valid TinyRustLM share-bundle profiles plus project-server-byte and chunk-list drift failures; it exercises `write-peer-companion-state` / `inspect-peer-companion-state` from a prepared q8 share, including metadata-only state output, normalized path-prefixed/root-dot peer URLs, state/piece-count drift rejection, project-server flag drift rejection, malformed host rejection, and project/Hugging Face host rejection before manifest or piece reads; it exercises `write-peer-contact-card` / `inspect-peer-contact-card`, including normalized path-prefixed peer URLs and project/Hugging Face host rejection before output; it also exercises `write-peer-source-announcement-feed` / `inspect-peer-source-announcement-feed`, including a prepared-share announcement feed, an empty feed, and project-server-flag rejection; and it exercises `inspect-catalog-snapshot` against normal/feed-bound snapshots plus project-server-flag drift.
+The full local companion application remains roadmap only. Do not claim a signed MiniModel Peer Companion app is live until that application, consent flows, and release documentation exist. The Rust CLI now has companion-shaped primitives: `prepare-peer-share` writes a verified sender share package from a local `.slm`, `inspect-share-metadata` validates TinyRustLM metadata-only and share-kit-ready local share bundles, `write-peer-companion-state` writes verified metadata-only state, `inspect-peer-companion-state` revalidates that state against the manifest and piece directory, `write-peer-contact-card` writes a metadata-only reviewed known-peer URL card, `inspect-peer-contact-card` revalidates that card, `inspect-peer-source-announcement-feed` preflights existing metadata-only peer-source announcement feeds, `inspect-catalog-snapshot` preflights existing `models.v0.json` catalog snapshots, `inspect-peer-import-request` validates saved receiver handoff JSON against the manifest before network access, `inspect-import-receipt` revalidates completed local import receipts against the manifest and assembled `.slm`, `write-import-receipt-ledger` writes a local metadata-only receipt index after reopening every receipt/manifest/artifact through Rust verification, `inspect-import-receipt-ledger` revalidates that index and rejects drift, `serve-peer-companion` validates companion state before serving the fixed companion-state route plus the existing peer-piece routes from a user-run local process, and `check-peer-status` fetches only `minimodel.peer_status.v0.json` to validate a running peer's metadata before piece preflight or transfer. CLI integration coverage now exercises the public `prepare-peer-share` command from the q8 fixture, including manifest, peer-offer, peer-piece, and catalog output; it validates public `inspect-peer-import-request` offline, starts the public `serve-peer-companion` binary, and runs public `check-peer-status`, `preflight-peer-import-request`, `import-peer-request`, `inspect-import-receipt`, `inspect-peer-import-receipt`, `write-import-receipt-ledger`, and `inspect-import-receipt-ledger` commands against it to prove the receiver path; it exercises ledger metadata-only output plus stale receipt-SHA drift rejection; it exercises `inspect-share-metadata` against both valid TinyRustLM share-bundle profiles plus project-server-byte and chunk-list drift failures; it exercises `write-peer-companion-state` / `inspect-peer-companion-state` from a prepared q8 share, including metadata-only state output, normalized path-prefixed/root-dot peer URLs, state/piece-count drift rejection, project-server flag drift rejection, malformed host rejection, and project/Hugging Face host rejection before manifest or piece reads; it exercises `write-peer-contact-card` / `inspect-peer-contact-card`, including normalized path-prefixed peer URLs and project/Hugging Face host rejection before output; it also exercises `write-peer-source-announcement-feed` / `inspect-peer-source-announcement-feed`, including a prepared-share announcement feed, an empty feed, and project-server-flag rejection; and it exercises `inspect-catalog-snapshot` against normal/feed-bound snapshots plus project-server-flag drift.
+
+TinyRustLM-generated local share kits also exercise the companion/audit primitives from the sender side: after `prepare-peer-share`, the script writes and inspects a local `.minimodel-receipt`, then writes and inspects a metadata-only `import-receipts.v0.json` ledger with `peer_import_count=0` before publishing optional peer-source, catalog, companion-state, or contact-card metadata.
+
+The sender-side share kit now also writes and inspects `minimodel.peer_companion_inventory.v0` when a consenting Known peer URL is set. The inventory summarizes the companion state, manifest, peer-piece directory, sender-side receipt ledger, local piece-store byte/quota evidence, and optional peer contact cards without carrying `.slm` bytes or peer-piece payloads.
+
+TinyRustLM can load the same inventory as local browser metadata in its P2P panels. That UI preview validates the no-byte boundary and shows a Rust-reverify-required summary, but `inspect-peer-companion-inventory` remains the verifier gate before a companion trusts the file.
 
 ## Non-Negotiable Rules
 
@@ -43,7 +49,7 @@ The companion should turn the advanced peer workflow into a local control center
 - export or import metadata-only peer contact cards for reviewed consenting direct peer URLs
 - write portable peer-source announcements for catalog maintainers
 - import from a consenting direct peer with local Rust verification
-- maintain local import receipts and transfer logs
+- maintain local import receipts, metadata-only receipt ledgers, and transfer logs
 - enforce cache quotas and let the user remove stored pieces
 - hand the verified output path back to TinyRustLM for browser file-picker import
 
@@ -71,10 +77,17 @@ The user provides a local `.slm`. The companion can call the same Rust verificat
 minimodel verify-manifest <manifest>
 minimodel verify-artifact <manifest> <artifact.slm>
 minimodel write-import-receipt <manifest> <artifact.slm> <receipt>
+minimodel inspect-import-receipt <receipt.minimodel-receipt> <manifest> <artifact.slm>
+minimodel write-import-receipt-ledger <output-json> <receipt> <manifest> <artifact.slm> [<receipt> <manifest> <artifact.slm>...]
+minimodel inspect-import-receipt-ledger <ledger-json>
 minimodel write-peer-companion-state <manifest> <piece-dir> <state-json> <known-peer-base-url>
 minimodel inspect-peer-companion-state <state-json> <manifest> <piece-dir>
+minimodel write-peer-companion-inventory <output-json> <state-json> <manifest> <piece-dir> <receipt-ledger-json> <piece-store-quota-bytes> [contact-card-json...]
+minimodel inspect-peer-companion-inventory <inventory-json>
 minimodel write-peer-contact-card <output-json> <known-peer-base-url> [peer-label]
 minimodel inspect-peer-contact-card <card-json>
+minimodel write-peer-contact-book <output-json> <contact-card-json>...
+minimodel inspect-peer-contact-book <book-json>
 minimodel inspect-share-metadata <bundle-json>
 minimodel inspect-peer-source-announcement-feed <feed-json>
 minimodel inspect-catalog-snapshot <catalog-json>
@@ -114,12 +127,16 @@ If a receiver only needs a reviewed known-peer URL for a proof-ready row, the se
 ```text
 minimodel write-peer-contact-card <output-json> <known-peer-base-url> [peer-label]
 minimodel inspect-peer-contact-card <card-json>
+minimodel write-peer-contact-book <output-json> <contact-card-json>...
+minimodel inspect-peer-contact-book <book-json>
 minimodel inspect-share-metadata <bundle-json>
 ```
 
 The card carries no `.slm` bytes, no peer pieces, and no catalog availability claim. It only lets TinyRustLM or a future companion fill the Known peer URL before Rust `import-peer-request` revalidates and transfers from that consenting peer.
 
-The CLI integration test `peer_share_cli` keeps the sender-side public command path aligned with the core validator: it runs `prepare-peer-share` through the binary against the TinyRustLM q8 fixture, verifies the generated manifest, peer-offer, peer-piece sidecar, and catalog entry, checks the normalized `http://127.0.0.1:8123/peer-pieces/` URL, and verifies `http://MiniModel.org/peer-pieces` is rejected before artifact bytes are read. The `peer_import_cli` smoke keeps the receiver-side public path aligned: it exports pieces, writes companion state, starts `serve-peer-companion` on a path-prefixed loopback URL, waits for `check-peer-status`, runs `preflight-peer-import-request`, runs `inspect-peer-import-preflight`, runs `import-peer-request`, runs `inspect-import-receipt`, runs `inspect-peer-import-receipt`, verifies metadata-only preflight, validates advertised companion state, verifies receipt evidence, rejects unsafe peer URL paths before manifest reads, rejects drifted project-server and piece-set receipt fields, rejects a future-dated preflight whose timestamp would make the receipt predate the preflight, and checks the imported `.slm` bytes match the source fixture. The `share_metadata_cli` test keeps TinyRustLM's browser export contract aligned with Rust: it accepts metadata-only and share-kit-ready `minimodel.local_slm_share_metadata.v0` bundles, rejects project-server-byte claims, and rejects chunk-list drift before a maintainer or converter treats the bundle as MiniModel metadata. The `peer_companion_state_cli` test keeps the companion-state public command path aligned with the core validator: it exports peer pieces through the binary, writes companion state through the binary, inspects that state through the binary, checks the same path-prefixed URL normalization, verifies the JSON remains metadata-only with no project-server-byte flags, rejects piece-count drift, rejects project-server flag drift, and verifies the project host is rejected before manifest or piece files are read. The companion `peer_contact_card_cli` test keeps the smaller card contract aligned: it writes a card through the binary, inspects it through the binary, checks the same path-prefixed URL normalization, and verifies the project host is rejected before any card file is created. The `peer_source_announcement_feed_cli` test keeps feed publication aligned: it writes and inspects a prepared-share announcement feed, accepts an empty feed, and rejects project-server-byte flag drift before TinyRustLM or a maintainer applies the feed. The `catalog_snapshot_cli` test keeps final snapshot publication aligned: it writes and inspects normal and feed-bound snapshots, reports catalog SHA-256/counts, and rejects project-server flag drift before the snapshot is loaded or shared.
+For a small reviewed peer list, `write-peer-contact-book` embeds 1-64 validated cards into `minimodel.peer_contact_book.v0` with per-card SHA-256s and an explicit no-model-byte/no-peer-piece/no-catalog-claim boundary. `inspect-peer-contact-book` revalidates the book before a UI trusts it; TinyRustLM uses the first embedded peer as the active Known peer while still requiring Rust reverify before transfer.
+
+The CLI integration test `peer_share_cli` keeps the sender-side public command path aligned with the core validator: it runs `prepare-peer-share` through the binary against the TinyRustLM q8 fixture, verifies the generated manifest, peer-offer, peer-piece sidecar, and catalog entry, checks the normalized `http://127.0.0.1:8123/peer-pieces/` URL, and verifies `http://MiniModel.org/peer-pieces` is rejected before artifact bytes are read. The `peer_import_cli` smoke keeps the receiver-side public path aligned: it exports pieces, writes companion state, starts `serve-peer-companion` on a path-prefixed loopback URL, waits for `check-peer-status`, runs `preflight-peer-import-request`, runs `inspect-peer-import-preflight`, runs `import-peer-request`, runs `inspect-import-receipt`, runs `inspect-peer-import-receipt`, verifies metadata-only preflight, validates advertised companion state, verifies receipt evidence, rejects unsafe peer URL paths before manifest reads, rejects drifted project-server and piece-set receipt fields, rejects a future-dated preflight whose timestamp would make the receipt predate the preflight, and checks the imported `.slm` bytes match the source fixture. The `share_metadata_cli` test keeps TinyRustLM's browser export contract aligned with Rust: it accepts metadata-only and share-kit-ready `minimodel.local_slm_share_metadata.v0` bundles, rejects project-server-byte claims, and rejects chunk-list drift before a maintainer or converter treats the bundle as MiniModel metadata. The `peer_companion_state_cli` test keeps the companion-state public command path aligned with the core validator: it exports peer pieces through the binary, writes companion state through the binary, inspects that state through the binary, checks the same path-prefixed URL normalization, verifies the JSON remains metadata-only with no project-server-byte flags, rejects piece-count drift, rejects project-server flag drift, and verifies the project host is rejected before manifest or piece files are read. The companion `peer_contact_card_cli` test keeps the smaller card contract aligned: it writes a card through the binary, inspects it through the binary, checks the same path-prefixed URL normalization, and verifies the project host is rejected before any card file is created. The `peer_contact_book_cli` test keeps reviewed peer lists aligned: it writes two cards, writes and inspects a contact book, verifies embedded card hashes and source-path omission, and proves duplicate peer URLs fail before any book output. The `peer_source_announcement_feed_cli` test keeps feed publication aligned: it writes and inspects a prepared-share announcement feed, accepts an empty feed, and rejects project-server-byte flag drift before TinyRustLM or a maintainer applies the feed. The `catalog_snapshot_cli` test keeps final snapshot publication aligned: it writes and inspects normal and feed-bound snapshots, reports catalog SHA-256/counts, and rejects project-server flag drift before the snapshot is loaded or shared.
 
 ### P2P Import
 
@@ -133,6 +150,9 @@ minimodel check-peer-status <manifest> <known-peer-base-url> <output-json>
 minimodel preflight-peer-import-request <request-json> <manifest> <output.preflight>
 minimodel import-peer-request <request-json> <manifest> <output-dir>
 minimodel inspect-import-receipt <receipt.minimodel-receipt> <manifest> <artifact.slm>
+minimodel inspect-peer-import-receipt <receipt.minimodel-receipt> <request-json> <preflight> <manifest> <artifact.slm>
+minimodel write-import-receipt-ledger <output-json> <receipt> <manifest> <artifact.slm> [<receipt> <manifest> <artifact.slm>...]
+minimodel inspect-import-receipt-ledger <ledger-json>
 ```
 
 The companion may wrap those commands with progress, logs, retry controls, and cache policy, but the acceptance criteria stay the same:
@@ -149,6 +169,7 @@ The companion may wrap those commands with progress, logs, retry controls, and c
 - assembled `.slm` passes full artifact and runtime checks
 - import receipt is written before TinyRustLM import
 - import receipt is inspected against the assembled `.slm` before TinyRustLM import
+- import receipt can be indexed in a metadata-only ledger that reopens the receipt, manifest, and artifact before later companion use
 
 ## Architecture
 
@@ -159,7 +180,7 @@ Use shared Rust verifier crates first. Choose the presentation shell later.
 - `minimodel-core`: manifest, catalog, peer-source, peer-piece, `.slm`, checksum, and receipt verification.
 - `minimodel`: CLI command surface that remains the reference behavior and test oracle.
 - future `minimodel-companion-core`: application use cases such as prepare share, start serve session, import from peer, write announcement, enforce cache quota, and list receipts.
-- future `minimodel-companion-store`: local metadata store for receipts, peer identities, transfer logs, cache index, and catalog snapshots.
+- future `minimodel-companion-store`: local metadata store for receipts, receipt ledgers, peer identities, transfer logs, cache index, and catalog snapshots; the current CLI receipt ledger is the first metadata-only file primitive, not the full store.
 - future `minimodel-companion-transport`: adapters for direct HTTP first, then Iroh/QUIC, libp2p, WebRTC, WebTransport, or other transports only after the verifier contract is preserved.
 - future presentation shell: Tauri, Iced, Slint, egui, Dioxus, or another UI after the domain layer is stable.
 
@@ -214,6 +235,7 @@ Acceptable local state:
 - peer-source announcement hashes
 - peer companion state hashes
 - receipt paths and hashes
+- receipt ledger paths and hashes
 - transfer logs
 - cache index
 - local peer identity public key
@@ -289,8 +311,13 @@ Implemented by the CLI:
 - `assemble-peer-pieces`
 - `import-peer-request`
 - `inspect-import-receipt`
+- `inspect-peer-import-receipt`
+- `write-import-receipt-ledger`
+- `inspect-import-receipt-ledger`
 - `write-peer-companion-state`
 - `inspect-peer-companion-state`
+- `write-peer-companion-inventory`
+- `inspect-peer-companion-inventory`
 - `add-peer-source`
 - `write-peer-source-announcement`
 - `apply-peer-source-announcements`
@@ -302,7 +329,7 @@ Implemented by the CLI:
 
 The companion should wrap this before adding broader discovery.
 
-`write-peer-companion-state` is the first CLI artifact shaped for that wrapper. It validates a prepared share directory, binds a consenting direct peer URL, and writes metadata-only JSON with manifest/artifact/piece-set checksums, piece count, Merkle root, command hints, and no-project-server-byte flags. `inspect-peer-companion-state` reruns the same state/manifest/piece-directory checks against an existing JSON file and reports the state, manifest, artifact, piece-set, chunk, and no-embedded-byte boundary before a script publishes or serves the handoff. `serve-peer-companion` is the matching local serving primitive: it validates the state against the manifest and peer-piece directory, serves `minimodel.peer_status.v0.json`, `minimodel.peer_companion_state.v0.json`, and keeps the existing allow-list behavior for `minimodel.peer_piece_set.v0` plus declared chunk files. Path-prefixed base URLs such as `http://127.0.0.1:8123/peer-pieces/` are honored by serving those same allow-listed routes under the prefix. `serve-peer-pieces` also exposes the metadata-only status route for peers without companion state. Receiver-side `check-peer-status` validates that route before preflight, and `preflight-peer-import-request`, `fetch-peer-pieces`, and `import-peer-request` validate companion state when the route exists and record `not-advertised` for older piece-only peers. Completed `import-peer-request` receipts also record the direct peer transport, piece-set SHA-256, companion-state status, chunk/Merkle contract, fetched peer-piece bytes, assembled-from-peer-pieces status, and no-project-server-byte flags; `inspect-import-receipt` rechecks that evidence against the manifest and assembled `.slm`. A future UI can read that state and receipt evidence without parsing model bytes or inventing a separate verifier path.
+`write-peer-companion-state` is the first CLI artifact shaped for that wrapper. It validates a prepared share directory, binds a consenting direct peer URL, and writes metadata-only JSON with manifest/artifact/piece-set checksums, piece count, Merkle root, command hints, and no-project-server-byte flags. `inspect-peer-companion-state` reruns the same state/manifest/piece-directory checks against an existing JSON file and reports the state, manifest, artifact, piece-set, chunk, and no-embedded-byte boundary before a script publishes or serves the handoff. `write-peer-companion-inventory` layers on top of that state by binding it to the sender-side receipt ledger, optional contact cards, and local piece-store byte/quota evidence; `inspect-peer-companion-inventory` revalidates that metadata-only summary before a UI trusts it. `serve-peer-companion` is the matching local serving primitive: it validates the state against the manifest and peer-piece directory, serves `minimodel.peer_status.v0.json`, `minimodel.peer_companion_state.v0.json`, and keeps the existing allow-list behavior for `minimodel.peer_piece_set.v0` plus declared chunk files. Path-prefixed base URLs such as `http://127.0.0.1:8123/peer-pieces/` are honored by serving those same allow-listed routes under the prefix. `serve-peer-pieces` also exposes the metadata-only status route for peers without companion state. Receiver-side `check-peer-status` validates that route before preflight, and `preflight-peer-import-request`, `fetch-peer-pieces`, and `import-peer-request` validate companion state when the route exists and record `not-advertised` for older piece-only peers. Completed `import-peer-request` receipts also record the direct peer transport, piece-set SHA-256, companion-state status, chunk/Merkle contract, fetched peer-piece bytes, assembled-from-peer-pieces status, and no-project-server-byte flags; `inspect-import-receipt` and `inspect-peer-import-receipt` recheck that evidence against the manifest, request, preflight report, and assembled `.slm`. `write-import-receipt-ledger` then lets a local companion or audit trail index one or more verified receipts without copying model bytes, while `inspect-import-receipt-ledger` reopens every receipt, manifest, and artifact before trusting the index. A future UI can read that state, inventory, ledger, and receipt evidence without parsing model bytes or inventing a separate verifier path.
 
 ### Phase 1: Local Companion Wrapper
 
@@ -363,7 +390,7 @@ Accepted for the companion roadmap:
 - strict Tauri capability and IPC boundaries if a WebView shell is used
 - message-passing or actor-style network workers instead of shared global transport state
 - OS secure storage for private peer identity keys or external credentials
-- local SQLite or equivalent only for metadata, receipts, peer identities, transfer logs, and cache indexes
+- local SQLite or equivalent only for metadata, receipts, receipt ledgers, peer identities, transfer logs, and cache indexes
 - signed releases, published checksums, and platform-appropriate packaging before broad distribution
 - domain tests before UI tests, with drift rejection and consent gates as the first test surface
 
@@ -404,6 +431,7 @@ Beginner-safe labels:
 Advanced details:
 
 - artifact SHA-256
+- receipt ledger SHA-256
 - chunk count
 - chunk-list SHA-256
 - Merkle root
@@ -430,6 +458,7 @@ Domain tests first:
 - interrupted fetch cleanup
 - cache quota enforcement
 - receipt replay rejection or clear receipt replay semantics
+- receipt ledger drift rejection
 - unsafe local path rejection
 - consent-required command rejection
 

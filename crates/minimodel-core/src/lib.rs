@@ -32,6 +32,7 @@ const PEER_COMPANION_INSPECT_STATE_COMMAND: &str =
     "minimodel inspect-peer-companion-state <state-json> <manifest> <piece-dir>";
 const IMPORT_RECEIPT_LEDGER_INSPECT_COMMAND: &str =
     "minimodel inspect-import-receipt-ledger <ledger-json>";
+const MAX_METADATA_JSON_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct ArtifactVerification {
@@ -100,6 +101,7 @@ pub struct CatalogSnapshotInspectionReport {
     pub p2p_ready_count: usize,
     pub peer_source_count: usize,
     pub announcement_route_count: usize,
+    pub catalog_byte_count: u64,
     pub catalog_sha256: String,
 }
 
@@ -118,6 +120,7 @@ pub struct PeerSourceAnnouncementFeedReport {
     pub feed_path: String,
     pub announcement_count: usize,
     pub model_count: usize,
+    pub feed_byte_count: u64,
     pub feed_sha256: String,
 }
 
@@ -425,6 +428,7 @@ pub struct PeerCompanionInventoryReport {
     pub serve_plan_status: String,
     pub piece_count: usize,
     pub piece_store_byte_count: u64,
+    pub piece_store_sha256: String,
     pub piece_store_quota_bytes: u64,
     pub receipt_entry_count: usize,
     pub contact_card_count: usize,
@@ -1901,10 +1905,11 @@ pub fn write_peer_companion_inventory_path(
     validate_local_path_hint(receipt_ledger_path, "receipt ledger path")?;
 
     let share = inspect_peer_companion_state_path(state_path, manifest_path, piece_dir)?;
-    let piece_store_byte_count = peer_piece_store_byte_count_path(manifest_path, piece_dir)?;
-    if piece_store_byte_count > piece_store_quota_bytes {
+    let piece_store = peer_piece_store_summary_path(manifest_path, piece_dir)?;
+    if piece_store.byte_count > piece_store_quota_bytes {
         return Err(format!(
-            "peer companion inventory piece store byte count {piece_store_byte_count} exceeds quota {piece_store_quota_bytes}"
+            "peer companion inventory piece store byte count {} exceeds quota {piece_store_quota_bytes}",
+            piece_store.byte_count
         ));
     }
 
@@ -1935,6 +1940,7 @@ pub fn write_peer_companion_inventory_path(
 
     let mut contact_cards = Vec::with_capacity(contact_card_paths.len());
     let mut seen_contact_cards = BTreeSet::new();
+    let mut seen_contact_peer_urls = BTreeSet::new();
     for (index, contact_card_path) in contact_card_paths.iter().enumerate() {
         validate_local_path_hint(contact_card_path, "peer contact card path")?;
         let contact = inspect_peer_contact_card_path(contact_card_path)?;
@@ -1948,6 +1954,12 @@ pub fn write_peer_companion_inventory_path(
         if !seen_contact_cards.insert(contact_path_text.to_ascii_lowercase()) {
             return Err(format!(
                 "peer companion inventory duplicate contact card path {contact_path_text}"
+            ));
+        }
+        if !seen_contact_peer_urls.insert(contact.peer_base_url.to_ascii_lowercase()) {
+            return Err(format!(
+                "peer companion inventory duplicate contact card peer_base_url {}",
+                contact.peer_base_url
             ));
         }
         contact_cards.push(serde_json::json!({
@@ -1980,7 +1992,8 @@ pub fn write_peer_companion_inventory_path(
         },
         "piece_store": {
             "directory_path": piece_dir.display().to_string(),
-            "piece_store_byte_count": piece_store_byte_count,
+            "piece_store_byte_count": piece_store.byte_count,
+            "piece_store_sha256": piece_store.sha256,
             "piece_store_quota_bytes": piece_store_quota_bytes,
             "quota_status": "within-quota",
             "piece_store_user_controlled": true,
@@ -2051,7 +2064,8 @@ pub fn write_peer_companion_inventory_path(
         peer_base_url: share.peer_base_url,
         serve_plan_status: PEER_COMPANION_SERVE_PLAN_STATUS.to_string(),
         piece_count: share.piece_count,
-        piece_store_byte_count,
+        piece_store_byte_count: piece_store.byte_count,
+        piece_store_sha256: piece_store.sha256,
         piece_store_quota_bytes,
         receipt_entry_count: ledger.entry_count,
         contact_card_count: contact_cards.len(),
@@ -2166,9 +2180,9 @@ pub fn inspect_peer_companion_inventory_path(
         &share.merkle_root_sha256,
     )?;
 
-    let piece_store = json_required_object(&value, "piece_store", &label)?;
+    let piece_store_json = json_required_object(&value, "piece_store", &label)?;
     let piece_store_dir = json_required_string(
-        piece_store,
+        piece_store_json,
         "directory_path",
         "peer companion inventory piece_store",
     )?;
@@ -2176,35 +2190,43 @@ pub fn inspect_peer_companion_inventory_path(
     if resolve_ledger_path(base_dir, &piece_store_dir) != piece_dir {
         return Err("peer companion inventory piece_store directory_path must match share_state piece_dir_path".to_string());
     }
-    let piece_store_byte_count = peer_piece_store_byte_count_path(&manifest_path, &piece_dir)?;
+    let piece_store = peer_piece_store_summary_path(&manifest_path, &piece_dir)?;
     let recorded_piece_store_byte_count = json_required_usize(
-        piece_store,
+        piece_store_json,
         "piece_store_byte_count",
         "peer companion inventory piece_store",
     )? as u64;
-    if recorded_piece_store_byte_count != piece_store_byte_count {
+    if recorded_piece_store_byte_count != piece_store.byte_count {
         return Err(format!(
-            "peer companion inventory piece_store_byte_count mismatch: expected {piece_store_byte_count}, got {recorded_piece_store_byte_count}"
+            "peer companion inventory piece_store_byte_count mismatch: expected {}, got {recorded_piece_store_byte_count}",
+            piece_store.byte_count
         ));
     }
+    compare_inventory_string(
+        piece_store_json,
+        "piece_store_sha256",
+        "peer companion inventory piece_store",
+        &piece_store.sha256,
+    )?;
     let piece_store_quota_bytes = json_required_usize(
-        piece_store,
+        piece_store_json,
         "piece_store_quota_bytes",
         "peer companion inventory piece_store",
     )? as u64;
-    if piece_store_quota_bytes < piece_store_byte_count {
+    if piece_store_quota_bytes < piece_store.byte_count {
         return Err(format!(
-            "peer companion inventory piece store byte count {piece_store_byte_count} exceeds quota {piece_store_quota_bytes}"
+            "peer companion inventory piece store byte count {} exceeds quota {piece_store_quota_bytes}",
+            piece_store.byte_count
         ));
     }
     require_json_string_field(
-        piece_store,
+        piece_store_json,
         "quota_status",
         "peer companion inventory piece_store",
         "within-quota",
     )?;
     require_json_bool_true(
-        piece_store,
+        piece_store_json,
         "piece_store_user_controlled",
         "peer companion inventory piece_store",
     )?;
@@ -2267,6 +2289,7 @@ pub fn inspect_peer_companion_inventory_path(
         return Err(format!("{label} contact_cards exceeded 16 entries"));
     }
     let mut seen_contact_cards = BTreeSet::new();
+    let mut seen_contact_peer_urls = BTreeSet::new();
     for (index, contact_card) in contact_cards.iter().enumerate() {
         let card_label = format!("peer companion inventory contact_cards[{index}]");
         let card_path_hint = json_required_string(contact_card, "path", &card_label)?;
@@ -2282,6 +2305,12 @@ pub fn inspect_peer_companion_inventory_path(
             return Err(format!(
                 "{card_label} peer_base_url mismatch: expected {}, got {}",
                 share.peer_base_url, contact.peer_base_url
+            ));
+        }
+        if !seen_contact_peer_urls.insert(contact.peer_base_url.to_ascii_lowercase()) {
+            return Err(format!(
+                "peer companion inventory duplicate contact card peer_base_url {}",
+                contact.peer_base_url
             ));
         }
         compare_inventory_string(
@@ -2444,7 +2473,8 @@ pub fn inspect_peer_companion_inventory_path(
         peer_base_url: share.peer_base_url,
         serve_plan_status: PEER_COMPANION_SERVE_PLAN_STATUS.to_string(),
         piece_count: share.piece_count,
-        piece_store_byte_count,
+        piece_store_byte_count: piece_store.byte_count,
+        piece_store_sha256: piece_store.sha256,
         piece_store_quota_bytes,
         receipt_entry_count: ledger.entry_count,
         contact_card_count,
@@ -2560,19 +2590,21 @@ pub fn inspect_catalog_snapshot_path(
     catalog_path: &Path,
 ) -> Result<CatalogSnapshotInspectionReport, String> {
     let label = catalog_path.display().to_string();
-    let bytes = fs::read(catalog_path)
-        .map_err(|error| format!("failed to read catalog snapshot {label}: {error}"))?;
+    let document_label = format!("catalog snapshot {label}");
+    let bytes = read_metadata_json_bytes_with_budget(catalog_path, &document_label)?;
     let text = std::str::from_utf8(&bytes)
         .map_err(|_| format!("catalog snapshot {label} must be valid UTF-8"))?;
     let value: Value = serde_json::from_str(text)
         .map_err(|error| format!("failed to parse catalog snapshot {label}: {error}"))?;
     let summary = validate_catalog_snapshot_value(&value, &label)?;
+    let catalog_byte_count = bytes.len() as u64;
     Ok(CatalogSnapshotInspectionReport {
         catalog_path: label,
         entry_count: summary.entry_count,
         p2p_ready_count: summary.p2p_ready_count,
         peer_source_count: summary.peer_source_count,
         announcement_route_count: summary.announcement_route_count,
+        catalog_byte_count,
         catalog_sha256: sha256_prefixed(&bytes),
     })
 }
@@ -2733,13 +2765,14 @@ pub fn write_peer_source_announcement_feed_path(
         + "\n";
     let feed_sha256 = sha256_prefixed(text.as_bytes());
     ensure_parent_dir(output_path, "peer-source announcement feed")?;
-    fs::write(output_path, text)
+    fs::write(output_path, &text)
         .map_err(|error| format!("failed to write peer-source announcement feed: {error}"))?;
 
     Ok(PeerSourceAnnouncementFeedReport {
         feed_path: output_path.display().to_string(),
         announcement_count: announcements.len(),
         model_count,
+        feed_byte_count: text.as_bytes().len() as u64,
         feed_sha256,
     })
 }
@@ -2748,9 +2781,8 @@ pub fn inspect_peer_source_announcement_feed_path(
     feed_json_path: &Path,
 ) -> Result<PeerSourceAnnouncementFeedReport, String> {
     let label = feed_json_path.display().to_string();
-    let text = fs::read_to_string(feed_json_path).map_err(|error| {
-        format!("failed to read peer-source announcement feed {label}: {error}")
-    })?;
+    let document_label = format!("peer-source announcement feed {label}");
+    let text = read_metadata_json_text_with_budget(feed_json_path, &document_label)?;
     let value: Value = serde_json::from_str(&text).map_err(|error| {
         format!("failed to parse peer-source announcement feed {label}: {error}")
     })?;
@@ -2765,6 +2797,7 @@ pub fn inspect_peer_source_announcement_feed_path(
         feed_path: label,
         announcement_count: announcements.len(),
         model_count,
+        feed_byte_count: text.as_bytes().len() as u64,
         feed_sha256: sha256_prefixed(text.as_bytes()),
     })
 }
@@ -2780,9 +2813,8 @@ pub fn write_catalog_snapshot_with_announcement_feed_path(
     }
     let feed_route = validate_catalog_announcement_route(feed_route)?;
     let feed_label = feed_json_path.display().to_string();
-    let feed_text = fs::read_to_string(feed_json_path).map_err(|error| {
-        format!("failed to read peer-source announcement feed {feed_label}: {error}")
-    })?;
+    let feed_document_label = format!("peer-source announcement feed {feed_label}");
+    let feed_text = read_metadata_json_text_with_budget(feed_json_path, &feed_document_label)?;
     let feed_value: Value = serde_json::from_str(&feed_text).map_err(|error| {
         format!("failed to parse peer-source announcement feed {feed_label}: {error}")
     })?;
@@ -5674,13 +5706,47 @@ fn file_sha256_prefixed(path: &Path, label: &str) -> Result<String, String> {
     Ok(sha256_prefixed(&bytes))
 }
 
-fn peer_piece_store_byte_count_path(manifest_path: &Path, piece_dir: &Path) -> Result<u64, String> {
-    inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
+#[derive(Debug, Clone)]
+struct PeerPieceStoreSummary {
+    byte_count: u64,
+    sha256: String,
+}
+
+fn peer_piece_store_summary_path(
+    manifest_path: &Path,
+    piece_dir: &Path,
+) -> Result<PeerPieceStoreSummary, String> {
+    let share = inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
     let piece_set_path = piece_dir.join(PEER_PIECE_SET_ROUTE);
-    let piece_set_text = fs::read_to_string(&piece_set_path)
+    let piece_set_bytes = fs::read(&piece_set_path)
         .map_err(|error| format!("failed to read peer piece set for inventory: {error}"))?;
-    let piece_set = Manifest::parse(&piece_set_text)?;
+    let piece_set_text = std::str::from_utf8(&piece_set_bytes)
+        .map_err(|_| "peer piece set for inventory must be valid UTF-8".to_string())?;
+    let piece_set = Manifest::parse(piece_set_text)?;
+    let piece_set_sha256 = sha256_prefixed(&piece_set_bytes);
+    if piece_set_sha256 != share.piece_set_sha256 {
+        return Err(format!(
+            "peer companion inventory piece set SHA mismatch: expected {}, got {piece_set_sha256}",
+            share.piece_set_sha256
+        ));
+    }
     let chunk_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
+    if chunk_count != share.piece_count {
+        return Err(format!(
+            "peer companion inventory piece count mismatch: expected {}, got {chunk_count}",
+            share.piece_count
+        ));
+    }
+    let mut identity = String::new();
+    push_line(&mut identity, "piece_store.identity.version", "1");
+    push_line(&mut identity, "piece_set.sha256", &piece_set_sha256);
+    push_line(&mut identity, "piece_count", &chunk_count.to_string());
+    push_line(&mut identity, "artifact.sha256", &share.artifact_sha256);
+    push_line(
+        &mut identity,
+        "chunks.merkle_root_sha256",
+        &share.merkle_root_sha256,
+    );
     let mut byte_count = 0u64;
     for index in 0..chunk_count {
         let spec = peer_piece_spec(&piece_set, index)?;
@@ -5689,8 +5755,19 @@ fn peer_piece_store_byte_count_path(manifest_path: &Path, piece_dir: &Path) -> R
             .ok_or_else(|| {
                 "peer companion inventory piece store byte count overflow".to_string()
             })?;
+        let prefix = format!("piece.{index}");
+        push_line(&mut identity, &format!("{prefix}.file"), &spec.file_name);
+        push_line(
+            &mut identity,
+            &format!("{prefix}.byte_count"),
+            &spec.byte_count.to_string(),
+        );
+        push_line(&mut identity, &format!("{prefix}.sha256"), &spec.sha256);
     }
-    Ok(byte_count)
+    Ok(PeerPieceStoreSummary {
+        byte_count,
+        sha256: sha256_prefixed(identity.as_bytes()),
+    })
 }
 
 fn receipt_ledger_model_ids(ledger_path: &Path) -> Result<BTreeSet<String>, String> {
@@ -6998,6 +7075,34 @@ fn json_value_summary(value: &Value) -> String {
         Value::Array(_) => "array".to_string(),
         Value::Object(_) => "object".to_string(),
     }
+}
+
+fn metadata_json_budget_label() -> String {
+    format!("{} MiB", MAX_METADATA_JSON_BYTES / 1024 / 1024)
+}
+
+fn read_metadata_json_bytes_with_budget(path: &Path, label: &str) -> Result<Vec<u8>, String> {
+    let metadata =
+        fs::metadata(path).map_err(|error| format!("failed to read {label}: {error}"))?;
+    if metadata.len() > MAX_METADATA_JSON_BYTES {
+        return Err(format!(
+            "{label} exceeded {} byte budget",
+            metadata_json_budget_label()
+        ));
+    }
+    let bytes = fs::read(path).map_err(|error| format!("failed to read {label}: {error}"))?;
+    if bytes.len() as u64 > MAX_METADATA_JSON_BYTES {
+        return Err(format!(
+            "{label} exceeded {} byte budget",
+            metadata_json_budget_label()
+        ));
+    }
+    Ok(bytes)
+}
+
+fn read_metadata_json_text_with_budget(path: &Path, label: &str) -> Result<String, String> {
+    let bytes = read_metadata_json_bytes_with_budget(path, label)?;
+    String::from_utf8(bytes).map_err(|_| format!("{label} must be valid UTF-8"))
 }
 
 fn validate_piece_set(

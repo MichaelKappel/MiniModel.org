@@ -80,6 +80,7 @@ fn inspect_peer_source_announcement_feed_cli_round_trips_prepared_announcement()
     assert!(write_text.contains("MiniModel peer source announcement feed written"));
     assert!(write_text.contains("announcement_count: 1"));
     assert!(write_text.contains("model_count: 1"));
+    assert!(write_text.contains("feed.bytes: "));
     assert!(write_text.contains("feed.sha256: sha256:"));
 
     let feed = std::fs::read_to_string(&feed_path).expect("read announcement feed");
@@ -104,6 +105,7 @@ fn inspect_peer_source_announcement_feed_cli_round_trips_prepared_announcement()
     assert!(inspect_text.contains("MiniModel peer source announcement feed validation: PASS"));
     assert!(inspect_text.contains("announcement_count: 1"));
     assert!(inspect_text.contains("model_count: 1"));
+    assert!(inspect_text.contains("feed.bytes: "));
     assert!(inspect_text.contains("feed.sha256: sha256:"));
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -139,7 +141,32 @@ fn inspect_peer_source_announcement_feed_cli_accepts_empty_feed() {
     assert!(inspect_text.contains("MiniModel peer source announcement feed validation: PASS"));
     assert!(inspect_text.contains("announcement_count: 0"));
     assert!(inspect_text.contains("model_count: 0"));
+    assert!(inspect_text.contains("feed.bytes: "));
     assert!(inspect_text.contains("feed.sha256: sha256:"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn inspect_peer_source_announcement_feed_cli_rejects_oversized_feed_before_parse() {
+    let dir = unique_dir("peer-source-announcement-feed-byte-budget-cli");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create test directory");
+    let feed_path = dir.join("peer-source-announcements.too-large.v0.json");
+    let feed_path_text = path_text(&feed_path);
+    std::fs::write(&feed_path, vec![b' '; (4 * 1024 * 1024) + 1])
+        .expect("write oversized announcement feed");
+
+    let inspect_output = Command::new(minimodel_bin())
+        .args(["inspect-peer-source-announcement-feed", &feed_path_text])
+        .output()
+        .expect("run inspect-peer-source-announcement-feed");
+    assert!(
+        !inspect_output.status.success(),
+        "{}",
+        output_text(&inspect_output)
+    );
+    assert!(output_text(&inspect_output).contains("exceeded 4 MiB byte budget"));
 
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -56,7 +56,7 @@ The first real fixture manifest is [../examples/tiny-test-model-q8.minimodel.man
 | `source.id` | Source checkpoint, recipe, or local source id. |
 | `source.revision` | Source revision, commit, digest, or `unknown`. |
 | `evidence.admission.status` | `passed`, `pending`, or `unavailable`. |
-| `signature.kind` | `unsigned-draft` for examples, or a later registered signature envelope. |
+| `signature.kind` | `unsigned-draft` for examples, or `external-signature-v0` for externally verified signatures with Rust-checked payload binding. |
 
 ## Evidence Fields
 
@@ -90,7 +90,7 @@ Hugging Face `/resolve/`, Xet/CAS, Inference Providers, Inference Endpoints, and
 
 TinyRustLM may save a `minimodel.huggingface_conversion_request.v0` JSON handoff when a Hub result has no admitted `.slm` metadata yet. That request is not a manifest and not an execution grant. It is a local planning artifact for a converter or future peer workflow: review the source, convert once, validate the produced `.slm`, publish checksum-bound metadata, and only then make peer availability visible.
 
-TinyRustLM may also save a `.tinyrustlm-convert.ps1` handoff script for the same Hub record. The script should be treated as a local convenience wrapper around Rust commands, not as MiniModel metadata and not as an acquisition grant. Its expected first command is `tinyrustlm-slm-pack convert-huggingface-request`, which consumes the saved conversion request plus a user-owned local `.safetensors` path, writes a verified `.slm`, and writes a checksum-bound conversion receipt before MiniModel `prepare-peer-share` publishes metadata. The script must not download model bytes.
+TinyRustLM may also save a `.tinyrustlm-convert.ps1` handoff script for the same Hub record. The script should be treated as a local convenience wrapper around Rust commands, not as MiniModel metadata and not as an acquisition grant. Safetensors handoffs run `tinyrustlm-slm-pack convert-huggingface-request`, which consumes the saved conversion request plus a user-owned local `.safetensors` file or shard directory, writes a verified `.slm`, and writes a checksum-bound conversion receipt before MiniModel `prepare-peer-share` publishes metadata. GGUF handoffs are review-first and run `inspect-gguf`, `plan-gguf-source`, and `convert-gguf-trained` against a user-owned F32/F16/BF16/Q2_K/Q3_K/Q4_0/Q4_1/Q4_K/Q5_0/Q5_1/Q5_K/Q6_K/Q8_0/Q8_1/Q8_K `.gguf` file before the same MiniModel metadata path; GGUF conversion still requires supported tensor names/shapes, tokenizer token-count compatibility, and Rust validation before .slm import; `plan-gguf-source` fails closed when `tokenizer.ggml.tokens` contradicts the target vocab, and BPE source shapes import `tokenizer.ggml.tokens`/`tokenizer.ggml.merges` into the raw source manifest when both are declared. The script must not download model bytes.
 
 The peer-offer output is a text manifest, usually named `.minimodel-peer-offer`, with SHA-256 artifact identity, fixed-size chunk SHA-256 rows, a chunk-list SHA-256, and a Merkle root. It proves what a future peer client must transfer and what the recipient must reverify before local browser import. It is not executable code and not a project-hosted artifact URL.
 
@@ -125,7 +125,7 @@ minimodel inspect-import-receipt-ledger <ledger-json>
 
 `write-peer-companion-state` validates an already prepared share and writes metadata-only `minimodel.peer_companion_state` JSON for a future local companion UI. It binds manifest, artifact, piece-set, piece-count, Merkle-root, command-hint, consent, and no-project-server-byte fields without embedding `.slm` bytes or peer-piece payloads. `inspect-peer-companion-state` reruns the state/manifest/piece-directory checks on an existing JSON file and reports the metadata-only boundary before the state is served or handed to TinyRustLM.
 
-`write-peer-companion-inventory` writes metadata-only `minimodel.peer_companion_inventory.v0` JSON for a future local companion UI. It binds an already inspected companion state to the manifest, peer-piece directory, sender-side receipt ledger, piece-store byte/quota evidence, optional contact cards, and a `serve_plan` with exact user-run serving routes, preflight commands, consent, and Rust-reverify flags. `inspect-peer-companion-inventory` revalidates that envelope and rejects serve-plan or byte-boundary drift; the inventory carries no `.slm` bytes or peer-piece payloads.
+`write-peer-companion-inventory` writes metadata-only `minimodel.peer_companion_inventory.v0` JSON for a future local companion UI. It binds an already inspected companion state to the manifest, peer-piece directory, sender-side receipt ledger, piece-store byte/quota/SHA-256 evidence, optional contact cards, and a `serve_plan` with exact user-run serving routes, preflight commands, consent, and Rust-reverify flags. `inspect-peer-companion-inventory` revalidates that envelope and rejects piece-store SHA-256, duplicate contact-card peer URLs, serve-plan, or byte-boundary drift; the inventory carries no `.slm` bytes or peer-piece payloads.
 
 `write-peer-contact-card` writes metadata-only `minimodel.peer_contact_card` JSON for the known-peer URL itself. The card carries a printable label, the normalized direct `http://` peer base URL, `direct-http-piece-server-v0`, explicit no-project-server serve/run/proxy flags, and a `requires_rust_reverify_before_browser_import` boundary flag. `inspect-peer-contact-card` revalidates the same envelope. TinyRustLM may use an accepted card to fill the Known peer URL for proof-ready rows, but the card is not a manifest, not a peer-source announcement, and not model-byte availability by itself.
 
@@ -212,11 +212,13 @@ The MVP may publish unsigned examples, but implementation should reserve canonic
 
 | Field | Requirement |
 | --- | --- |
-| `signature.kind` | `unsigned-draft` or a registered signature scheme. |
+| `signature.kind` | `unsigned-draft` for examples, or `external-signature-v0` for a payload bound to external signature verification. |
 | `signature.key_id` | Publisher key id, or `none` for unsigned draft examples. |
 | `signature.public_key_route` | Metadata route for public key material, not a model byte route. |
 | `signature.payload_sha256` | SHA256 of the canonical non-signature manifest body. |
 | `signature.value` | Encoded signature value, or `none` for unsigned draft examples. |
+
+For `external-signature-v0`, the Rust verifier fails closed unless `signature.payload_sha256` exactly matches the canonical sorted manifest body after all `signature.*` fields are removed. The local verifier does not claim cryptographic trust in `signature.value`; it proves payload immutability and leaves key-policy or transparency-log verification to the external publisher workflow. Unknown signature kinds are rejected until registered.
 
 ## Rejection Rules
 

@@ -40,7 +40,11 @@
         <p class="lede">
           A planned source catalog for checksum-bound tiny model packages that users bring locally,
           discover externally, describe with share metadata, transfer by consent, verify, and run locally.
-          TinyRustLM exposes the same choices as Local Files, Hugging Face, and P2P Exchange.
+          TinyRustLM exposes the same choices as Local Files, Hugging Face, and P2P Exchange, and
+          the protected TinyRustLM NuGet SDK now gives .NET developers a local share-kit verification
+          path that assembles manifest-declared pieces into a `.slm`, writes and inspects a receipt
+          sidecar, and avoids project-hosted model bytes. As of 2026-07-06 that SDK is locally
+          package-feed verified at version 0.1.1, but public NuGet.org listing is still pending.
         </p>
         <div class="actions" aria-label="Primary links">
           <a class="button primary" href="ROADMAP.md">View roadmap</a>
@@ -77,7 +81,7 @@
         <li>
           <span class="step">01</span>
           <h3>Manifest</h3>
-          <p>Define a signed MiniModel manifest for `.slm` packages, source identity, license route, tokenizer/config checksums, eval evidence, and final artifact checksum.</p>
+          <p>Define a MiniModel manifest for `.slm` packages, source identity, license route, tokenizer/config checksums, eval evidence, final artifact checksum, and an externally signed payload-hash envelope.</p>
         </li>
         <li>
           <span class="step">02</span>
@@ -87,7 +91,7 @@
         <li>
           <span class="step">03</span>
           <h3>Catalog</h3>
-          <p>Publish static catalog metadata and signed index snapshots. `write-catalog-entry` validates manifest plus peer-offer proof, and announcement-feed snapshots can bind same-origin peer availability metadata by SHA-256 without hosting model bytes. Empty feeds are valid no-peer-yet checks.</p>
+          <p>Publish static catalog metadata and signed index snapshots. `write-catalog-entry` validates manifest plus peer-offer proof, and announcement-feed snapshots can bind same-origin peer availability metadata by SHA-256 without hosting model bytes. Inspectors report exact metadata byte counts and SHA-256 values, and reject catalog/feed JSON above 4 MiB before parsing.</p>
         </li>
         <li>
           <span class="step">04</span>
@@ -183,7 +187,7 @@
         </a>
         <a href="docs/peer-companion.md">
           <h3>Companion state</h3>
-          <p>`write-peer-companion-state`, `write-peer-companion-inventory`, and `write-peer-contact-book` validate prepared-share state, receipt-ledger evidence, quota metadata, and reviewed peer contacts for future peer companion UI without embedding model bytes.</p>
+          <p>`write-peer-companion-state`, `write-peer-companion-inventory`, and `write-peer-contact-book` validate prepared-share state, receipt-ledger evidence, quota metadata, and reviewed peer contacts for future peer companion UI without embedding model bytes; duplicate contact endpoints are rejected before display.</p>
         </a>
       </div>
     </section>
@@ -196,7 +200,7 @@
       <div class="research-grid">
         <article>
           <h3>P2P Architecture</h3>
-          <p>Compare Rust P2P approaches for a model package exchange: direct known-peer HTTP now, optional user-run MiniModel Peer Companion later, then libp2p, Iroh, BitTorrent-style chunking, DHT discovery, static bootstrap registries, NAT traversal, and signed catalogs.</p>
+          <p>Compare Rust P2P approaches for a model package exchange: direct known-peer HTTP now, protected TinyRustLM NuGet local piece verification for ecosystem apps, optional user-run MiniModel Peer Companion later, then libp2p, Iroh, BitTorrent-style chunking, DHT discovery, static bootstrap registries, NAT traversal, and signed catalogs.</p>
         </article>
         <article>
           <h3>Hugging Face Source</h3>

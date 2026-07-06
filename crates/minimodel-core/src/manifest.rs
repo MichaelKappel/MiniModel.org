@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use crate::sha256::normalize_sha256;
+use crate::sha256::{normalize_sha256, sha256_prefixed};
+
+const SIGNATURE_KIND_UNSIGNED_DRAFT: &str = "unsigned-draft";
+const SIGNATURE_KIND_EXTERNAL_V0: &str = "external-signature-v0";
 
 const REQUIRED_FIELDS: &[&str] = &[
     "manifest.version",
@@ -103,6 +106,27 @@ impl Manifest {
         &self.fields
     }
 
+    /// Returns the canonical sorted manifest body covered by a signature payload digest.
+    pub fn canonical_signature_payload(&self) -> String {
+        let mut payload = String::new();
+        for (key, value) in self
+            .fields
+            .iter()
+            .filter(|(key, _)| !key.starts_with("signature."))
+        {
+            payload.push_str(key);
+            payload.push('=');
+            payload.push_str(value);
+            payload.push('\n');
+        }
+        payload
+    }
+
+    /// Returns the SHA-256 of the canonical non-signature manifest body.
+    pub fn canonical_signature_payload_sha256(&self) -> String {
+        sha256_prefixed(self.canonical_signature_payload().as_bytes())
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         for key in REQUIRED_FIELDS {
             self.require(key)?;
@@ -161,7 +185,7 @@ impl Manifest {
         self.validate_routes()?;
         self.validate_evidence_pairs()?;
         self.validate_source_discovery()?;
-        self.validate_signature_placeholder()?;
+        self.validate_signature()?;
         self.validate_chunk_metadata()?;
         self.validate_boundary_scan()?;
         Ok(())
@@ -234,9 +258,9 @@ impl Manifest {
         Ok(())
     }
 
-    fn validate_signature_placeholder(&self) -> Result<(), String> {
+    fn validate_signature(&self) -> Result<(), String> {
         let kind = self.require("signature.kind")?;
-        if kind == "unsigned-draft" {
+        if kind == SIGNATURE_KIND_UNSIGNED_DRAFT {
             if let Some(value) = self.get("signature.key_id") {
                 require_member(value, "signature.key_id", &["none"])?;
             }
@@ -250,16 +274,32 @@ impl Manifest {
             }
             return Ok(());
         }
+        if kind != SIGNATURE_KIND_EXTERNAL_V0 {
+            return Err(format!("signature.kind has unsupported value {kind}"));
+        }
         if self.had_comment {
             return Err("signed manifests must not contain comments".to_string());
         }
-        self.require("signature.key_id")?;
-        require_route(
-            self.require("signature.public_key_route")?,
-            "signature.public_key_route",
-        )?;
-        normalize_sha256(self.require("signature.payload_sha256")?)?;
-        self.require("signature.value")?;
+        let key_id = self.require("signature.key_id")?;
+        if key_id.is_empty() || key_id == "none" {
+            return Err("signature.key_id must name a signing key".to_string());
+        }
+        let public_key_route = self.require("signature.public_key_route")?;
+        if public_key_route == "none" {
+            return Err("signature.public_key_route must name public key metadata".to_string());
+        }
+        require_route(public_key_route, "signature.public_key_route")?;
+        let expected_payload_sha256 = normalize_sha256(self.require("signature.payload_sha256")?)?;
+        let actual_payload_sha256 = self.canonical_signature_payload_sha256();
+        if expected_payload_sha256 != actual_payload_sha256 {
+            return Err(format!(
+                "signature.payload_sha256 mismatch: expected {expected_payload_sha256}, canonical payload had {actual_payload_sha256}"
+            ));
+        }
+        let signature_value = self.require("signature.value")?;
+        if signature_value.is_empty() || signature_value == "none" {
+            return Err("signature.value must contain an external signature value".to_string());
+        }
         Ok(())
     }
 
@@ -531,5 +571,90 @@ signature.kind=unsigned-draft
         manifest.fields.remove("evidence.admission.sha256");
         let error = manifest.validate().unwrap_err();
         assert!(error.contains("evidence.admission"));
+    }
+
+    #[test]
+    fn validates_external_signature_payload_digest() {
+        let mut manifest = valid_manifest();
+        manifest.fields.insert(
+            "signature.kind".to_string(),
+            SIGNATURE_KIND_EXTERNAL_V0.to_string(),
+        );
+        manifest.fields.insert(
+            "signature.key_id".to_string(),
+            "minimodel-development-key-v0".to_string(),
+        );
+        manifest.fields.insert(
+            "signature.public_key_route".to_string(),
+            "../keys/minimodel-development-key-v0.pub".to_string(),
+        );
+        manifest.fields.insert(
+            "signature.value".to_string(),
+            "test-signature-value".to_string(),
+        );
+        let payload_sha256 = manifest.canonical_signature_payload_sha256();
+        manifest
+            .fields
+            .insert("signature.payload_sha256".to_string(), payload_sha256);
+
+        manifest.validate().unwrap();
+    }
+
+    #[test]
+    fn rejects_external_signature_payload_digest_drift() {
+        let mut manifest = valid_manifest();
+        manifest.fields.insert(
+            "signature.kind".to_string(),
+            SIGNATURE_KIND_EXTERNAL_V0.to_string(),
+        );
+        manifest.fields.insert(
+            "signature.key_id".to_string(),
+            "minimodel-development-key-v0".to_string(),
+        );
+        manifest.fields.insert(
+            "signature.public_key_route".to_string(),
+            "../keys/minimodel-development-key-v0.pub".to_string(),
+        );
+        manifest.fields.insert(
+            "signature.value".to_string(),
+            "test-signature-value".to_string(),
+        );
+        let payload_sha256 = manifest.canonical_signature_payload_sha256();
+        manifest
+            .fields
+            .insert("signature.payload_sha256".to_string(), payload_sha256);
+        manifest
+            .fields
+            .insert("model.version".to_string(), "0.1.1-drift".to_string());
+
+        let error = manifest.validate().unwrap_err();
+        assert!(error.contains("signature.payload_sha256 mismatch"));
+    }
+
+    #[test]
+    fn rejects_unknown_signature_kind() {
+        let mut manifest = valid_manifest();
+        manifest
+            .fields
+            .insert("signature.kind".to_string(), "ed25519".to_string());
+        manifest.fields.insert(
+            "signature.key_id".to_string(),
+            "minimodel-development-key-v0".to_string(),
+        );
+        manifest.fields.insert(
+            "signature.public_key_route".to_string(),
+            "../keys/minimodel-development-key-v0.pub".to_string(),
+        );
+        let payload_sha256 = manifest.canonical_signature_payload_sha256();
+        manifest
+            .fields
+            .insert("signature.payload_sha256".to_string(), payload_sha256);
+        manifest.fields.insert(
+            "signature.value".to_string(),
+            "test-signature-value".to_string(),
+        );
+
+        let error = manifest.validate().unwrap_err();
+        assert!(error.contains("unsupported value ed25519"));
     }
 }

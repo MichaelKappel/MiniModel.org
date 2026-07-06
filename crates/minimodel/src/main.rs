@@ -32,6 +32,10 @@ fn run() -> Result<(), String> {
                 "runtime.compatibility: {}",
                 parsed.require("runtime.compatibility")?
             );
+            println!(
+                "signature.payload_sha256: {}",
+                parsed.canonical_signature_payload_sha256()
+            );
         }
         "verify-artifact" => {
             let manifest = one_arg(&mut args, "manifest")?;
@@ -762,6 +766,7 @@ fn run() -> Result<(), String> {
             println!("serve_plan.status: {}", report.serve_plan_status);
             println!("piece_count: {}", report.piece_count);
             println!("piece_store_byte_count: {}", report.piece_store_byte_count);
+            println!("piece_store.sha256: {}", report.piece_store_sha256);
             println!(
                 "piece_store_quota_bytes: {}",
                 report.piece_store_quota_bytes
@@ -782,6 +787,7 @@ fn run() -> Result<(), String> {
             println!("serve_plan.status: {}", report.serve_plan_status);
             println!("piece_count: {}", report.piece_count);
             println!("piece_store_byte_count: {}", report.piece_store_byte_count);
+            println!("piece_store.sha256: {}", report.piece_store_sha256);
             println!(
                 "piece_store_quota_bytes: {}",
                 report.piece_store_quota_bytes
@@ -922,6 +928,7 @@ fn run() -> Result<(), String> {
                 "announcement_route_count: {}",
                 report.announcement_route_count
             );
+            println!("catalog.bytes: {}", report.catalog_byte_count);
             println!("catalog.sha256: {}", report.catalog_sha256);
         }
         "write-catalog-snapshot-with-announcements" => {
@@ -955,6 +962,7 @@ fn run() -> Result<(), String> {
             println!("feed: {}", report.feed_path);
             println!("announcement_count: {}", report.announcement_count);
             println!("model_count: {}", report.model_count);
+            println!("feed.bytes: {}", report.feed_byte_count);
             println!("feed.sha256: {}", report.feed_sha256);
             println!(
                 "catalog_route_hint: minimodel write-catalog-snapshot-with-announcement-feed models.v0.json peer-source-announcements.v0.json \"{}\" <catalog-entry-json>...",
@@ -970,6 +978,7 @@ fn run() -> Result<(), String> {
             println!("feed: {}", report.feed_path);
             println!("announcement_count: {}", report.announcement_count);
             println!("model_count: {}", report.model_count);
+            println!("feed.bytes: {}", report.feed_byte_count);
             println!("feed.sha256: {}", report.feed_sha256);
         }
         "write-catalog-snapshot-with-announcement-feed" => {

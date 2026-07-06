@@ -99,6 +99,7 @@ fn inspect_catalog_snapshot_cli_validates_generated_snapshots() {
     assert!(inspect_text.contains("p2p_ready_count: 1"));
     assert!(inspect_text.contains("peer_source_count: 1"));
     assert!(inspect_text.contains("announcement_route_count: 0"));
+    assert!(inspect_text.contains("catalog.bytes: "));
     assert!(inspect_text.contains("catalog.sha256: sha256:"));
 
     let announcement_output = Command::new(minimodel_bin())
@@ -160,6 +161,31 @@ fn inspect_catalog_snapshot_cli_validates_generated_snapshots() {
     assert!(feed_inspect_text.contains("p2p_ready_count: 0"));
     assert!(feed_inspect_text.contains("peer_source_count: 0"));
     assert!(feed_inspect_text.contains("announcement_route_count: 1"));
+    assert!(feed_inspect_text.contains("catalog.bytes: "));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn inspect_catalog_snapshot_cli_rejects_oversized_catalog_before_parse() {
+    let dir = unique_dir("catalog-snapshot-cli-byte-budget");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create test directory");
+    let catalog_path = dir.join("models.too-large.v0.json");
+    let catalog_path_text = path_text(&catalog_path);
+    std::fs::write(&catalog_path, vec![b' '; (4 * 1024 * 1024) + 1])
+        .expect("write oversized catalog");
+
+    let inspect_output = Command::new(minimodel_bin())
+        .args(["inspect-catalog-snapshot", &catalog_path_text])
+        .output()
+        .expect("run inspect-catalog-snapshot");
+    assert!(
+        !inspect_output.status.success(),
+        "{}",
+        output_text(&inspect_output)
+    );
+    assert!(output_text(&inspect_output).contains("exceeded 4 MiB byte budget"));
 
     let _ = std::fs::remove_dir_all(&dir);
 }

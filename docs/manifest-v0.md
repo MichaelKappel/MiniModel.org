@@ -208,17 +208,17 @@ For `chunks.mode=none`, the verifier skips chunk verification but still verifies
 
 ## Signature Fields
 
-The MVP may publish unsigned examples, but implementation should reserve canonical signature fields now.
+The MVP may publish unsigned examples, but signed manifests now have a local Ed25519 verification path.
 
 | Field | Requirement |
 | --- | --- |
-| `signature.kind` | `unsigned-draft` for examples, or `external-signature-v0` for a payload bound to external signature verification. |
+| `signature.kind` | `unsigned-draft` for examples, or `external-signature-v0` for a payload bound to Ed25519 verification. |
 | `signature.key_id` | Publisher key id, or `none` for unsigned draft examples. |
 | `signature.public_key_route` | Metadata route for public key material, not a model byte route. |
 | `signature.payload_sha256` | SHA256 of the canonical non-signature manifest body. |
-| `signature.value` | Encoded signature value, or `none` for unsigned draft examples. |
+| `signature.value` | `ed25519-base64:<base64-signature>` for local signed verification, or `none` for unsigned draft examples. |
 
-For `external-signature-v0`, the Rust verifier fails closed unless `signature.payload_sha256` exactly matches the canonical sorted manifest body after all `signature.*` fields are removed. The local verifier does not claim cryptographic trust in `signature.value`; it proves payload immutability and leaves key-policy or transparency-log verification to the external publisher workflow. Unknown signature kinds are rejected until registered.
+For `external-signature-v0`, `verify-manifest` fails closed unless `signature.payload_sha256` exactly matches the canonical sorted manifest body after all `signature.*` fields are removed. `verify-signed-manifest <manifest> <public-key-json>` then verifies `signature.value` as an Ed25519 signature over that canonical payload. The public key JSON is metadata-only `minimodel.public_key.v0` and must bind `key_algorithm=ed25519`, the manifest `publisher.id`, the manifest `signature.key_id`, the manifest `signature.public_key_route`, `public_key_sha256`, `usage=minimodel-manifest-signing-v0`, `revoked=false`, and a UTC creation timestamp. Transparency-log policy and remote key-discovery policy remain later gates. Unknown signature kinds are rejected until registered.
 
 ## Rejection Rules
 

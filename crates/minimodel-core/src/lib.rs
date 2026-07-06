@@ -11,7 +11,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub use manifest::Manifest;
+pub use manifest::{Manifest, ManifestSignatureVerification};
 pub use slm::SlmReport;
 
 use sha256::{bytes_to_hex, normalize_sha256, parse_sha256_hex, sha256, sha256_prefixed};
@@ -42,6 +42,19 @@ pub struct ArtifactVerification {
     pub artifact_sha256: String,
     pub evidence_status: String,
     pub slm: SlmReport,
+}
+
+#[derive(Debug, Clone)]
+pub struct SignedManifestVerification {
+    pub manifest_path: String,
+    pub public_key_path: String,
+    pub manifest_sha256: String,
+    pub signature_algorithm: String,
+    pub key_id: String,
+    pub publisher_id: String,
+    pub public_key_route: String,
+    pub public_key_sha256: String,
+    pub payload_sha256: String,
 }
 
 #[derive(Debug, Clone)]
@@ -489,6 +502,30 @@ struct PeerImportReceiptTransfer {
 
 pub fn verify_manifest_path(path: &Path) -> Result<Manifest, String> {
     Ok(read_valid_manifest_path(path)?.manifest)
+}
+
+pub fn verify_signed_manifest_path(
+    manifest_path: &Path,
+    public_key_path: &Path,
+) -> Result<SignedManifestVerification, String> {
+    let manifest_text = fs::read_to_string(manifest_path)
+        .map_err(|source| format!("failed to read manifest: {source}"))?;
+    let manifest = Manifest::parse(&manifest_text)?;
+    manifest.validate()?;
+    let public_key_json = fs::read_to_string(public_key_path)
+        .map_err(|source| format!("failed to read public key JSON: {source}"))?;
+    let report = manifest.verify_external_signature_key_json(&public_key_json)?;
+    Ok(SignedManifestVerification {
+        manifest_path: manifest_path.display().to_string(),
+        public_key_path: public_key_path.display().to_string(),
+        manifest_sha256: sha256_prefixed(manifest_text.as_bytes()),
+        signature_algorithm: report.signature_algorithm,
+        key_id: report.key_id,
+        publisher_id: report.publisher_id,
+        public_key_route: report.public_key_route,
+        public_key_sha256: report.public_key_sha256,
+        payload_sha256: report.payload_sha256,
+    })
 }
 
 pub fn verify_artifact_path(
@@ -1502,7 +1539,7 @@ pub fn inspect_peer_piece_dir_path(
         .map_err(|error| format!("failed to read peer piece set: {error}"))?;
     let piece_set_text = std::str::from_utf8(&piece_set_bytes)
         .map_err(|_| "peer piece set must be valid UTF-8".to_string())?;
-    let piece_set = Manifest::parse(&piece_set_text)?;
+    let piece_set = Manifest::parse(piece_set_text)?;
     validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
     let chunk_count = validate_peer_piece_files(&piece_set, piece_dir)?;
     Ok(PeerPieceServe {
@@ -2772,7 +2809,7 @@ pub fn write_peer_source_announcement_feed_path(
         feed_path: output_path.display().to_string(),
         announcement_count: announcements.len(),
         model_count,
-        feed_byte_count: text.as_bytes().len() as u64,
+        feed_byte_count: text.len() as u64,
         feed_sha256,
     })
 }
@@ -2797,7 +2834,7 @@ pub fn inspect_peer_source_announcement_feed_path(
         feed_path: label,
         announcement_count: announcements.len(),
         model_count,
-        feed_byte_count: text.as_bytes().len() as u64,
+        feed_byte_count: text.len() as u64,
         feed_sha256: sha256_prefixed(text.as_bytes()),
     })
 }
@@ -4277,61 +4314,41 @@ fn catalog_entry_json(
     source_huggingface_model_id: Option<&str>,
     known_peer_base_url: Option<&str>,
 ) -> Result<String, String> {
-    let mut fields = Vec::new();
-    fields.push(json_number_field("catalog_version", "0"));
-    fields.push(json_string_field("entry_kind", "minimodel.catalog_entry"));
-    fields.push(json_string_field("model_id", manifest.require("model.id")?));
-    fields.push(json_string_field(
-        "display_name",
-        manifest.require("model.id")?,
-    ));
-    fields.push(json_string_field(
-        "publisher_id",
-        manifest.require("publisher.id")?,
-    ));
-    fields.push(json_string_field(
-        "publisher_key_id",
-        manifest.require("publisher.key_id")?,
-    ));
-    fields.push(json_string_field("manifest_route", manifest_route));
-    fields.push(json_string_field(
-        "model_card_route",
-        manifest.require("model_card.route")?,
-    ));
-    fields.push(json_string_field(
-        "license_route",
-        manifest.require("license.route")?,
-    ));
-    fields.push(json_string_field("artifact_kind", "slm"));
-    fields.push(json_string_field(
-        "artifact_file_name",
-        peer_offer.require("artifact_file_name")?,
-    ));
-    fields.push(json_string_field(
-        "local_file_name_hint",
-        peer_offer.require("artifact_file_name")?,
-    ));
-    fields.push(json_number_field(
-        "artifact_byte_count",
-        manifest.require("artifact.byte_count")?,
-    ));
-    fields.push(json_string_field(
-        "artifact_sha256",
-        &normalize_sha256(manifest.require("artifact.sha256")?)?,
-    ));
-    fields.push(json_null_field("artifact_project_server_url"));
-    fields.push(json_bool_field("project_server_serves_model_bytes", false));
-    fields.push(json_bool_field("project_server_runs_model_bytes", false));
-    fields.push(json_string_field(
-        "peer_hint_status",
-        "peer-offer-ready-known-peer-needed",
-    ));
-    fields.push(json_string_field(
-        "peer_import_status",
-        "request-script-ready",
-    ));
-    fields.push(json_string_field("peer_offer_route", peer_offer_route));
-    fields.push(json_string_field("peer_offer_sha256", peer_offer_sha256));
+    let mut fields = vec![
+        json_number_field("catalog_version", "0"),
+        json_string_field("entry_kind", "minimodel.catalog_entry"),
+        json_string_field("model_id", manifest.require("model.id")?),
+        json_string_field("display_name", manifest.require("model.id")?),
+        json_string_field("publisher_id", manifest.require("publisher.id")?),
+        json_string_field("publisher_key_id", manifest.require("publisher.key_id")?),
+        json_string_field("manifest_route", manifest_route),
+        json_string_field("model_card_route", manifest.require("model_card.route")?),
+        json_string_field("license_route", manifest.require("license.route")?),
+        json_string_field("artifact_kind", "slm"),
+        json_string_field(
+            "artifact_file_name",
+            peer_offer.require("artifact_file_name")?,
+        ),
+        json_string_field(
+            "local_file_name_hint",
+            peer_offer.require("artifact_file_name")?,
+        ),
+        json_number_field(
+            "artifact_byte_count",
+            manifest.require("artifact.byte_count")?,
+        ),
+        json_string_field(
+            "artifact_sha256",
+            &normalize_sha256(manifest.require("artifact.sha256")?)?,
+        ),
+        json_null_field("artifact_project_server_url"),
+        json_bool_field("project_server_serves_model_bytes", false),
+        json_bool_field("project_server_runs_model_bytes", false),
+        json_string_field("peer_hint_status", "peer-offer-ready-known-peer-needed"),
+        json_string_field("peer_import_status", "request-script-ready"),
+        json_string_field("peer_offer_route", peer_offer_route),
+        json_string_field("peer_offer_sha256", peer_offer_sha256),
+    ];
     if let Some(peer_base_url) = known_peer_base_url {
         fields.push(json_number_field("peer_source_count", "1"));
         fields.push(json_raw_field(
@@ -6501,15 +6518,14 @@ fn known_peer_source_value(peer_base_url: &str) -> Value {
 }
 
 fn known_peer_source_json_fields(peer_base_url: &str) -> [String; 6] {
-    let fields = [
+    [
         json_string_field("source_kind", "known-direct-http-peer-v0"),
         json_string_field("transport", "direct-http-piece-server-v0"),
         json_string_field("peer_base_url", peer_base_url),
         json_string_field("consent_status", "publisher-declared-consenting-peer"),
         json_bool_field("project_server_serves_model_bytes", false),
         json_bool_field("project_server_runs_model_bytes", false),
-    ];
-    fields
+    ]
 }
 
 fn minimodel_manifest_text(
@@ -10571,9 +10587,11 @@ mod tests {
         )
         .unwrap();
 
-        let report =
-            write_catalog_snapshot_path(&catalog_snapshot_path, &[catalog_entry_path.clone()])
-                .unwrap();
+        let report = write_catalog_snapshot_path(
+            &catalog_snapshot_path,
+            std::slice::from_ref(&catalog_entry_path),
+        )
+        .unwrap();
         let text = std::fs::read_to_string(&catalog_snapshot_path).unwrap();
         let value: Value = serde_json::from_str(&text).unwrap();
 

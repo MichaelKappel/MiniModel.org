@@ -28,6 +28,7 @@ The first pass keeps manifests and peer-piece sidecars line-oriented where possi
 
 ```text
 minimodel verify-manifest <manifest>
+minimodel verify-signed-manifest <manifest> <public-key-json>
 minimodel verify-artifact <manifest> <artifact.slm>
 minimodel write-import-receipt <manifest> <artifact.slm> <receipt.minimodel-receipt>
 minimodel inspect-import-receipt <receipt.minimodel-receipt> <manifest> <artifact.slm>
@@ -66,7 +67,9 @@ minimodel write-catalog-snapshot <output-json> <catalog-entry-json>...
 minimodel inspect-catalog-snapshot <catalog-json>
 ```
 
-`verify-manifest` checks schema, required fields, boundary fields, license/model-card routes, route shape, unsigned-draft rules, and signed-manifest payload digests. It prints the canonical `signature.payload_sha256` for the sorted non-signature manifest body so publishers and reviewers can bind the same payload before external signing.
+`verify-manifest` checks schema, required fields, boundary fields, license/model-card routes, route shape, unsigned-draft rules, and signed-manifest payload digests. It prints the canonical `signature.payload_sha256` for the sorted non-signature manifest body so publishers and reviewers can bind the same payload before signing.
+
+`verify-signed-manifest` verifies an `external-signature-v0` manifest against a local metadata-only `minimodel.public_key.v0` JSON document. The command requires `key_algorithm=ed25519`, matching publisher id, matching signing key id, matching public-key route, matching public-key SHA-256, `usage=minimodel-manifest-signing-v0`, `revoked=false`, and a valid `ed25519-base64:` signature over the canonical non-signature manifest body. It does not fetch keys from the network or claim transparency-log inclusion.
 
 `verify-artifact` additionally checks local file byte count, SHA256, chunk metadata when present, and TinyRustLM `.slm` compatibility.
 
@@ -177,6 +180,7 @@ Receipts must not contain model bytes, public model-byte URLs, or claims that Mi
    - reject comments in signed manifests
    - reject unknown required field versions
    - reject non-ASCII keys
+   - reject `external-signature-v0` payload drift before key verification
 2. Boundary parse:
    - require `artifact.project_server_url=none`
    - require `artifact.acquisition=user-local-file`, `user-external-download`, or `consent-peer-transfer`

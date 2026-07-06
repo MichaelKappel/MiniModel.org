@@ -37,6 +37,25 @@ fn run() -> Result<(), String> {
                 parsed.canonical_signature_payload_sha256()
             );
         }
+        "verify-signed-manifest" => {
+            let manifest = one_arg(&mut args, "manifest")?;
+            let public_key = one_arg(&mut args, "public-key-json")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::verify_signed_manifest_path(
+                Path::new(&manifest),
+                Path::new(&public_key),
+            )?;
+            println!("MiniModel signed manifest validation: PASS");
+            println!("manifest: {}", report.manifest_path);
+            println!("public_key: {}", report.public_key_path);
+            println!("manifest.sha256: {}", report.manifest_sha256);
+            println!("signature.algorithm: {}", report.signature_algorithm);
+            println!("signature.key_id: {}", report.key_id);
+            println!("publisher.id: {}", report.publisher_id);
+            println!("signature.public_key_route: {}", report.public_key_route);
+            println!("public_key.sha256: {}", report.public_key_sha256);
+            println!("signature.payload_sha256: {}", report.payload_sha256);
+        }
         "verify-artifact" => {
             let manifest = one_arg(&mut args, "manifest")?;
             let artifact = one_arg(&mut args, "artifact.slm")?;
@@ -1040,6 +1059,7 @@ fn parse_u64_arg(value: &str, label: &str) -> Result<u64, String> {
 fn print_usage() {
     eprintln!("usage:");
     eprintln!("  minimodel verify-manifest <manifest>");
+    eprintln!("  minimodel verify-signed-manifest <manifest> <public-key-json>");
     eprintln!("  minimodel verify-artifact <manifest> <artifact.slm>");
     eprintln!(
         "  minimodel write-import-receipt <manifest> <artifact.slm> <receipt.minimodel-receipt>"
@@ -1132,7 +1152,7 @@ fn receipt_ledger_entries(args: Vec<String>) -> Result<Vec<(PathBuf, PathBuf, Pa
                 .to_string(),
         );
     }
-    if args.len() % 3 != 0 {
+    if !args.len().is_multiple_of(3) {
         return Err(
             "write-import-receipt-ledger entries must be <receipt> <manifest> <artifact.slm> triples"
                 .to_string(),

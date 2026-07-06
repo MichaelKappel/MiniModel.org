@@ -55,7 +55,7 @@ Each model entry should bind:
 - source checkpoint identity and source revision when known
 - config, tokenizer, eval, source-review, source-validation, runtime-smoke, and admission evidence checksums when available
 - chunk size, Merkle root, and piece metadata for peer transfer
-- signature fields for publisher identity, including the implemented `external-signature-v0` canonical payload SHA-256 gate, with full key-policy and transparency-log verification still reserved for a later release
+- signature fields for publisher identity, including the implemented `external-signature-v0` canonical payload SHA-256 gate plus local `verify-signed-manifest` Ed25519 public-key verification, with transparency-log and remote key-discovery policy still reserved for a later release
 
 The first concrete schema draft is [docs/manifest-v0.md](docs/manifest-v0.md). It uses a line-oriented `key=value` format so the initial Rust verifier can stay small and local.
 

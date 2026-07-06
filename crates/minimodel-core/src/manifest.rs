@@ -1,9 +1,17 @@
 use std::collections::BTreeMap;
 
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use serde::Deserialize;
+
 use crate::sha256::{normalize_sha256, sha256_prefixed};
 
 const SIGNATURE_KIND_UNSIGNED_DRAFT: &str = "unsigned-draft";
 const SIGNATURE_KIND_EXTERNAL_V0: &str = "external-signature-v0";
+const SIGNATURE_ALGORITHM_ED25519: &str = "ed25519";
+const SIGNATURE_VALUE_ED25519_BASE64_PREFIX: &str = "ed25519-base64:";
+const PUBLIC_KEY_KIND_V0: &str = "minimodel.public_key.v0";
+const PUBLIC_KEY_USAGE_MANIFEST_SIGNING_V0: &str = "minimodel-manifest-signing-v0";
 
 const REQUIRED_FIELDS: &[&str] = &[
     "manifest.version",
@@ -59,6 +67,31 @@ const EVIDENCE_PAIRS: &[(&str, &str)] = &[
 pub struct Manifest {
     fields: BTreeMap<String, String>,
     had_comment: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ManifestSignatureVerification {
+    pub signature_algorithm: String,
+    pub key_id: String,
+    pub publisher_id: String,
+    pub public_key_route: String,
+    pub public_key_sha256: String,
+    pub payload_sha256: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PublicKeyDocument {
+    key_kind: String,
+    key_algorithm: String,
+    key_id: String,
+    publisher_id: String,
+    public_key_route: String,
+    public_key_base64: String,
+    public_key_sha256: String,
+    usage: String,
+    created_utc: String,
+    revoked: bool,
 }
 
 impl Manifest {
@@ -125,6 +158,47 @@ impl Manifest {
     /// Returns the SHA-256 of the canonical non-signature manifest body.
     pub fn canonical_signature_payload_sha256(&self) -> String {
         sha256_prefixed(self.canonical_signature_payload().as_bytes())
+    }
+
+    pub fn verify_external_signature_key_json(
+        &self,
+        public_key_json: &str,
+    ) -> Result<ManifestSignatureVerification, String> {
+        self.validate()?;
+        let kind = self.require("signature.kind")?;
+        if kind != SIGNATURE_KIND_EXTERNAL_V0 {
+            return Err(format!(
+                "signed verification requires signature.kind={SIGNATURE_KIND_EXTERNAL_V0}"
+            ));
+        }
+        let document: PublicKeyDocument = serde_json::from_str(public_key_json)
+            .map_err(|source| format!("invalid public key JSON: {source}"))?;
+        document.validate_for_manifest(self)?;
+        let public_key_bytes =
+            decode_base64_array::<32>(&document.public_key_base64, "public_key_base64")?;
+        let actual_public_key_sha256 = sha256_prefixed(&public_key_bytes);
+        let expected_public_key_sha256 = normalize_sha256(&document.public_key_sha256)?;
+        if actual_public_key_sha256 != expected_public_key_sha256 {
+            return Err(format!(
+                "public_key_sha256 mismatch: expected {expected_public_key_sha256}, public key bytes had {actual_public_key_sha256}"
+            ));
+        }
+        let signature = parse_ed25519_signature_value(self.require("signature.value")?)?;
+        let verifying_key = VerifyingKey::from_bytes(&public_key_bytes)
+            .map_err(|source| format!("invalid Ed25519 public key: {source}"))?;
+        verifying_key
+            .verify(self.canonical_signature_payload().as_bytes(), &signature)
+            .map_err(|_| {
+                "signature.value did not verify the canonical manifest payload".to_string()
+            })?;
+        Ok(ManifestSignatureVerification {
+            signature_algorithm: SIGNATURE_ALGORITHM_ED25519.to_string(),
+            key_id: document.key_id,
+            publisher_id: document.publisher_id,
+            public_key_route: document.public_key_route,
+            public_key_sha256: actual_public_key_sha256,
+            payload_sha256: self.canonical_signature_payload_sha256(),
+        })
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -368,6 +442,86 @@ impl Manifest {
     }
 }
 
+impl PublicKeyDocument {
+    fn validate_for_manifest(&self, manifest: &Manifest) -> Result<(), String> {
+        validate_public_key_value(&self.key_kind, "key_kind")?;
+        validate_public_key_value(&self.key_algorithm, "key_algorithm")?;
+        validate_public_key_value(&self.key_id, "key_id")?;
+        validate_public_key_value(&self.publisher_id, "publisher_id")?;
+        validate_public_key_value(&self.public_key_route, "public_key_route")?;
+        validate_public_key_value(&self.public_key_base64, "public_key_base64")?;
+        validate_public_key_value(&self.public_key_sha256, "public_key_sha256")?;
+        validate_public_key_value(&self.usage, "usage")?;
+        validate_public_key_value(&self.created_utc, "created_utc")?;
+        if self.key_kind != PUBLIC_KEY_KIND_V0 {
+            return Err(format!("key_kind must be {PUBLIC_KEY_KIND_V0}"));
+        }
+        if self.key_algorithm != SIGNATURE_ALGORITHM_ED25519 {
+            return Err(format!(
+                "key_algorithm must be {SIGNATURE_ALGORITHM_ED25519}"
+            ));
+        }
+        if self.usage != PUBLIC_KEY_USAGE_MANIFEST_SIGNING_V0 {
+            return Err(format!(
+                "usage must be {PUBLIC_KEY_USAGE_MANIFEST_SIGNING_V0}"
+            ));
+        }
+        require_timestampish(&self.created_utc, "created_utc")?;
+        require_route_safe(&self.key_id, "key_id")?;
+        require_route_safe(&self.publisher_id, "publisher_id")?;
+        require_route(&self.public_key_route, "public_key_route")?;
+        normalize_sha256(&self.public_key_sha256)?;
+        if self.revoked {
+            return Err("public key metadata is revoked".to_string());
+        }
+        let manifest_key_id = manifest.require("signature.key_id")?;
+        if self.key_id != manifest_key_id {
+            return Err(format!(
+                "public key key_id {} does not match manifest signature.key_id {manifest_key_id}",
+                self.key_id
+            ));
+        }
+        let manifest_publisher_id = manifest.require("publisher.id")?;
+        if self.publisher_id != manifest_publisher_id {
+            return Err(format!(
+                "public key publisher_id {} does not match manifest publisher.id {manifest_publisher_id}",
+                self.publisher_id
+            ));
+        }
+        let manifest_public_key_route = manifest.require("signature.public_key_route")?;
+        if self.public_key_route != manifest_public_key_route {
+            return Err(format!(
+                "public key route {} does not match manifest signature.public_key_route {manifest_public_key_route}",
+                self.public_key_route
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn validate_public_key_value(value: &str, key: &str) -> Result<(), String> {
+    validate_value(value).map_err(|source| format!("{key}: {source}"))
+}
+
+fn decode_base64_array<const N: usize>(value: &str, key: &str) -> Result<[u8; N], String> {
+    let bytes = BASE64_STANDARD
+        .decode(value)
+        .map_err(|source| format!("{key} is not base64: {source}"))?;
+    bytes
+        .try_into()
+        .map_err(|bytes: Vec<u8>| format!("{key} must decode to {N} bytes, got {}", bytes.len()))
+}
+
+fn parse_ed25519_signature_value(value: &str) -> Result<Signature, String> {
+    let encoded = value
+        .strip_prefix(SIGNATURE_VALUE_ED25519_BASE64_PREFIX)
+        .ok_or_else(|| {
+            format!("signature.value must start with {SIGNATURE_VALUE_ED25519_BASE64_PREFIX}")
+        })?;
+    let signature_bytes = decode_base64_array::<64>(encoded, "signature.value")?;
+    Ok(Signature::from_bytes(&signature_bytes))
+}
+
 fn require_equal(manifest: &Manifest, key: &str, expected: &str) -> Result<(), String> {
     let actual = manifest.require(key)?;
     if actual != expected {
@@ -491,6 +645,55 @@ fn is_model_byte_route(route: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+
+    fn signed_manifest_and_key_json() -> (Manifest, String) {
+        let mut manifest = valid_manifest();
+        manifest.fields.insert(
+            "signature.kind".to_string(),
+            SIGNATURE_KIND_EXTERNAL_V0.to_string(),
+        );
+        manifest.fields.insert(
+            "signature.key_id".to_string(),
+            "minimodel-development-key-v0".to_string(),
+        );
+        manifest.fields.insert(
+            "signature.public_key_route".to_string(),
+            "../keys/minimodel-development-key-v0.public-key.json".to_string(),
+        );
+        let payload_sha256 = manifest.canonical_signature_payload_sha256();
+        manifest
+            .fields
+            .insert("signature.payload_sha256".to_string(), payload_sha256);
+        let signing_key = SigningKey::from_bytes(&[7u8; 32]);
+        let verifying_key = signing_key.verifying_key();
+        let signature = signing_key.sign(manifest.canonical_signature_payload().as_bytes());
+        manifest.fields.insert(
+            "signature.value".to_string(),
+            format!(
+                "{SIGNATURE_VALUE_ED25519_BASE64_PREFIX}{}",
+                BASE64_STANDARD.encode(signature.to_bytes())
+            ),
+        );
+        let public_key_bytes = verifying_key.to_bytes();
+        let key_json = format!(
+            r#"{{
+  "key_kind": "minimodel.public_key.v0",
+  "key_algorithm": "ed25519",
+  "key_id": "minimodel-development-key-v0",
+  "publisher_id": "minimodel.org",
+  "public_key_route": "../keys/minimodel-development-key-v0.public-key.json",
+  "public_key_base64": "{}",
+  "public_key_sha256": "{}",
+  "usage": "minimodel-manifest-signing-v0",
+  "created_utc": "2026-07-06T00:00:00Z",
+  "revoked": false
+}}"#,
+            BASE64_STANDARD.encode(public_key_bytes),
+            sha256_prefixed(&public_key_bytes)
+        );
+        (manifest, key_json)
+    }
 
     fn valid_manifest() -> Manifest {
         Manifest::parse(
@@ -656,5 +859,72 @@ signature.kind=unsigned-draft
 
         let error = manifest.validate().unwrap_err();
         assert!(error.contains("unsupported value ed25519"));
+    }
+
+    #[test]
+    fn verifies_external_ed25519_signature() {
+        let (manifest, key_json) = signed_manifest_and_key_json();
+
+        let report = manifest
+            .verify_external_signature_key_json(&key_json)
+            .unwrap();
+
+        assert_eq!(report.signature_algorithm, "ed25519");
+        assert_eq!(report.key_id, "minimodel-development-key-v0");
+        assert_eq!(report.publisher_id, "minimodel.org");
+        assert_eq!(
+            report.public_key_route,
+            "../keys/minimodel-development-key-v0.public-key.json"
+        );
+        assert_eq!(
+            report.payload_sha256,
+            manifest.canonical_signature_payload_sha256()
+        );
+    }
+
+    #[test]
+    fn rejects_external_ed25519_signature_payload_drift() {
+        let (mut manifest, key_json) = signed_manifest_and_key_json();
+        manifest
+            .fields
+            .insert("model.version".to_string(), "0.1.1-drift".to_string());
+        manifest.fields.insert(
+            "signature.payload_sha256".to_string(),
+            manifest.canonical_signature_payload_sha256(),
+        );
+
+        let error = manifest
+            .verify_external_signature_key_json(&key_json)
+            .unwrap_err();
+
+        assert!(error.contains("signature.value did not verify"));
+    }
+
+    #[test]
+    fn rejects_external_ed25519_public_key_drift() {
+        let (manifest, key_json) = signed_manifest_and_key_json();
+        let mut key_value: serde_json::Value = serde_json::from_str(&key_json).unwrap();
+        key_value["public_key_sha256"] = serde_json::Value::String(
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111".to_string(),
+        );
+        let drifted_key_json = serde_json::to_string(&key_value).unwrap();
+
+        let error = manifest
+            .verify_external_signature_key_json(&drifted_key_json)
+            .unwrap_err();
+
+        assert!(error.contains("public_key_sha256 mismatch"));
+    }
+
+    #[test]
+    fn rejects_revoked_external_ed25519_public_key() {
+        let (manifest, key_json) = signed_manifest_and_key_json();
+        let revoked_key_json = key_json.replace("\"revoked\": false", "\"revoked\": true");
+
+        let error = manifest
+            .verify_external_signature_key_json(&revoked_key_json)
+            .unwrap_err();
+
+        assert!(error.contains("revoked"));
     }
 }

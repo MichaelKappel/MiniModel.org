@@ -7522,7 +7522,7 @@ fn serve_peer_piece_request(
     let path = parts
         .next()
         .ok_or_else(|| "peer request missing path".to_string())?;
-    if method != "GET" {
+    if method != "GET" && method != "OPTIONS" {
         write_http_response(stream, "405 Method Not Allowed", b"method not allowed")?;
         return Ok(());
     }
@@ -7549,6 +7549,15 @@ fn serve_peer_piece_request(
         write_http_response(stream, "404 Not Found", b"not found")?;
         return Ok(());
     }
+    let allow_metadata_cors = peer_metadata_cors_allowed(file_name, extra_files);
+    if method == "OPTIONS" {
+        if allow_metadata_cors {
+            write_http_response_with_metadata_cors(stream, "204 No Content", b"", true)?;
+        } else {
+            write_http_response(stream, "405 Method Not Allowed", b"method not allowed")?;
+        }
+        return Ok(());
+    }
     let bytes = match extra_files.get(file_name) {
         Some(ServedPeerExtra::Path(path)) => {
             fs::read(path).map_err(|error| format!("failed to read served peer file: {error}"))?
@@ -7557,7 +7566,16 @@ fn serve_peer_piece_request(
         None => fs::read(piece_dir.join(file_name))
             .map_err(|error| format!("failed to read served peer file: {error}"))?,
     };
-    write_http_response(stream, "200 OK", &bytes)
+    write_http_response_with_metadata_cors(stream, "200 OK", &bytes, allow_metadata_cors)
+}
+
+fn peer_metadata_cors_allowed(
+    file_name: &str,
+    extra_files: &BTreeMap<String, ServedPeerExtra>,
+) -> bool {
+    file_name == PEER_STATUS_ROUTE
+        || file_name == PEER_PIECE_SET_ROUTE
+        || extra_files.contains_key(file_name)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7633,8 +7651,28 @@ fn read_http_request_headers(stream: &mut TcpStream) -> Result<Vec<u8>, String> 
 }
 
 fn write_http_response(stream: &mut TcpStream, status: &str, body: &[u8]) -> Result<(), String> {
+    write_http_response_with_metadata_cors(stream, status, body, false)
+}
+
+fn write_http_response_with_metadata_cors(
+    stream: &mut TcpStream,
+    status: &str,
+    body: &[u8],
+    allow_metadata_cors: bool,
+) -> Result<(), String> {
+    let cors_headers = if allow_metadata_cors {
+        concat!(
+            "Access-Control-Allow-Origin: *\r\n",
+            "Access-Control-Allow-Methods: GET, OPTIONS\r\n",
+            "Access-Control-Allow-Headers: *\r\n",
+            "Access-Control-Allow-Private-Network: true\r\n",
+            "Access-Control-Max-Age: 600\r\n"
+        )
+    } else {
+        ""
+    };
     let header = format!(
-        "HTTP/1.0 {status}\r\nContent-Length: {}\r\nConnection: close\r\nContent-Type: application/octet-stream\r\n\r\n",
+        "HTTP/1.0 {status}\r\nContent-Length: {}\r\nConnection: close\r\nContent-Type: application/octet-stream\r\n{cors_headers}\r\n",
         body.len()
     );
     stream
@@ -8261,6 +8299,18 @@ mod tests {
         include_str!("../../../examples/tiny-test-model-q8.minimodel-peer-offer");
     const REAL_Q8_PEER_IMPORT_REQUEST: &str =
         include_str!("../../../examples/tiny-test-model-q8.minimodel-peer-import-request.json");
+
+    fn http_raw_peer_request(url: &HttpUrl, method: &str) -> String {
+        let mut stream = TcpStream::connect((url.host.as_str(), url.port)).unwrap();
+        let request = format!(
+            "{method} {} HTTP/1.0\r\nHost: {}\r\nOrigin: https://tinyrustlm.com\r\nAccess-Control-Request-Method: GET\r\nAccess-Control-Request-Private-Network: true\r\nConnection: close\r\n\r\n",
+            url.path, url.host
+        );
+        stream.write_all(request.as_bytes()).unwrap();
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).unwrap();
+        String::from_utf8_lossy(&response).into_owned()
+    }
 
     #[test]
     fn formats_unix_epoch_utc() {
@@ -9334,6 +9384,44 @@ mod tests {
         let piece_set = http_get_bytes(&piece_set_url, 64 * 1024).unwrap();
         let piece_set_text = std::str::from_utf8(&piece_set).unwrap();
         assert!(piece_set_text.contains("piece_set.kind=minimodel.peer_piece_set.v0"));
+    }
+
+    #[test]
+    fn serves_browser_cors_only_for_peer_metadata_routes_when_fixture_present() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping peer metadata CORS test; TinyRustLM fixture not present");
+            return;
+        };
+        let dir = unique_dir("peer-status-metadata-cors");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest_path = dir.join("tiny-test-model-q8.minimodel.manifest.v0");
+        let piece_dir = dir.join("tiny-test-model-q8.peer-pieces");
+        std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
+        export_peer_pieces_path(&manifest_path, &artifact_path, &piece_dir).unwrap();
+        let piece_set = Manifest::parse(
+            &std::fs::read_to_string(piece_dir.join(PEER_PIECE_SET_ROUTE)).unwrap(),
+        )
+        .unwrap();
+        let first_piece_name = peer_piece_spec(&piece_set, 0).unwrap().file_name;
+
+        let peer_url =
+            start_peer_status_server_with_path(manifest_path, piece_dir, "peer-pieces", 3);
+        let status_url = HttpUrl::parse(&format!("{peer_url}{PEER_STATUS_ROUTE}")).unwrap();
+        let options_response = http_raw_peer_request(&status_url, "OPTIONS");
+        assert!(options_response.starts_with("HTTP/1.0 204 No Content"));
+        assert!(options_response.contains("Access-Control-Allow-Origin: *"));
+        assert!(options_response.contains("Access-Control-Allow-Private-Network: true"));
+
+        let status_response = http_raw_peer_request(&status_url, "GET");
+        assert!(status_response.starts_with("HTTP/1.0 200 OK"));
+        assert!(status_response.contains("Access-Control-Allow-Origin: *"));
+        assert!(status_response.contains("\"status_kind\": \"minimodel.peer_status\""));
+
+        let piece_url = HttpUrl::parse(&format!("{peer_url}{first_piece_name}")).unwrap();
+        let piece_response = http_raw_peer_request(&piece_url, "GET");
+        assert!(piece_response.starts_with("HTTP/1.0 200 OK"));
+        assert!(!piece_response.contains("Access-Control-Allow-Origin"));
     }
 
     #[test]

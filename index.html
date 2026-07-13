@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MiniModel.org</title>
-  <meta name="description" content="MiniModel.org is a Rust-first peer-to-peer exchange roadmap for checksum-bound tiny local AI model packages.">
-  <link rel="stylesheet" href="styles.css">
+  <meta name="description" content="Browse checksum-bound .slm models prepared for verified local use and consent-based P2P sharing with TinyRustLM.">
+  <link rel="stylesheet" href="styles.css?v=20260713-catalog1">
+  <script src="catalog.js?v=20260713-catalog1" defer></script>
 </head>
 <body>
   <header class="site-header" aria-label="MiniModel navigation">
@@ -14,10 +15,10 @@
       <span>MiniModel.org</span>
     </a>
     <nav>
+      <a href="#models">Models</a>
       <a href="#roadmap">Roadmap</a>
       <a href="#docs">Docs</a>
       <a href="#rules">Rules</a>
-      <a href="#research">Research</a>
     </nav>
   </header>
 
@@ -35,24 +36,55 @@
         <span class="line line-d"></span>
       </div>
       <div class="hero-content">
-        <p class="eyebrow">Rust peer-to-peer tiny model exchange</p>
+        <p class="eyebrow">Rust P2P model directory</p>
         <h1>MiniModel.org</h1>
         <p class="lede">
-          A planned source catalog for checksum-bound tiny model packages that users bring locally,
-          discover externally, describe with share metadata, transfer by consent, verify, and run locally.
-          TinyRustLM exposes the same choices as Local Files, Hugging Face, and P2P Exchange, and
-          the protected TinyRustLM NuGet SDK now gives .NET developers a local share-kit verification
-          path that assembles manifest-declared pieces into a `.slm`, writes and inspects a receipt
-          sidecar, and avoids project-hosted model bytes. As of 2026-07-06 that SDK is locally
-          package-feed verified at version 0.1.1, but public NuGet.org listing is still pending.
+          Find every checksum-bound <code>.slm</code> model in the public catalog, see where it came from,
+          and verify whether a consenting peer is currently available before importing it into TinyRustLM.
         </p>
         <div class="actions" aria-label="Primary links">
-          <a class="button primary" href="ROADMAP.md">View roadmap</a>
-          <a class="button secondary" href="docs/manifest-v0.md">Manifest draft</a>
-          <a class="button secondary" href="docs/peer-companion.md">Peer companion spec</a>
-          <a class="button secondary" href="catalog/models.v0.json">Catalog JSON</a>
+          <a class="button primary" href="#models">Browse P2P models</a>
           <a class="button secondary" href="https://TinyRustLM.com/">Open TinyRustLM</a>
+          <a class="button secondary" href="catalog/models.v0.json">Catalog JSON</a>
         </div>
+      </div>
+    </section>
+
+    <section class="catalog-section" id="models" aria-labelledby="modelCatalogHeading">
+      <div class="catalog-inner">
+        <header class="catalog-heading">
+          <div>
+            <p class="eyebrow">Public model catalog</p>
+            <h2 id="modelCatalogHeading">P2P models</h2>
+            <p>Every catalog model is shown. Active peer availability is checksum-verified and reported separately from share readiness.</p>
+          </div>
+          <div class="catalog-totals" aria-label="Catalog totals">
+            <span id="modelCatalogTotal">Loading catalog</span>
+            <span id="modelCatalogActive">Checking peers</span>
+            <span id="modelCatalogReady">Checking share readiness</span>
+          </div>
+        </header>
+
+        <div class="catalog-toolbar" role="search">
+          <label class="catalog-search">
+            <span>Search models</span>
+            <input id="modelCatalogSearch" type="search" autocomplete="off" placeholder="Name, description, source, or quantization">
+          </label>
+          <label class="catalog-filter">
+            <span>Availability</span>
+            <select id="modelCatalogAvailability">
+              <option value="all">All catalog models</option>
+              <option value="active">Active P2P peers</option>
+              <option value="share-ready">Awaiting an active peer</option>
+            </select>
+          </label>
+          <span id="modelCatalogVisibleCount" class="catalog-visible-count">0 models</span>
+        </div>
+
+        <p id="modelCatalogStatus" class="catalog-status" role="status" aria-live="polite">Loading checksum-bound catalog metadata.</p>
+        <ol id="modelCatalogList" class="catalog-model-list" aria-label="MiniModel catalog models">
+          <li class="catalog-empty">Loading models.</li>
+        </ol>
       </div>
     </section>
 

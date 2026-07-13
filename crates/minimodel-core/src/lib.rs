@@ -4314,11 +4314,21 @@ fn catalog_entry_json(
     source_huggingface_model_id: Option<&str>,
     known_peer_base_url: Option<&str>,
 ) -> Result<String, String> {
+    let model_id = manifest.require("model.id")?;
+    let description = match source_huggingface_model_id {
+        Some(source_model_id) => format!(
+            "Checksum-bound .slm package converted from Hugging Face source {source_model_id}. Review the source model card, license, and quality evidence before local use."
+        ),
+        None => format!(
+            "Checksum-bound .slm package for {model_id}, prepared for local Rust verification and consent-based peer sharing. Review its model card and quality evidence before use."
+        ),
+    };
     let mut fields = vec![
         json_number_field("catalog_version", "0"),
         json_string_field("entry_kind", "minimodel.catalog_entry"),
-        json_string_field("model_id", manifest.require("model.id")?),
-        json_string_field("display_name", manifest.require("model.id")?),
+        json_string_field("model_id", model_id),
+        json_string_field("display_name", model_id),
+        json_string_field("description", &description),
         json_string_field("publisher_id", manifest.require("publisher.id")?),
         json_string_field("publisher_key_id", manifest.require("publisher.key_id")?),
         json_string_field("manifest_route", manifest_route),
@@ -9945,6 +9955,7 @@ mod tests {
         assert!(text.contains("\"peer_hint_status\": \"peer-offer-ready-known-peer-needed\""));
         assert!(text.contains("\"peer_import_status\": \"request-script-ready\""));
         assert!(text.contains("\"source_huggingface_model_id\": \"example-org/example-source\""));
+        assert!(text.contains("\"description\": \"Checksum-bound .slm package converted from Hugging Face source example-org/example-source."));
         assert!(text.contains("\"peer_source_count\": 1"));
         assert!(text.contains("\"peer_sources\": [{"));
         assert!(text.contains("\"peer_base_url\": \"http://127.0.0.1:8123/peer-pieces/\""));

@@ -3,6 +3,7 @@
   "entry_kind": "minimodel.catalog_entry",
   "model_id": "tinyrustlm/tiny-test-model-q8",
   "display_name": "tinyrustlm/tiny-test-model-q8",
+  "description": "Checksum-bound .slm package for tinyrustlm/tiny-test-model-q8, prepared for local Rust verification and consent-based peer sharing. Review its model card and quality evidence before use.",
   "publisher_id": "minimodel.org",
   "publisher_key_id": "minimodel-development-key-v0",
   "manifest_route": "tiny-test-model-q8.minimodel.manifest.v0",

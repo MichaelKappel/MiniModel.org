@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 minimodel-core = { path = "../minimodel-core" }
+serde_json = "1.0"
 
 [dev-dependencies]
 base64 = "0.22"

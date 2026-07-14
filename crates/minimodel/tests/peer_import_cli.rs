@@ -171,12 +171,18 @@ impl ChildGuard {
             panic!("serve-peer-companion exited early with {status}");
         }
     }
+
+    fn stop(&mut self) {
+        if self.child.try_wait().ok().flatten().is_none() {
+            let _ = self.child.kill();
+        }
+        let _ = self.child.wait();
+    }
 }
 
 impl Drop for ChildGuard {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.stop();
     }
 }
 
@@ -399,6 +405,11 @@ fn companion_peer_import_cli_executes_check_preflight_and_import_over_local_http
     assert!(import_cli_text.contains("MiniModel peer import request executed"));
     assert!(import_cli_text.contains("companion_state_status: validated"));
     assert!(import_cli_text.contains("piece_count: 1"));
+    assert!(import_cli_text.contains("downloaded_piece_count: 1"));
+    assert!(import_cli_text.contains("reused_piece_count: 0"));
+    assert!(import_cli_text.contains("refetched_corrupt_piece_count: 0"));
+    assert!(import_cli_text.contains("transfer_concurrency: 1"));
+    assert!(import_cli_text.contains("resumed: false"));
 
     let output_artifact_path = import_dir.join("tiny-test-model-q8.slm");
     let receipt_path = import_dir.join("tiny-test-model-q8.minimodel-receipt");
@@ -425,6 +436,59 @@ fn companion_peer_import_cli_executes_check_preflight_and_import_over_local_http
     assert!(
         receipt.contains("receiver_validation.import_receipt_required_before_browser_load=true")
     );
+
+    std::fs::remove_file(&output_artifact_path).expect("remove artifact for corrupt resume");
+    std::fs::remove_file(&receipt_path).expect("remove receipt for corrupt resume");
+    let staged_piece = import_dir
+        .join("tiny-test-model-q8-peer-pieces")
+        .join("piece-00000000.bin");
+    std::fs::write(&staged_piece, b"corrupt staged piece")
+        .expect("corrupt staged piece before resume");
+    let corrupt_resume = Command::new(minimodel_bin())
+        .args([
+            "import-peer-request",
+            &request_path_text,
+            &manifest_path_text,
+            &import_dir_text,
+        ])
+        .output()
+        .expect("resume peer import after staged piece corruption");
+    assert!(
+        corrupt_resume.status.success(),
+        "{}",
+        output_text(&corrupt_resume)
+    );
+    let corrupt_resume_text = output_text(&corrupt_resume);
+    assert!(corrupt_resume_text.contains("downloaded_piece_count: 1"));
+    assert!(corrupt_resume_text.contains("reused_piece_count: 0"));
+    assert!(corrupt_resume_text.contains("refetched_corrupt_piece_count: 1"));
+    assert!(corrupt_resume_text.contains("resumed: true"));
+    assert_eq!(
+        std::fs::read(&output_artifact_path).expect("read corrupt-resumed artifact"),
+        std::fs::read(&artifact_path).expect("read source after corrupt resume")
+    );
+
+    std::fs::remove_file(&output_artifact_path).expect("remove artifact for verified-piece resume");
+    std::fs::remove_file(&receipt_path).expect("remove receipt for verified-piece resume");
+    let verified_resume = Command::new(minimodel_bin())
+        .args([
+            "import-peer-request",
+            &request_path_text,
+            &manifest_path_text,
+            &import_dir_text,
+        ])
+        .output()
+        .expect("resume peer import with verified staged piece");
+    assert!(
+        verified_resume.status.success(),
+        "{}",
+        output_text(&verified_resume)
+    );
+    let verified_resume_text = output_text(&verified_resume);
+    assert!(verified_resume_text.contains("downloaded_piece_count: 0"));
+    assert!(verified_resume_text.contains("reused_piece_count: 1"));
+    assert!(verified_resume_text.contains("refetched_corrupt_piece_count: 0"));
+    assert!(verified_resume_text.contains("resumed: true"));
 
     let inspect_receipt_output = Command::new(minimodel_bin())
         .args([
@@ -682,6 +746,92 @@ fn companion_peer_import_cli_executes_check_preflight_and_import_over_local_http
         output_text(&drift_output)
     );
     assert!(output_text(&drift_output).contains("project_server_serves_model_bytes"));
+
+    let lane_b_bind = free_loopback_addr();
+    let lane_b_url = format!("http://{lane_b_bind}/peer-pieces/");
+    let lane_b_state_path = dir.join("tiny-test-model-q8.lane-b.peer-companion-state.v0.json");
+    let lane_b_request_path = dir.join("tiny-test-model-q8.lane-b.peer-import-request.json");
+    let lane_b_status_path = dir.join("tiny-test-model-q8.lane-b.status.json");
+    std::fs::write(
+        &lane_b_request_path,
+        q8_peer_import_request_text(&lane_b_url),
+    )
+    .expect("write lane B import request");
+    let lane_b_state_output = Command::new(minimodel_bin())
+        .args([
+            "write-peer-companion-state",
+            &manifest_path_text,
+            &piece_dir_text,
+            &lane_b_state_path.to_string_lossy(),
+            &lane_b_url,
+        ])
+        .output()
+        .expect("write lane B companion state");
+    assert!(
+        lane_b_state_output.status.success(),
+        "{}",
+        output_text(&lane_b_state_output)
+    );
+    let mut lane_b_command = Command::new(minimodel_bin());
+    lane_b_command
+        .args([
+            "serve-peer-companion",
+            &lane_b_state_path.to_string_lossy(),
+            &manifest_path_text,
+            &piece_dir_text,
+            &lane_b_bind,
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let mut lane_b_server = ChildGuard::spawn(lane_b_command);
+    let lane_b_status_text = wait_for_peer_status(
+        &mut lane_b_server,
+        &manifest_path_text,
+        &lane_b_url,
+        &lane_b_status_path.to_string_lossy(),
+    );
+    assert!(lane_b_status_text.contains("MiniModel peer status check: PASS"));
+    std::fs::remove_file(&output_artifact_path).expect("remove artifact before lane failover");
+    std::fs::remove_file(&receipt_path).expect("remove receipt before lane failover");
+    server.stop();
+
+    let lane_b_import = Command::new(minimodel_bin())
+        .args([
+            "import-peer-request",
+            &lane_b_request_path.to_string_lossy(),
+            &manifest_path_text,
+            &import_dir_text,
+        ])
+        .output()
+        .expect("resume the import from lane B after lane A stops");
+    assert!(
+        lane_b_import.status.success(),
+        "{}",
+        output_text(&lane_b_import)
+    );
+    let lane_b_import_text = output_text(&lane_b_import);
+    assert!(lane_b_import_text.contains(&format!("peer_base_url: {lane_b_url}")));
+    assert!(lane_b_import_text.contains("downloaded_piece_count: 0"));
+    assert!(lane_b_import_text.contains("reused_piece_count: 1"));
+    assert!(lane_b_import_text.contains("resumed: true"));
+    let lane_b_chain = Command::new(minimodel_bin())
+        .args([
+            "inspect-peer-import-receipt",
+            &receipt_path_text,
+            &lane_b_request_path.to_string_lossy(),
+            &import_dir
+                .join("minimodel.peer_import.preflight")
+                .to_string_lossy(),
+            &manifest_path_text,
+            &output_artifact_path_text,
+        ])
+        .output()
+        .expect("validate lane B failover receipt chain");
+    assert!(
+        lane_b_chain.status.success(),
+        "{}",
+        output_text(&lane_b_chain)
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

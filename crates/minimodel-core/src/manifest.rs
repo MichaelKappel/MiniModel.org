@@ -45,6 +45,11 @@ const REQUIRED_FIELDS: &[&str] = &[
 ];
 
 const EVIDENCE_PAIRS: &[(&str, &str)] = &[
+    ("source.license.route", "source.license.sha256"),
+    (
+        "source.modification_notice.route",
+        "source.modification_notice.sha256",
+    ),
     ("source.config.route", "source.config.sha256"),
     ("source.tokenizer.route", "source.tokenizer.sha256"),
     (
@@ -60,6 +65,10 @@ const EVIDENCE_PAIRS: &[(&str, &str)] = &[
         "evidence.runtime_smoke.sha256",
     ),
     ("evidence.eval.route", "evidence.eval.sha256"),
+    (
+        "evidence.conversation.route",
+        "evidence.conversation.sha256",
+    ),
     ("evidence.admission.route", "evidence.admission.sha256"),
 ];
 
@@ -232,7 +241,7 @@ impl Manifest {
         require_member(
             self.require("slm.quantization")?,
             "slm.quantization",
-            &["f32", "q8_0", "q4_0"],
+            &["f32", "q8_0", "q5_0", "q4_0", "mixed"],
         )?;
         require_hex64(
             self.require("slm.tokenizer_checksum")?,
@@ -259,6 +268,7 @@ impl Manifest {
         self.validate_routes()?;
         self.validate_evidence_pairs()?;
         self.validate_source_discovery()?;
+        self.validate_trained_provenance()?;
         self.validate_signature()?;
         self.validate_chunk_metadata()?;
         self.validate_boundary_scan()?;
@@ -328,6 +338,82 @@ impl Manifest {
                 "source.discovery.user_token_required",
                 &["true", "false"],
             )?;
+        }
+        Ok(())
+    }
+
+    fn validate_trained_provenance(&self) -> Result<(), String> {
+        let Some(quality_tier) = self.get("quality.tier") else {
+            if self.fields.keys().any(|key| {
+                key.starts_with("quality.")
+                    || key.starts_with("source.license.")
+                    || key.starts_with("source.modification_notice.")
+                    || key.starts_with("evidence.conversation.")
+            }) {
+                return Err(
+                    "trained provenance fields require quality.tier as their boundary".to_string(),
+                );
+            }
+            return Ok(());
+        };
+        require_equal(self, "source.kind", "safetensors")?;
+        self.require("source.huggingface_model_id")?;
+        let revision = self.require("source.revision")?;
+        if revision.len() != 40
+            || !revision
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(
+                "source.revision must be a canonical 40-character lowercase commit SHA".to_string(),
+            );
+        }
+        let license_id = self.require("source.license.id")?;
+        if license_id.is_empty()
+            || license_id.len() > 64
+            || !license_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+'))
+        {
+            return Err("source.license.id must be a single SPDX-style identifier".to_string());
+        }
+        require_equal(self, "license.route", self.require("source.license.route")?)?;
+        require_equal(
+            self,
+            "model_card.route",
+            self.require("source.modification_notice.route")?,
+        )?;
+        self.require("source.license.sha256")?;
+        self.require("source.modification_notice.sha256")?;
+        self.require("evidence.conversation.route")?;
+        self.require("evidence.conversation.sha256")?;
+        self.require("evidence.eval.route")?;
+        self.require("evidence.eval.sha256")?;
+        require_route_safe(
+            self.require("quality.known_limitation")?,
+            "quality.known_limitation",
+        )?;
+        match quality_tier {
+            "conversation-proven-full-assistant-pending" => {
+                require_equal(
+                    self,
+                    "quality.claim",
+                    "coherent-multi-turn-conversation-evidence-not-full-assistant-quality",
+                )?;
+                require_equal(
+                    self,
+                    "quality.trained_claim",
+                    "converted-trained-conversation-evidence",
+                )?;
+                require_equal(
+                    self,
+                    "quality.required_next_gate",
+                    "full-assistant-quality-evaluation",
+                )?;
+            }
+            value => {
+                return Err(format!("quality.tier has unsupported value {value}"));
+            }
         }
         Ok(())
     }
@@ -520,6 +606,29 @@ fn parse_ed25519_signature_value(value: &str) -> Result<Signature, String> {
         })?;
     let signature_bytes = decode_base64_array::<64>(encoded, "signature.value")?;
     Ok(Signature::from_bytes(&signature_bytes))
+}
+
+pub(crate) fn verify_detached_ed25519_signature(
+    public_key_base64: &str,
+    public_key_sha256: &str,
+    signature_value: &str,
+    payload: &[u8],
+) -> Result<String, String> {
+    let public_key_bytes = decode_base64_array::<32>(public_key_base64, "public_key_base64")?;
+    let actual_public_key_sha256 = sha256_prefixed(&public_key_bytes);
+    let expected_public_key_sha256 = normalize_sha256(public_key_sha256)?;
+    if actual_public_key_sha256 != expected_public_key_sha256 {
+        return Err(format!(
+            "public_key_sha256 mismatch: expected {expected_public_key_sha256}, public key bytes had {actual_public_key_sha256}"
+        ));
+    }
+    let signature = parse_ed25519_signature_value(signature_value)?;
+    let verifying_key = VerifyingKey::from_bytes(&public_key_bytes)
+        .map_err(|source| format!("invalid Ed25519 public key: {source}"))?;
+    verifying_key
+        .verify(payload, &signature)
+        .map_err(|_| "signature.value did not verify the canonical payload".to_string())?;
+    Ok(actual_public_key_sha256)
 }
 
 fn require_equal(manifest: &Manifest, key: &str, expected: &str) -> Result<(), String> {
@@ -738,6 +847,29 @@ signature.kind=unsigned-draft
     #[test]
     fn validates_minimal_manifest() {
         valid_manifest().validate().unwrap();
+    }
+
+    #[test]
+    fn accepts_all_tinyrustlm_runtime_quantization_identities() {
+        for quantization in ["f32", "q8_0", "q5_0", "q4_0", "mixed"] {
+            let mut manifest = valid_manifest();
+            manifest
+                .fields
+                .insert("slm.quantization".to_string(), quantization.to_string());
+            manifest.validate().unwrap();
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_quantization_identity() {
+        let mut manifest = valid_manifest();
+        manifest
+            .fields
+            .insert("slm.quantization".to_string(), "q2_unreviewed".to_string());
+
+        let error = manifest.validate().unwrap_err();
+
+        assert!(error.contains("slm.quantization"));
     }
 
     #[test]

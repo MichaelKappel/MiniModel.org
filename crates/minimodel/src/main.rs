@@ -329,11 +329,39 @@ fn run() -> Result<(), String> {
             println!("piece_dir: {}", report.piece_dir_path);
             println!("piece_set.sha256: {}", report.piece_set_sha256);
             println!("piece_count: {}", report.piece_count);
+            println!("downloaded_piece_count: {}", report.downloaded_piece_count);
+            println!("reused_piece_count: {}", report.reused_piece_count);
+            println!(
+                "refetched_corrupt_piece_count: {}",
+                report.refetched_corrupt_piece_count
+            );
+            println!("network_retry_count: {}", report.network_retry_count);
+            println!("transfer_concurrency: {}", report.transfer_concurrency);
+            println!("resumed: {}", report.resumed);
+            println!("resume_state: {}", report.resume_state_path);
+            println!("status_check: {}", report.status_check_path);
+            println!("preflight: {}", report.preflight_path);
             println!("artifact: {}", report.output_artifact_path);
             println!("receipt: {}", report.receipt_path);
             println!("manifest.sha256: {}", report.manifest_sha256);
             println!("artifact.sha256: {}", report.artifact_sha256);
             println!("chunks.merkle_root_sha256: {}", report.merkle_root_sha256);
+        }
+        "import-peer-request-json" => {
+            let request_json = one_arg(&mut args, "request-json")?;
+            let manifest = one_arg(&mut args, "manifest")?;
+            let output_dir = one_arg(&mut args, "output-dir")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::execute_peer_import_request_path(
+                Path::new(&request_json),
+                Path::new(&manifest),
+                Path::new(&output_dir),
+            )?;
+            println!(
+                "{}",
+                serde_json::to_string(&report)
+                    .map_err(|error| format!("failed to encode import report JSON: {error}"))?
+            );
         }
         "inspect-peer-import-request" => {
             let request_json = one_arg(&mut args, "request-json")?;
@@ -661,6 +689,97 @@ fn run() -> Result<(), String> {
                 Path::new(&piece_dir),
                 &bind_addr,
             )?;
+        }
+        "inspect-seed-fleet" => {
+            let config_json = one_arg(&mut args, "config-json")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_seed_fleet_path(Path::new(&config_json))?;
+            println!("MiniModel seed fleet inspection: PASS");
+            println!("config: {}", report.config_path);
+            println!("fleet_id: {}", report.fleet_id);
+            println!("target_model_count: {}", report.target_model_count);
+            println!("admitted_model_count: {}", report.admitted_model_count);
+            println!("active_model_count: {}", report.active_model_count);
+            println!(
+                "remaining_model_capacity: {}",
+                report.remaining_model_capacity
+            );
+            println!("replica_lane_count: {}", report.replica_lane_count);
+            println!("peer_endpoint_count: {}", report.peer_endpoint_count);
+            println!("lane_ids: {}", report.lane_ids.join(","));
+            println!("model_ids: {}", report.model_ids.join(","));
+            println!("active_model_ids: {}", report.active_model_ids.join(","));
+            println!("advertisement_status: {}", report.advertisement_status);
+            println!("project_server_serves_model_bytes: false");
+            println!("project_server_runs_model_bytes: false");
+        }
+        "inspect-external-probe-receipt" => {
+            let receipt_json = one_arg(&mut args, "receipt-json")?;
+            let trust_json = one_arg(&mut args, "trust-json")?;
+            let config_json = one_arg(&mut args, "config-json")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::inspect_external_probe_receipt_path(
+                Path::new(&receipt_json),
+                Path::new(&trust_json),
+                Path::new(&config_json),
+            )?;
+            println!("MiniModel external probe receipt inspection: PASS");
+            println!("receipt_id: {}", report.receipt_id);
+            println!("observer_id: {}", report.observer_id);
+            println!("fleet_id: {}", report.fleet_id);
+            println!("lane_id: {}", report.lane_id);
+            println!("model_id: {}", report.model_id);
+            println!("public_base_url: {}", report.public_base_url);
+            println!("checked_utc: {}", report.checked_utc);
+            println!("expires_utc: {}", report.expires_utc);
+            println!("externally_reachable: true");
+            println!("announcement_eligible: true");
+        }
+        "prepare-seed-announcement" => {
+            let catalog_entry_json = one_arg(&mut args, "catalog-entry-json")?;
+            let output_json = one_arg(&mut args, "output-json")?;
+            let receipt_json = one_arg(&mut args, "receipt-json")?;
+            let trust_json = one_arg(&mut args, "trust-json")?;
+            let config_json = one_arg(&mut args, "config-json")?;
+            no_more_args(&mut args)?;
+            let report = minimodel_core::prepare_seed_peer_source_announcement_path(
+                Path::new(&catalog_entry_json),
+                Path::new(&output_json),
+                Path::new(&receipt_json),
+                Path::new(&trust_json),
+                Path::new(&config_json),
+            )?;
+            println!("MiniModel proof-gated seed announcement prepared: PASS");
+            println!("announcement: {}", report.announcement_path);
+            println!("announcement_sha256: {}", report.announcement_sha256);
+            println!("receipt_id: {}", report.external_probe_receipt_id);
+            println!("fleet_id: {}", report.fleet_id);
+            println!("lane_id: {}", report.lane_id);
+            println!("model_id: {}", report.model_id);
+            println!("externally_reachable: true");
+            println!("announcement_eligible: true");
+            println!("advertised: false");
+        }
+        "serve-seed-lane" => {
+            let config_json = one_arg(&mut args, "config-json")?;
+            let lane_id = one_arg(&mut args, "lane-id")?;
+            let shutdown_file = args.next();
+            no_more_args(&mut args)?;
+            println!("MiniModel seed lane starting");
+            println!("config: {config_json}");
+            println!("lane_id: {lane_id}");
+            if let Some(shutdown_file) = shutdown_file {
+                println!("shutdown_file: {shutdown_file}");
+                minimodel_core::serve_seed_fleet_lane_with_shutdown_path(
+                    Path::new(&config_json),
+                    &lane_id,
+                    Path::new(&shutdown_file),
+                )?;
+                println!("MiniModel seed lane stopped cleanly");
+            } else {
+                println!("Press Ctrl+C to stop serving the seed lane.");
+                minimodel_core::serve_seed_fleet_lane_path(Path::new(&config_json), &lane_id)?;
+            }
         }
         "inspect-peer-companion-state" => {
             let state_json = one_arg(&mut args, "state-json")?;
@@ -1078,6 +1197,7 @@ fn print_usage() {
     eprintln!("  minimodel assemble-peer-pieces <manifest> <piece-dir> <output.slm>");
     eprintln!("  minimodel fetch-peer-pieces <manifest> <http-peer-base-url> <output-dir>");
     eprintln!("  minimodel import-peer-request <request-json> <manifest> <output-dir>");
+    eprintln!("  minimodel import-peer-request-json <request-json> <manifest> <output-dir>");
     eprintln!("  minimodel inspect-peer-import-request <request-json> <manifest>");
     eprintln!(
         "  minimodel preflight-peer-import-request <request-json> <manifest> <output.preflight>"
@@ -1090,6 +1210,16 @@ fn print_usage() {
     );
     eprintln!("  minimodel serve-peer-pieces <manifest> <piece-dir> <bind-addr>");
     eprintln!("  minimodel serve-peer-companion <state-json> <manifest> <piece-dir> <bind-addr>");
+    eprintln!("  minimodel inspect-seed-fleet <config-json>");
+    eprintln!(
+        "  minimodel inspect-external-probe-receipt <receipt-json> <trust-json> <config-json>"
+    );
+    eprintln!(
+        "  minimodel prepare-seed-announcement <catalog-entry-json> <output-json> <receipt-json> <trust-json> <config-json>"
+    );
+    eprintln!(
+        "  minimodel serve-seed-lane <config-json> <lane-id> [shutdown-file-inside-fleet-root]"
+    );
     eprintln!("  minimodel inspect-peer-companion-state <state-json> <manifest> <piece-dir>");
     eprintln!(
         "  minimodel write-peer-companion-state <manifest> <piece-dir> <output-json> <known-peer-base-url>"

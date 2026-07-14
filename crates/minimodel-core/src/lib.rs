@@ -2,14 +2,18 @@ mod manifest;
 mod sha256;
 mod slm;
 
-use serde::Deserialize;
+use fs2::FileExt;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub use manifest::{Manifest, ManifestSignatureVerification};
 pub use slm::SlmReport;
@@ -33,8 +37,27 @@ const PEER_COMPANION_INSPECT_STATE_COMMAND: &str =
 const IMPORT_RECEIPT_LEDGER_INSPECT_COMMAND: &str =
     "minimodel inspect-import-receipt-ledger <ledger-json>";
 const MAX_METADATA_JSON_BYTES: u64 = 4 * 1024 * 1024;
+const SEED_FLEET_KIND: &str = "minimodel.seed_fleet";
+const SEED_FLEET_VERSION: u64 = 0;
+const SEED_FLEET_TARGET_MODEL_COUNT: usize = 20;
+const SEED_FLEET_REPLICA_LANE_COUNT: usize = 2;
+const EXTERNAL_PROBE_RECEIPT_KIND: &str = "minimodel.external_reachability_receipt";
+const EXTERNAL_PROBE_TRUST_KIND: &str = "minimodel.external_probe_trust";
+const EXTERNAL_PROBE_NETWORK_SCOPE: &str = "outside-host-and-local-network";
+const EXTERNAL_PROBE_KEY_USAGE: &str = "minimodel-external-reachability-v0";
+const EXTERNAL_PROBE_OBSERVER_SCOPE: &str = "external-independent-observer";
+const EXTERNAL_PROBE_MAX_VALIDITY_SECONDS: i64 = 60 * 60;
+const EXTERNAL_PROBE_CLOCK_SKEW_SECONDS: i64 = 5 * 60;
+const EXTERNAL_PROBE_REPLAY_DIRECTORY: &str = "external-probe-replay-v0";
+const PEER_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const PEER_IO_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_PEER_HTTP_HEADER_BYTES: usize = 32 * 1024;
+const PEER_RESUME_STATE_FILE: &str = "minimodel.peer_resume_state.v0.json";
+const PEER_IMPORT_STATUS_CHECK_FILE: &str = "minimodel.peer_status_check.v0.json";
+const PEER_IMPORT_PREFLIGHT_FILE: &str = "minimodel.peer_import.preflight";
+const MAX_PEER_FETCH_RETRIES: usize = 8;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ArtifactVerification {
     pub manifest_sha256: String,
     pub manifest_model_id: String,
@@ -42,6 +65,38 @@ pub struct ArtifactVerification {
     pub artifact_sha256: String,
     pub evidence_status: String,
     pub slm: SlmReport,
+}
+
+/// Validated MiniModel manifest fields needed by managed seed-host clients.
+#[derive(Debug, Clone, Serialize)]
+pub struct MiniModelManifestInspection {
+    pub manifest_path: String,
+    pub manifest_sha256: String,
+    pub model_id: String,
+    pub artifact_byte_count: u64,
+    pub artifact_sha256: String,
+    pub piece_size: usize,
+    pub piece_count: usize,
+    pub merkle_root_sha256: String,
+    pub source_kind: String,
+    pub source_id: String,
+    pub source_revision: String,
+    pub source_license_id: Option<String>,
+    pub source_license_route: Option<String>,
+    pub source_license_sha256: Option<String>,
+    pub modification_notice_route: Option<String>,
+    pub modification_notice_sha256: Option<String>,
+    pub quality_tier: Option<String>,
+    pub quality_claim: Option<String>,
+    pub trained_quality_claim: Option<String>,
+    pub known_limitation: Option<String>,
+    pub required_next_gate: Option<String>,
+    pub conversation_evidence_route: Option<String>,
+    pub conversation_evidence_sha256: Option<String>,
+    pub evaluation_evidence_route: Option<String>,
+    pub evaluation_evidence_sha256: Option<String>,
+    pub evidence_status: String,
+    pub signature_kind: String,
 }
 
 #[derive(Debug, Clone)]
@@ -79,7 +134,28 @@ pub struct PeerPieceFetch {
     pub companion_state_status: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+pub struct ResumablePeerPieceFetch {
+    pub piece_set_path: String,
+    pub piece_set_sha256: String,
+    pub resume_state_path: String,
+    pub status_check_path: String,
+    pub piece_count: usize,
+    pub downloaded_piece_count: usize,
+    pub reused_piece_count: usize,
+    pub refetched_corrupt_piece_count: usize,
+    pub network_retry_count: usize,
+    pub transfer_concurrency: usize,
+    pub resumed: bool,
+    pub manifest_sha256: String,
+    pub artifact_sha256: String,
+    pub merkle_root_sha256: String,
+    pub peer_base_url: String,
+    pub companion_state_url: String,
+    pub companion_state_status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct PeerPieceServe {
     pub piece_set_path: String,
     pub piece_set_sha256: String,
@@ -168,6 +244,29 @@ pub struct PeerSourceAnnouncementReport {
     pub peer_base_url: String,
 }
 
+/// Proof-gated seed announcement plus the durable one-use receipt reservation.
+#[derive(Debug, Clone, Serialize)]
+pub struct SeedPeerSourceAnnouncementReport {
+    pub announcement_path: String,
+    pub announcement_sha256: String,
+    pub replay_record_path: String,
+    pub fleet_id: String,
+    pub lane_id: String,
+    pub model_id: String,
+    pub artifact_sha256: String,
+    pub piece_set_sha256: String,
+    pub peer_base_url: String,
+    pub external_probe_receipt_id: String,
+    pub external_probe_receipt_sha256: String,
+    pub external_probe_expires_utc: String,
+    pub externally_reachable: bool,
+    pub announcement_eligible: bool,
+    pub advertised: bool,
+    pub project_server_serves_model_bytes: bool,
+    pub project_server_runs_model_bytes: bool,
+    pub project_server_proxies_model_bytes: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct PeerSourceAnnouncementMerge {
     pub catalog_entry_path: String,
@@ -177,9 +276,11 @@ pub struct PeerSourceAnnouncementMerge {
     pub peer_source_count: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PeerImportRequestExecution {
     pub request_path: String,
+    pub status_check_path: String,
+    pub preflight_path: String,
     pub peer_base_url: String,
     pub companion_state_url: String,
     pub companion_state_status: String,
@@ -187,7 +288,14 @@ pub struct PeerImportRequestExecution {
     pub piece_set_sha256: String,
     pub output_artifact_path: String,
     pub receipt_path: String,
+    pub resume_state_path: String,
     pub piece_count: usize,
+    pub downloaded_piece_count: usize,
+    pub reused_piece_count: usize,
+    pub refetched_corrupt_piece_count: usize,
+    pub network_retry_count: usize,
+    pub transfer_concurrency: usize,
+    pub resumed: bool,
     pub manifest_sha256: String,
     pub artifact_sha256: String,
     pub merkle_root_sha256: String,
@@ -240,7 +348,7 @@ pub struct ImportReceiptInspection {
     pub artifact_assembled_from_peer_pieces: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PeerImportReceiptInspection {
     pub receipt_path: String,
     pub receipt_sha256: String,
@@ -281,7 +389,7 @@ pub struct ImportReceiptLedgerReport {
     pub model_count: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PeerImportPreflight {
     pub request_path: String,
     pub preflight_path: String,
@@ -340,7 +448,7 @@ pub struct PeerImportPreflightInspection {
 }
 
 /// Summary returned after a metadata-only status check against a running direct peer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PeerStatusCheck {
     pub report_path: String,
     pub peer_base_url: String,
@@ -373,7 +481,7 @@ pub struct PeerStatusCheckInspection {
     pub merkle_root_sha256: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PeerSharePreparation {
     pub manifest_path: String,
     pub peer_offer_path: String,
@@ -385,8 +493,112 @@ pub struct PeerSharePreparation {
     pub peer_source_count: usize,
 }
 
+/// Evidence returned after a real loopback HTTP serve/import/receipt round trip.
+#[derive(Debug, Clone, Serialize)]
+pub struct LocalPeerRoundTripVerification {
+    pub receipt_path: String,
+    pub receipt_sha256: String,
+    pub model_id: String,
+    pub manifest_sha256: String,
+    pub artifact_byte_count: u64,
+    pub artifact_sha256: String,
+    pub piece_set_sha256: String,
+    pub piece_count: usize,
+    pub merkle_root_sha256: String,
+    pub import_receipt_sha256: String,
+    pub peer_status_checked: bool,
+    pub peer_piece_set_checked: bool,
+    pub peer_companion_state_checked: bool,
+    pub final_receipt_checked: bool,
+    pub project_server_serves_model_bytes: bool,
+    pub project_server_runs_model_bytes: bool,
+    pub project_server_proxies_model_bytes: bool,
+}
+
+/// Reviewed quality boundary accepted for a checksum-bound trained-model share.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum PeerShareQualityTier {
+    /// Multi-turn conversation evidence passed while full assistant quality remains pending.
+    ConversationProvenFullAssistantPending,
+}
+
+impl PeerShareQualityTier {
+    /// Returns the manifest and catalog identity for this quality boundary.
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ConversationProvenFullAssistantPending => {
+                "conversation-proven-full-assistant-pending"
+            }
+        }
+    }
+
+    /// Returns the non-promotional quality claim derived from this boundary.
+    fn quality_claim(self) -> &'static str {
+        match self {
+            Self::ConversationProvenFullAssistantPending => {
+                "coherent-multi-turn-conversation-evidence-not-full-assistant-quality"
+            }
+        }
+    }
+
+    /// Returns the trained-artifact claim derived from this boundary.
+    fn trained_quality_claim(self) -> &'static str {
+        match self {
+            Self::ConversationProvenFullAssistantPending => {
+                "converted-trained-conversation-evidence"
+            }
+        }
+    }
+
+    /// Returns the next gate required before a stronger quality claim is allowed.
+    fn required_next_gate(self) -> &'static str {
+        match self {
+            Self::ConversationProvenFullAssistantPending => "full-assistant-quality-evaluation",
+        }
+    }
+}
+
+/// Caller-supplied paths and expected identities for trained-model provenance.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PeerShareProvenance {
+    pub source_revision: String,
+    pub source_license_id: String,
+    pub source_license_path: PathBuf,
+    pub source_license_sha256: String,
+    pub modification_notice_path: PathBuf,
+    pub modification_notice_sha256: String,
+    pub conversation_evidence_path: PathBuf,
+    pub conversation_evidence_sha256: String,
+    pub evaluation_evidence_path: PathBuf,
+    pub evaluation_evidence_sha256: String,
+    pub quality_tier: PeerShareQualityTier,
+    pub known_limitation: String,
+}
+
+#[derive(Debug)]
+struct PreparedPeerShareProvenance {
+    source_revision: String,
+    source_license_id: String,
+    source_license_route: String,
+    source_license_sha256: String,
+    source_license_bytes: Vec<u8>,
+    modification_notice_route: String,
+    modification_notice_sha256: String,
+    modification_notice_bytes: Vec<u8>,
+    conversation_evidence_route: String,
+    conversation_evidence_sha256: String,
+    conversation_evidence_bytes: Vec<u8>,
+    evaluation_evidence_route: String,
+    evaluation_evidence_sha256: String,
+    evaluation_evidence_bytes: Vec<u8>,
+    quality_tier: PeerShareQualityTier,
+    known_limitation: String,
+}
+
 /// Summary returned after writing a local companion-readable share state file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PeerCompanionStateReport {
     pub state_path: String,
     pub model_id: String,
@@ -398,7 +610,7 @@ pub struct PeerCompanionStateReport {
 }
 
 /// Summary returned after validating a companion state before serving.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PeerCompanionServe {
     pub state_path: String,
     pub state_route: String,
@@ -411,6 +623,210 @@ pub struct PeerCompanionServe {
     pub manifest_sha256: String,
     pub artifact_sha256: String,
     pub merkle_root_sha256: String,
+}
+
+/// Summary returned after validating a two-lane MiniModel seed fleet.
+#[derive(Debug, Clone, Serialize)]
+pub struct SeedFleetInspection {
+    pub config_path: String,
+    pub fleet_id: String,
+    pub target_model_count: usize,
+    pub admitted_model_count: usize,
+    pub active_model_count: usize,
+    pub remaining_model_capacity: usize,
+    pub replica_lane_count: usize,
+    pub peer_endpoint_count: usize,
+    pub lane_ids: Vec<String>,
+    pub model_ids: Vec<String>,
+    pub active_model_ids: Vec<String>,
+    pub advertisement_status: String,
+}
+
+/// Rust-verified external observer receipt bound to one exact seed endpoint.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExternalProbeReceiptInspection {
+    pub receipt_path: String,
+    pub receipt_sha256: String,
+    pub receipt_id: String,
+    pub observer_id: String,
+    pub observer_key_id: String,
+    pub observer_public_key_sha256: String,
+    pub fleet_id: String,
+    pub lane_id: String,
+    pub model_id: String,
+    pub public_base_url: String,
+    pub artifact_sha256: String,
+    pub piece_set_sha256: String,
+    pub checked_utc: String,
+    pub expires_utc: String,
+    pub checked_route_count: usize,
+    pub probe_implementation_version: String,
+    pub network_scope: String,
+    pub signature_payload_sha256: String,
+    pub externally_reachable: bool,
+    pub announcement_eligible: bool,
+    pub project_server_serves_model_bytes: bool,
+    pub project_server_runs_model_bytes: bool,
+    pub project_server_proxies_model_bytes: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SeedFleetFile {
+    fleet_kind: String,
+    fleet_id: String,
+    fleet_version: u64,
+    target_model_count: usize,
+    replica_lane_count: usize,
+    models: Vec<SeedFleetModelFile>,
+    lanes: Vec<SeedFleetLaneFile>,
+    boundary: SeedFleetBoundaryFile,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SeedFleetModelFile {
+    model_id: String,
+    enabled: bool,
+    manifest_path: String,
+    piece_dir: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SeedFleetLaneFile {
+    lane_id: String,
+    endpoints: Vec<SeedFleetEndpointFile>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SeedFleetEndpointFile {
+    model_id: String,
+    state_path: String,
+    bind_addr: String,
+    public_base_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SeedFleetBoundaryFile {
+    operator_consent: bool,
+    advertise_only_after_external_probe: bool,
+    project_server_serves_model_bytes: bool,
+    project_server_runs_model_bytes: bool,
+    project_server_proxies_model_bytes: bool,
+}
+
+#[derive(Debug, Clone)]
+struct SeedFleetPlan {
+    inspection: SeedFleetInspection,
+    lanes: Vec<SeedFleetLanePlan>,
+}
+
+#[derive(Debug, Clone)]
+struct SeedFleetLanePlan {
+    lane_id: String,
+    endpoints: Vec<SeedFleetEndpointPlan>,
+}
+
+#[derive(Debug, Clone)]
+struct SeedFleetEndpointPlan {
+    model_id: String,
+    enabled: bool,
+    state_path: PathBuf,
+    piece_dir: PathBuf,
+    bind_addr: SocketAddr,
+    serve: PeerCompanionServe,
+}
+
+#[derive(Debug, Clone)]
+struct SeedFleetModelPlan {
+    model_id: String,
+    enabled: bool,
+    piece_dir: PathBuf,
+    share: PeerPieceServe,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExternalProbeReceiptFile {
+    receipt_kind: String,
+    receipt_version: u64,
+    receipt_id: String,
+    observer_id: String,
+    observer_key_id: String,
+    fleet_id: String,
+    lane_id: String,
+    model_id: String,
+    public_base_url: String,
+    artifact_sha256: String,
+    piece_set_sha256: String,
+    checked_utc: String,
+    expires_utc: String,
+    probe_implementation_version: String,
+    network_scope: String,
+    checked_routes: Vec<ExternalProbeRouteFile>,
+    signature: ExternalProbeSignatureFile,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExternalProbeRouteFile {
+    route: String,
+    http_status: u16,
+    body_byte_count: u64,
+    body_sha256: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExternalProbeSignatureFile {
+    kind: String,
+    payload_sha256: String,
+    value: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExternalProbeTrustFile {
+    trust_kind: String,
+    trust_version: u64,
+    keys: Vec<ExternalProbeTrustKeyFile>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExternalProbeTrustKeyFile {
+    key_id: String,
+    observer_id: String,
+    algorithm: String,
+    usage: String,
+    observer_scope: String,
+    public_key_base64: String,
+    public_key_sha256: String,
+    revoked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PeerResumeStateFile {
+    resume_kind: String,
+    resume_version: u64,
+    created_utc: String,
+    model_id: String,
+    manifest_sha256: String,
+    artifact_byte_count: u64,
+    artifact_sha256: String,
+    piece_set_sha256: String,
+    piece_count: usize,
+    merkle_root_sha256: String,
+    initial_peer_base_url: String,
+    progress_is_derived_from_verified_piece_files: bool,
+    contains_credentials: bool,
+    project_server_serves_model_bytes: bool,
+    project_server_runs_model_bytes: bool,
+    project_server_proxies_model_bytes: bool,
 }
 
 /// Summary returned after writing or validating a metadata-only peer contact card.
@@ -502,6 +918,86 @@ struct PeerImportReceiptTransfer {
 
 pub fn verify_manifest_path(path: &Path) -> Result<Manifest, String> {
     Ok(read_valid_manifest_path(path)?.manifest)
+}
+
+/// Inspect a MiniModel manifest after applying the complete Rust validation path.
+pub fn inspect_manifest_path(path: &Path) -> Result<MiniModelManifestInspection, String> {
+    let bundle = read_valid_manifest_path(path)?;
+    Ok(MiniModelManifestInspection {
+        manifest_path: path.display().to_string(),
+        manifest_sha256: sha256_prefixed(&bundle.bytes),
+        model_id: bundle.manifest.require("model.id")?.to_string(),
+        artifact_byte_count: bundle
+            .manifest
+            .require("artifact.byte_count")?
+            .parse::<u64>()
+            .map_err(|_| "artifact.byte_count must be a decimal integer".to_string())?,
+        artifact_sha256: normalize_sha256(bundle.manifest.require("artifact.sha256")?)?,
+        piece_size: parse_usize(bundle.manifest.require("chunks.size")?, "chunks.size")?,
+        piece_count: parse_usize(bundle.manifest.require("chunks.count")?, "chunks.count")?,
+        merkle_root_sha256: normalize_sha256(
+            bundle.manifest.require("chunks.merkle_root_sha256")?,
+        )?,
+        source_kind: bundle.manifest.require("source.kind")?.to_string(),
+        source_id: bundle.manifest.require("source.id")?.to_string(),
+        source_revision: bundle.manifest.require("source.revision")?.to_string(),
+        source_license_id: bundle.manifest.get("source.license.id").map(str::to_string),
+        source_license_route: bundle
+            .manifest
+            .get("source.license.route")
+            .map(str::to_string),
+        source_license_sha256: bundle
+            .manifest
+            .get("source.license.sha256")
+            .map(normalize_sha256)
+            .transpose()?,
+        modification_notice_route: bundle
+            .manifest
+            .get("source.modification_notice.route")
+            .map(str::to_string),
+        modification_notice_sha256: bundle
+            .manifest
+            .get("source.modification_notice.sha256")
+            .map(normalize_sha256)
+            .transpose()?,
+        quality_tier: bundle.manifest.get("quality.tier").map(str::to_string),
+        quality_claim: bundle.manifest.get("quality.claim").map(str::to_string),
+        trained_quality_claim: bundle
+            .manifest
+            .get("quality.trained_claim")
+            .map(str::to_string),
+        known_limitation: bundle
+            .manifest
+            .get("quality.known_limitation")
+            .map(str::to_string),
+        required_next_gate: bundle
+            .manifest
+            .get("quality.required_next_gate")
+            .map(str::to_string),
+        conversation_evidence_route: bundle
+            .manifest
+            .get("evidence.conversation.route")
+            .map(str::to_string),
+        conversation_evidence_sha256: bundle
+            .manifest
+            .get("evidence.conversation.sha256")
+            .map(normalize_sha256)
+            .transpose()?,
+        evaluation_evidence_route: bundle
+            .manifest
+            .get("evidence.eval.route")
+            .map(str::to_string),
+        evaluation_evidence_sha256: bundle
+            .manifest
+            .get("evidence.eval.sha256")
+            .map(normalize_sha256)
+            .transpose()?,
+        evidence_status: bundle
+            .manifest
+            .require("evidence.admission.status")?
+            .to_string(),
+        signature_kind: bundle.manifest.require("signature.kind")?.to_string(),
+    })
 }
 
 pub fn verify_signed_manifest_path(
@@ -747,6 +1243,344 @@ pub fn fetch_peer_pieces_http_path(
     }
 }
 
+/// Fetch peer pieces into durable identity-bound staging that can survive interruption.
+pub fn fetch_peer_pieces_http_resumable_path(
+    manifest_path: &Path,
+    peer_base_url: &str,
+    output_dir: &Path,
+    max_retries: usize,
+) -> Result<ResumablePeerPieceFetch, String> {
+    if max_retries > MAX_PEER_FETCH_RETRIES {
+        return Err(format!(
+            "peer fetch max_retries must be at most {MAX_PEER_FETCH_RETRIES}"
+        ));
+    }
+    let base_url = HttpUrl::parse(peer_base_url)?;
+    reject_project_server_peer_host(&base_url.host)?;
+    let normalized_peer_base_url = normalize_known_peer_base_url(&base_url.to_string())?;
+    let bundle = read_valid_manifest_path(manifest_path)?;
+    require_fixed_chunk_mode(&bundle.manifest)?;
+    let manifest_sha256 = sha256_prefixed(&bundle.bytes);
+    let model_id = bundle.manifest.require("model.id")?.to_string();
+    let artifact_byte_count = bundle
+        .manifest
+        .require("artifact.byte_count")?
+        .parse::<u64>()
+        .map_err(|_| "artifact.byte_count must be a decimal integer".to_string())?;
+    let artifact_sha256 = normalize_sha256(bundle.manifest.require("artifact.sha256")?)?;
+    let merkle_root_sha256 =
+        normalize_sha256(bundle.manifest.require("chunks.merkle_root_sha256")?)?;
+
+    let directory_existed = prepare_resumable_piece_directory(output_dir)?;
+    let _lock = lock_resumable_piece_directory(output_dir)?;
+    let status_check_path = output_dir.join(PEER_IMPORT_STATUS_CHECK_FILE);
+    let status =
+        check_peer_status_path(manifest_path, &normalized_peer_base_url, &status_check_path)?;
+
+    let piece_set_url = base_url.join_file(PEER_PIECE_SET_ROUTE)?;
+    let piece_set_bytes = http_get_bytes(&piece_set_url, 1_048_576)?;
+    let piece_set_sha256 = sha256_prefixed(&piece_set_bytes);
+    if piece_set_sha256 != status.piece_set_sha256 {
+        return Err("peer piece-set identity changed after the validated status check".to_string());
+    }
+    let piece_set_text = std::str::from_utf8(&piece_set_bytes)
+        .map_err(|_| "peer piece set must be valid UTF-8".to_string())?;
+    let piece_set = Manifest::parse(piece_set_text)?;
+    validate_piece_set(&bundle.manifest, &bundle.bytes, &piece_set)?;
+    let companion = validate_optional_peer_companion_state(
+        &base_url,
+        &piece_set_url,
+        &bundle.manifest,
+        &bundle.bytes,
+        &piece_set,
+        &piece_set_bytes,
+    )?;
+    let piece_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
+    let piece_set_path = output_dir.join(PEER_PIECE_SET_ROUTE);
+    verify_or_write_immutable_resume_file(
+        &piece_set_path,
+        &piece_set_bytes,
+        "resumable peer piece set",
+    )?;
+
+    let resume_state_path = output_dir.join(PEER_RESUME_STATE_FILE);
+    let state_existed = resume_state_path.exists();
+    let expected_state = PeerResumeStateFile {
+        resume_kind: "minimodel.peer_resume_state".to_string(),
+        resume_version: 0,
+        created_utc: utc_now()?,
+        model_id,
+        manifest_sha256: manifest_sha256.clone(),
+        artifact_byte_count,
+        artifact_sha256: artifact_sha256.clone(),
+        piece_set_sha256: piece_set_sha256.clone(),
+        piece_count,
+        merkle_root_sha256: merkle_root_sha256.clone(),
+        initial_peer_base_url: normalized_peer_base_url.clone(),
+        progress_is_derived_from_verified_piece_files: true,
+        contains_credentials: false,
+        project_server_serves_model_bytes: false,
+        project_server_runs_model_bytes: false,
+        project_server_proxies_model_bytes: false,
+    };
+    if state_existed {
+        let (_, existing): (Vec<u8>, PeerResumeStateFile) =
+            read_bounded_json_file(&resume_state_path, "peer resume state")?;
+        validate_peer_resume_state(&existing, &expected_state)?;
+    } else {
+        let state_bytes = serde_json::to_vec_pretty(&expected_state)
+            .map_err(|error| format!("failed to encode peer resume state: {error}"))?;
+        write_new_synced_file(&resume_state_path, &state_bytes, "peer resume state")?;
+    }
+
+    let mut downloaded_piece_count = 0usize;
+    let mut reused_piece_count = 0usize;
+    let mut refetched_corrupt_piece_count = 0usize;
+    let mut network_retry_count = 0usize;
+    for index in 0..piece_count {
+        let prefix = format!("piece.{index}");
+        let spec = peer_piece_spec(&piece_set, index)?;
+        let piece_path = output_dir.join(&spec.file_name);
+        match inspect_resumable_piece(&piece_path, &prefix, &spec)? {
+            ResumablePieceState::Verified => {
+                reused_piece_count += 1;
+                continue;
+            }
+            ResumablePieceState::Corrupt => {
+                refetched_corrupt_piece_count += 1;
+                fs::remove_file(&piece_path).map_err(|error| {
+                    format!("failed to remove corrupt staged peer piece {index}: {error}")
+                })?;
+            }
+            ResumablePieceState::Missing => {}
+        }
+        let piece_url = base_url.join_file(&spec.file_name)?;
+        let mut last_error = None;
+        let mut downloaded = None;
+        for attempt in 0..=max_retries {
+            match http_get_bytes(&piece_url, spec.byte_count).and_then(|bytes| {
+                validate_piece_bytes(&prefix, &bytes, spec.byte_count, &spec.sha256, "peer sent")?;
+                Ok(bytes)
+            }) {
+                Ok(bytes) => {
+                    downloaded = Some(bytes);
+                    break;
+                }
+                Err(error) => {
+                    last_error = Some(error);
+                    if attempt < max_retries {
+                        network_retry_count += 1;
+                        thread::sleep(Duration::from_millis(100 * (attempt as u64 + 1).min(10)));
+                    }
+                }
+            }
+        }
+        let bytes = downloaded.ok_or_else(|| {
+            format!(
+                "failed to fetch verified peer piece {index} after {} attempt(s): {}",
+                max_retries + 1,
+                last_error.unwrap_or_else(|| "unknown peer fetch failure".to_string())
+            )
+        })?;
+        write_resumable_piece_atomically(&piece_path, &bytes, index)?;
+        downloaded_piece_count += 1;
+    }
+    let verified = inspect_peer_piece_dir_path(manifest_path, output_dir)?;
+    if verified.piece_set_sha256 != piece_set_sha256
+        || verified.artifact_sha256 != artifact_sha256
+        || verified.merkle_root_sha256 != merkle_root_sha256
+    {
+        return Err("resumable peer piece verification identity mismatch".to_string());
+    }
+
+    Ok(ResumablePeerPieceFetch {
+        piece_set_path: piece_set_path.display().to_string(),
+        piece_set_sha256,
+        resume_state_path: resume_state_path.display().to_string(),
+        status_check_path: status_check_path.display().to_string(),
+        piece_count,
+        downloaded_piece_count,
+        reused_piece_count,
+        refetched_corrupt_piece_count,
+        network_retry_count,
+        transfer_concurrency: 1,
+        resumed: directory_existed || state_existed,
+        manifest_sha256,
+        artifact_sha256,
+        merkle_root_sha256,
+        peer_base_url: normalized_peer_base_url,
+        companion_state_url: companion.url,
+        companion_state_status: companion.status,
+    })
+}
+
+fn prepare_resumable_piece_directory(output_dir: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(output_dir) {
+        Ok(metadata) => {
+            if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+                return Err(
+                    "resumable peer piece path must be a regular non-symlink directory".to_string(),
+                );
+            }
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            ensure_parent_dir(output_dir, "resumable peer piece directory")?;
+            fs::create_dir(output_dir).map_err(|error| {
+                format!("failed to create resumable peer piece directory: {error}")
+            })?;
+            Ok(false)
+        }
+        Err(error) => Err(format!(
+            "failed to inspect resumable peer piece directory: {error}"
+        )),
+    }
+}
+
+fn lock_resumable_piece_directory(output_dir: &Path) -> Result<fs::File, String> {
+    let lock_path = output_dir.join("minimodel.peer_resume.lock");
+    if let Ok(metadata) = fs::symlink_metadata(&lock_path) {
+        if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+            return Err("peer resume lock must be a regular non-symlink file".to_string());
+        }
+    }
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(|error| format!("failed to open peer resume lock: {error}"))?;
+    lock.try_lock_exclusive()
+        .map_err(|_| "another peer import already owns this resume directory".to_string())?;
+    Ok(lock)
+}
+
+fn verify_or_write_immutable_resume_file(
+    path: &Path,
+    expected: &[u8],
+    label: &str,
+) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+                return Err(format!("{label} must be a regular non-symlink file"));
+            }
+            let actual =
+                fs::read(path).map_err(|error| format!("failed to read {label}: {error}"))?;
+            if actual != expected {
+                return Err(format!(
+                    "{label} identity changed; refusing to mix incompatible peer pieces"
+                ));
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            write_new_synced_file(path, expected, label)
+        }
+        Err(error) => Err(format!("failed to inspect {label}: {error}")),
+    }
+}
+
+fn validate_peer_resume_state(
+    actual: &PeerResumeStateFile,
+    expected: &PeerResumeStateFile,
+) -> Result<(), String> {
+    if actual.resume_kind != "minimodel.peer_resume_state" || actual.resume_version != 0 {
+        return Err("peer resume state kind or version is unsupported".to_string());
+    }
+    parse_utc_timestamp_seconds(&actual.created_utc, "peer resume state created_utc")?;
+    if actual.model_id != expected.model_id
+        || normalize_sha256(&actual.manifest_sha256)? != expected.manifest_sha256
+        || actual.artifact_byte_count != expected.artifact_byte_count
+        || normalize_sha256(&actual.artifact_sha256)? != expected.artifact_sha256
+        || normalize_sha256(&actual.piece_set_sha256)? != expected.piece_set_sha256
+        || actual.piece_count != expected.piece_count
+        || normalize_sha256(&actual.merkle_root_sha256)? != expected.merkle_root_sha256
+    {
+        return Err(
+            "peer resume state identity mismatch; refusing to mix incompatible manifests or artifacts"
+                .to_string(),
+        );
+    }
+    let initial_url = normalize_known_peer_base_url(&actual.initial_peer_base_url)?;
+    if initial_url != actual.initial_peer_base_url {
+        return Err("peer resume state initial_peer_base_url is not normalized".to_string());
+    }
+    if !actual.progress_is_derived_from_verified_piece_files
+        || actual.contains_credentials
+        || actual.project_server_serves_model_bytes
+        || actual.project_server_runs_model_bytes
+        || actual.project_server_proxies_model_bytes
+    {
+        return Err("peer resume state security boundary mismatch".to_string());
+    }
+    Ok(())
+}
+
+enum ResumablePieceState {
+    Missing,
+    Verified,
+    Corrupt,
+}
+
+fn inspect_resumable_piece(
+    path: &Path,
+    prefix: &str,
+    spec: &PeerPieceSpec,
+) -> Result<ResumablePieceState, String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "{prefix} staged path must be a regular non-symlink file"
+                ));
+            }
+            let bytes = fs::read(path)
+                .map_err(|error| format!("failed to read staged {prefix}: {error}"))?;
+            if validate_piece_bytes(
+                prefix,
+                &bytes,
+                spec.byte_count,
+                &spec.sha256,
+                "staged file had",
+            )
+            .is_ok()
+            {
+                Ok(ResumablePieceState::Verified)
+            } else {
+                Ok(ResumablePieceState::Corrupt)
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(ResumablePieceState::Missing)
+        }
+        Err(error) => Err(format!("failed to inspect staged {prefix}: {error}")),
+    }
+}
+
+fn write_resumable_piece_atomically(
+    piece_path: &Path,
+    bytes: &[u8],
+    index: usize,
+) -> Result<(), String> {
+    let file_name = piece_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "peer piece path must end in a UTF-8 file name".to_string())?;
+    let temporary = piece_path.with_file_name(format!(".{file_name}.download-part"));
+    if let Ok(metadata) = fs::symlink_metadata(&temporary) {
+        if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+            return Err("stale peer piece temporary path is not a regular file".to_string());
+        }
+        fs::remove_file(&temporary)
+            .map_err(|error| format!("failed to remove stale peer piece temporary: {error}"))?;
+    }
+    write_new_synced_file(&temporary, bytes, "temporary verified peer piece")?;
+    fs::rename(&temporary, piece_path)
+        .map_err(|error| format!("failed to promote verified peer piece {index}: {error}"))
+}
+
 pub fn execute_peer_import_request_path(
     request_path: &Path,
     manifest_path: &Path,
@@ -756,39 +1590,93 @@ pub fn execute_peer_import_request_path(
     let bundle = read_valid_manifest_path(manifest_path)?;
     validate_peer_import_request_against_manifest(&request, &bundle.manifest)?;
     let contract = peer_import_request_contract_summary(&request);
-    create_empty_dir(output_dir)?;
+    prepare_import_output_directory(output_dir)?;
     let piece_dir = output_dir.join(&request.expected_piece_dir);
     let output_artifact_path = output_dir.join(&request.assembled_output_slm);
     let receipt_path = output_dir.join(receipt_file_name(&request.assembled_output_slm)?);
-    let fetch =
-        fetch_peer_pieces_http_path(manifest_path, &request.expected_peer_base_url, &piece_dir)?;
-    let artifact = assemble_peer_pieces_path(manifest_path, &piece_dir, &output_artifact_path)?;
-    write_peer_import_receipt_path(
+    let status_check_path = output_dir.join(PEER_IMPORT_STATUS_CHECK_FILE);
+    let status = check_peer_status_path(
         manifest_path,
-        &output_artifact_path,
-        &receipt_path,
-        &PeerImportReceiptTransfer {
-            request_path: request_path.display().to_string(),
-            receiver_validation_contract_status: contract.receiver_validation_contract_status,
-            check_peer_status_before_piece_fetch: contract.check_peer_status_before_piece_fetch,
-            preflight_fetches_piece_set_before_pieces: contract
-                .preflight_fetches_piece_set_before_pieces,
-            validate_advertised_companion_state_before_piece_fetch: contract
-                .validate_advertised_companion_state_before_piece_fetch,
-            import_receipt_required_before_browser_load: contract
-                .import_receipt_required_before_browser_load,
-            peer_base_url: fetch.peer_base_url.clone(),
-            piece_dir_path: piece_dir.display().to_string(),
-            piece_set_path: fetch.piece_set_path.clone(),
-            piece_set_sha256: fetch.piece_set_sha256.clone(),
-            companion_state_url: fetch.companion_state_url.clone(),
-            companion_state_status: fetch.companion_state_status.clone(),
-            piece_count: fetch.piece_count,
-            merkle_root_sha256: fetch.merkle_root_sha256.clone(),
-        },
+        &request.expected_peer_base_url,
+        &status_check_path,
     )?;
+    let preflight_path = output_dir.join(PEER_IMPORT_PREFLIGHT_FILE);
+    let preflight =
+        preflight_peer_import_request_path(request_path, manifest_path, &preflight_path)?;
+    if status.piece_set_sha256 != preflight.piece_set_sha256 {
+        return Err("peer identity changed between status and import preflight".to_string());
+    }
+    let fetch = fetch_peer_pieces_http_resumable_path(
+        manifest_path,
+        &request.expected_peer_base_url,
+        &piece_dir,
+        3,
+    )?;
+    if fetch.piece_set_sha256 != preflight.piece_set_sha256
+        || fetch.artifact_sha256 != preflight.artifact_sha256
+        || fetch.merkle_root_sha256 != preflight.merkle_root_sha256
+    {
+        return Err("peer identity changed between preflight and piece transfer".to_string());
+    }
+    let artifact = match fs::symlink_metadata(&output_artifact_path) {
+        Ok(metadata) => {
+            if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+                return Err("import output artifact must be a regular non-symlink file".to_string());
+            }
+            verify_artifact_path(manifest_path, &output_artifact_path)?
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            assemble_peer_pieces_path(manifest_path, &piece_dir, &output_artifact_path)?
+        }
+        Err(error) => return Err(format!("failed to inspect import output artifact: {error}")),
+    };
+    match fs::symlink_metadata(&receipt_path) {
+        Ok(metadata) => {
+            if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+                return Err("peer import receipt must be a regular non-symlink file".to_string());
+            }
+            inspect_peer_import_receipt_path(
+                &receipt_path,
+                request_path,
+                &preflight_path,
+                manifest_path,
+                &output_artifact_path,
+            )?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            write_peer_import_receipt_path(
+                manifest_path,
+                &output_artifact_path,
+                &receipt_path,
+                &PeerImportReceiptTransfer {
+                    request_path: request_path.display().to_string(),
+                    receiver_validation_contract_status: contract
+                        .receiver_validation_contract_status,
+                    check_peer_status_before_piece_fetch: contract
+                        .check_peer_status_before_piece_fetch,
+                    preflight_fetches_piece_set_before_pieces: contract
+                        .preflight_fetches_piece_set_before_pieces,
+                    validate_advertised_companion_state_before_piece_fetch: contract
+                        .validate_advertised_companion_state_before_piece_fetch,
+                    import_receipt_required_before_browser_load: contract
+                        .import_receipt_required_before_browser_load,
+                    peer_base_url: fetch.peer_base_url.clone(),
+                    piece_dir_path: piece_dir.display().to_string(),
+                    piece_set_path: fetch.piece_set_path.clone(),
+                    piece_set_sha256: fetch.piece_set_sha256.clone(),
+                    companion_state_url: fetch.companion_state_url.clone(),
+                    companion_state_status: fetch.companion_state_status.clone(),
+                    piece_count: fetch.piece_count,
+                    merkle_root_sha256: fetch.merkle_root_sha256.clone(),
+                },
+            )?;
+        }
+        Err(error) => return Err(format!("failed to inspect peer import receipt: {error}")),
+    }
     Ok(PeerImportRequestExecution {
         request_path: request_path.display().to_string(),
+        status_check_path: status_check_path.display().to_string(),
+        preflight_path: preflight_path.display().to_string(),
         peer_base_url: fetch.peer_base_url,
         companion_state_url: fetch.companion_state_url,
         companion_state_status: fetch.companion_state_status,
@@ -796,11 +1684,37 @@ pub fn execute_peer_import_request_path(
         piece_set_sha256: fetch.piece_set_sha256,
         output_artifact_path: output_artifact_path.display().to_string(),
         receipt_path: receipt_path.display().to_string(),
+        resume_state_path: fetch.resume_state_path,
         piece_count: fetch.piece_count,
+        downloaded_piece_count: fetch.downloaded_piece_count,
+        reused_piece_count: fetch.reused_piece_count,
+        refetched_corrupt_piece_count: fetch.refetched_corrupt_piece_count,
+        network_retry_count: fetch.network_retry_count,
+        transfer_concurrency: fetch.transfer_concurrency,
+        resumed: fetch.resumed,
         manifest_sha256: artifact.manifest_sha256,
         artifact_sha256: artifact.artifact_sha256,
         merkle_root_sha256: fetch.merkle_root_sha256,
     })
+}
+
+fn prepare_import_output_directory(output_dir: &Path) -> Result<(), String> {
+    match fs::symlink_metadata(output_dir) {
+        Ok(metadata) => {
+            if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+                return Err(
+                    "peer import output must be a regular non-symlink directory".to_string()
+                );
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            ensure_parent_dir(output_dir, "peer import output")?;
+            fs::create_dir(output_dir)
+                .map_err(|error| format!("failed to create peer import output: {error}"))
+        }
+        Err(error) => Err(format!("failed to inspect peer import output: {error}")),
+    }
 }
 
 pub fn inspect_peer_import_request_path(
@@ -1635,31 +2549,32 @@ pub fn inspect_peer_companion_state_path(
     let manifest = verify_manifest_path(manifest_path)?;
     let model_id = manifest.require("model.id")?.to_string();
     let share = inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
-    let piece_set_path = piece_dir.join("minimodel.peer_piece_set.v0");
-    let piece_set_bytes = fs::read(&piece_set_path)
-        .map_err(|error| format!("failed to read peer piece set for companion serve: {error}"))?;
+    inspect_peer_companion_state_with_share(state_path, &model_id, &share)
+}
+
+fn inspect_peer_companion_state_with_share(
+    state_path: &Path,
+    model_id: &str,
+    share: &PeerPieceServe,
+) -> Result<PeerCompanionServe, String> {
     let state_bytes = fs::read(state_path)
         .map_err(|error| format!("failed to read peer companion state: {error}"))?;
     let state: Value = serde_json::from_slice(&state_bytes)
         .map_err(|error| format!("failed to parse peer companion state JSON: {error}"))?;
-    let peer_base_url = validate_peer_companion_state_value(
-        &state,
-        &model_id,
-        &share,
-        &sha256_prefixed(&piece_set_bytes),
-    )?;
+    let peer_base_url =
+        validate_peer_companion_state_value(&state, model_id, share, &share.piece_set_sha256)?;
     Ok(PeerCompanionServe {
         state_path: state_path.display().to_string(),
         state_route: "minimodel.peer_companion_state.v0.json".to_string(),
-        piece_set_path: piece_set_path.display().to_string(),
-        piece_set_sha256: sha256_prefixed(&piece_set_bytes),
-        model_id,
+        piece_set_path: share.piece_set_path.clone(),
+        piece_set_sha256: share.piece_set_sha256.clone(),
+        model_id: model_id.to_string(),
         peer_base_url,
         artifact_byte_count: share.artifact_byte_count,
         piece_count: share.piece_count,
-        manifest_sha256: share.manifest_sha256,
-        artifact_sha256: share.artifact_sha256,
-        merkle_root_sha256: share.merkle_root_sha256,
+        manifest_sha256: share.manifest_sha256.clone(),
+        artifact_sha256: share.artifact_sha256.clone(),
+        merkle_root_sha256: share.merkle_root_sha256.clone(),
     })
 }
 
@@ -1673,6 +2588,863 @@ pub fn serve_peer_companion_http_path(
     let listener = TcpListener::bind(bind_addr)
         .map_err(|error| format!("failed to bind peer companion server at {bind_addr}: {error}"))?;
     serve_peer_companion_http_listener(state_path, manifest_path, piece_dir, listener, None)
+}
+
+/// Validate a two-lane seed fleet without opening any network listeners.
+pub fn inspect_seed_fleet_path(config_path: &Path) -> Result<SeedFleetInspection, String> {
+    Ok(read_seed_fleet_plan(config_path)?.inspection)
+}
+
+/// Validate a short-lived signed outside-network receipt against one exact fleet endpoint.
+pub fn inspect_external_probe_receipt_path(
+    receipt_path: &Path,
+    trust_path: &Path,
+    config_path: &Path,
+) -> Result<ExternalProbeReceiptInspection, String> {
+    let (receipt_bytes, receipt): (Vec<u8>, ExternalProbeReceiptFile) =
+        read_bounded_json_file(receipt_path, "external probe receipt")?;
+    let (_, trust): (Vec<u8>, ExternalProbeTrustFile) =
+        read_bounded_json_file(trust_path, "external probe trust")?;
+    validate_external_probe_receipt_header(&receipt)?;
+    let trusted_key = validate_external_probe_trust(&trust, &receipt)?;
+    let plan = read_seed_fleet_plan(config_path)?;
+    if receipt.fleet_id != plan.inspection.fleet_id {
+        return Err(format!(
+            "external probe fleet_id mismatch: receipt has {}, fleet has {}",
+            receipt.fleet_id, plan.inspection.fleet_id
+        ));
+    }
+    let lane = plan
+        .lanes
+        .iter()
+        .find(|lane| lane.lane_id == receipt.lane_id)
+        .ok_or_else(|| {
+            format!(
+                "external probe lane_id {} is not in the fleet",
+                receipt.lane_id
+            )
+        })?;
+    let endpoint = lane
+        .endpoints
+        .iter()
+        .find(|endpoint| endpoint.model_id == receipt.model_id)
+        .ok_or_else(|| {
+            format!(
+                "external probe model_id {} is not in lane {}",
+                receipt.model_id, receipt.lane_id
+            )
+        })?;
+    if !endpoint.enabled {
+        return Err(
+            "external probe cannot make a disabled model announcement eligible".to_string(),
+        );
+    }
+    let public_base_url = normalize_known_peer_base_url(&receipt.public_base_url)?;
+    if public_base_url != endpoint.serve.peer_base_url {
+        return Err(format!(
+            "external probe public_base_url mismatch: receipt has {public_base_url}, fleet endpoint has {}",
+            endpoint.serve.peer_base_url
+        ));
+    }
+    let artifact_sha256 = normalize_sha256(&receipt.artifact_sha256)?;
+    if artifact_sha256 != endpoint.serve.artifact_sha256 {
+        return Err("external probe artifact_sha256 does not match the fleet endpoint".to_string());
+    }
+    let piece_set_sha256 = normalize_sha256(&receipt.piece_set_sha256)?;
+    if piece_set_sha256 != endpoint.serve.piece_set_sha256 {
+        return Err(
+            "external probe piece_set_sha256 does not match the fleet endpoint".to_string(),
+        );
+    }
+    validate_external_probe_times(&receipt)?;
+    validate_external_probe_routes(&receipt, endpoint)?;
+
+    let payload = external_probe_signature_payload(&receipt)?;
+    let payload_sha256 = sha256_prefixed(&payload);
+    let expected_payload_sha256 = normalize_sha256(&receipt.signature.payload_sha256)?;
+    if payload_sha256 != expected_payload_sha256 {
+        return Err(format!(
+            "external probe signature payload_sha256 mismatch: receipt has {expected_payload_sha256}, canonical payload has {payload_sha256}"
+        ));
+    }
+    let public_key_sha256 = manifest::verify_detached_ed25519_signature(
+        &trusted_key.public_key_base64,
+        &trusted_key.public_key_sha256,
+        &receipt.signature.value,
+        &payload,
+    )?;
+
+    Ok(ExternalProbeReceiptInspection {
+        receipt_path: receipt_path.display().to_string(),
+        receipt_sha256: sha256_prefixed(&receipt_bytes),
+        receipt_id: receipt.receipt_id,
+        observer_id: receipt.observer_id,
+        observer_key_id: receipt.observer_key_id,
+        observer_public_key_sha256: public_key_sha256,
+        fleet_id: receipt.fleet_id,
+        lane_id: receipt.lane_id,
+        model_id: receipt.model_id,
+        public_base_url,
+        artifact_sha256,
+        piece_set_sha256,
+        checked_utc: receipt.checked_utc,
+        expires_utc: receipt.expires_utc,
+        checked_route_count: receipt.checked_routes.len(),
+        probe_implementation_version: receipt.probe_implementation_version,
+        network_scope: receipt.network_scope,
+        signature_payload_sha256: payload_sha256,
+        externally_reachable: true,
+        announcement_eligible: true,
+        project_server_serves_model_bytes: false,
+        project_server_runs_model_bytes: false,
+        project_server_proxies_model_bytes: false,
+    })
+}
+
+fn read_bounded_json_file<T: for<'de> Deserialize<'de>>(
+    path: &Path,
+    label: &str,
+) -> Result<(Vec<u8>, T), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("failed to inspect {label}: {error}"))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!("{label} must be a regular non-symlink file"));
+    }
+    if metadata.len() == 0 || metadata.len() > MAX_METADATA_JSON_BYTES {
+        return Err(format!(
+            "{label} must contain 1 to {MAX_METADATA_JSON_BYTES} bytes"
+        ));
+    }
+    let bytes = fs::read(path).map_err(|error| format!("failed to read {label}: {error}"))?;
+    let value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("failed to parse {label} JSON: {error}"))?;
+    Ok((bytes, value))
+}
+
+fn validate_external_probe_receipt_header(
+    receipt: &ExternalProbeReceiptFile,
+) -> Result<(), String> {
+    if receipt.receipt_kind != EXTERNAL_PROBE_RECEIPT_KIND {
+        return Err(format!(
+            "external probe receipt_kind must be {EXTERNAL_PROBE_RECEIPT_KIND}"
+        ));
+    }
+    if receipt.receipt_version != 0 {
+        return Err("external probe receipt_version must be 0".to_string());
+    }
+    validate_seed_fleet_id(&receipt.receipt_id, "receipt_id")?;
+    validate_seed_fleet_id(&receipt.observer_id, "observer_id")?;
+    validate_seed_fleet_id(&receipt.observer_key_id, "observer_key_id")?;
+    validate_seed_fleet_id(&receipt.fleet_id, "fleet_id")?;
+    validate_seed_fleet_id(&receipt.lane_id, "lane_id")?;
+    validate_minimodel_model_id(&receipt.model_id)?;
+    if receipt.network_scope != EXTERNAL_PROBE_NETWORK_SCOPE {
+        return Err(format!(
+            "external probe network_scope must be {EXTERNAL_PROBE_NETWORK_SCOPE}"
+        ));
+    }
+    if receipt.probe_implementation_version.is_empty()
+        || receipt.probe_implementation_version.len() > 64
+        || !receipt
+            .probe_implementation_version
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
+        return Err(
+            "external probe implementation version must be 1 to 64 route-safe ASCII bytes"
+                .to_string(),
+        );
+    }
+    if receipt.signature.kind != "ed25519" {
+        return Err("external probe signature.kind must be ed25519".to_string());
+    }
+    Ok(())
+}
+
+fn validate_external_probe_trust<'a>(
+    trust: &'a ExternalProbeTrustFile,
+    receipt: &ExternalProbeReceiptFile,
+) -> Result<&'a ExternalProbeTrustKeyFile, String> {
+    if trust.trust_kind != EXTERNAL_PROBE_TRUST_KIND {
+        return Err(format!(
+            "external probe trust_kind must be {EXTERNAL_PROBE_TRUST_KIND}"
+        ));
+    }
+    if trust.trust_version != 0 {
+        return Err("external probe trust_version must be 0".to_string());
+    }
+    if trust.keys.is_empty() || trust.keys.len() > 64 {
+        return Err("external probe trust must contain 1 through 64 keys".to_string());
+    }
+    let mut key_ids = BTreeSet::new();
+    for key in &trust.keys {
+        validate_seed_fleet_id(&key.key_id, "trusted key_id")?;
+        validate_seed_fleet_id(&key.observer_id, "trusted observer_id")?;
+        if !key_ids.insert(key.key_id.as_str()) {
+            return Err(format!(
+                "external probe trust contains duplicate key_id {}",
+                key.key_id
+            ));
+        }
+        if key.algorithm != "ed25519"
+            || key.usage != EXTERNAL_PROBE_KEY_USAGE
+            || key.observer_scope != EXTERNAL_PROBE_OBSERVER_SCOPE
+        {
+            return Err(format!(
+                "external probe trusted key {} has an unsupported algorithm, usage, or observer_scope",
+                key.key_id
+            ));
+        }
+        normalize_sha256(&key.public_key_sha256)?;
+    }
+    let key = trust
+        .keys
+        .iter()
+        .find(|key| key.key_id == receipt.observer_key_id && key.observer_id == receipt.observer_id)
+        .ok_or_else(|| "external probe receipt observer key is not trusted".to_string())?;
+    if key.revoked {
+        return Err("external probe receipt observer key is revoked".to_string());
+    }
+    Ok(key)
+}
+
+fn validate_external_probe_times(receipt: &ExternalProbeReceiptFile) -> Result<(), String> {
+    let checked = parse_utc_timestamp_seconds(&receipt.checked_utc, "external probe checked_utc")?;
+    let expires = parse_utc_timestamp_seconds(&receipt.expires_utc, "external probe expires_utc")?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "system clock is before the Unix epoch".to_string())?
+        .as_secs() as i64;
+    if checked > now + EXTERNAL_PROBE_CLOCK_SKEW_SECONDS {
+        return Err("external probe checked_utc is too far in the future".to_string());
+    }
+    if expires <= now {
+        return Err("external probe receipt is expired".to_string());
+    }
+    if expires <= checked || expires - checked > EXTERNAL_PROBE_MAX_VALIDITY_SECONDS {
+        return Err(format!(
+            "external probe validity must be greater than zero and at most {EXTERNAL_PROBE_MAX_VALIDITY_SECONDS} seconds"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_external_probe_routes(
+    receipt: &ExternalProbeReceiptFile,
+    endpoint: &SeedFleetEndpointPlan,
+) -> Result<(), String> {
+    let piece_set_path = endpoint.piece_dir.join(PEER_PIECE_SET_ROUTE);
+    let piece_set_bytes = fs::read(&piece_set_path)
+        .map_err(|error| format!("failed to read external probe piece set: {error}"))?;
+    let piece_set_text = std::str::from_utf8(&piece_set_bytes)
+        .map_err(|_| "external probe piece set must be UTF-8".to_string())?;
+    let piece_set = Manifest::parse(piece_set_text)?;
+    let first_piece = peer_piece_spec(&piece_set, 0)?;
+    let first_piece_path = endpoint.piece_dir.join(&first_piece.file_name);
+    let first_piece_bytes = fs::read(&first_piece_path)
+        .map_err(|error| format!("failed to read external probe sample piece: {error}"))?;
+    let state_bytes = fs::read(&endpoint.state_path)
+        .map_err(|error| format!("failed to read external probe companion state: {error}"))?;
+    let required_routes = [
+        PEER_STATUS_ROUTE.to_string(),
+        endpoint.serve.state_route.clone(),
+        PEER_PIECE_SET_ROUTE.to_string(),
+        first_piece.file_name.clone(),
+    ];
+    if receipt.checked_routes.len() != required_routes.len()
+        || !receipt
+            .checked_routes
+            .iter()
+            .zip(required_routes.iter())
+            .all(|(observed, expected)| &observed.route == expected)
+    {
+        return Err(format!(
+            "external probe checked_routes must be exactly {} in canonical order",
+            required_routes.join(",")
+        ));
+    }
+    for route in &receipt.checked_routes {
+        if route.http_status != 200 {
+            return Err(format!(
+                "external probe route {} must have HTTP status 200",
+                route.route
+            ));
+        }
+        let observed_sha = normalize_sha256(&route.body_sha256)?;
+        match route.route.as_str() {
+            PEER_STATUS_ROUTE => {
+                if route.body_byte_count == 0 || route.body_byte_count > 32 * 1024 {
+                    return Err(
+                        "external probe peer status body size must be 1 through 32768 bytes"
+                            .to_string(),
+                    );
+                }
+            }
+            value if value == endpoint.serve.state_route => {
+                require_external_probe_body(route, &state_bytes, &observed_sha)?;
+            }
+            PEER_PIECE_SET_ROUTE => {
+                require_external_probe_body(route, &piece_set_bytes, &observed_sha)?;
+            }
+            value if value == first_piece.file_name => {
+                require_external_probe_body(route, &first_piece_bytes, &observed_sha)?;
+                if first_piece.byte_count != first_piece_bytes.len()
+                    || first_piece.sha256 != observed_sha
+                {
+                    return Err(
+                        "external probe sample piece does not match the piece-set contract"
+                            .to_string(),
+                    );
+                }
+            }
+            _ => return Err("external probe contains an unexpected checked route".to_string()),
+        }
+    }
+    Ok(())
+}
+
+fn require_external_probe_body(
+    route: &ExternalProbeRouteFile,
+    expected_bytes: &[u8],
+    observed_sha: &str,
+) -> Result<(), String> {
+    if route.body_byte_count != expected_bytes.len() as u64 {
+        return Err(format!(
+            "external probe route {} body_byte_count mismatch",
+            route.route
+        ));
+    }
+    let expected_sha = sha256_prefixed(expected_bytes);
+    if observed_sha != expected_sha {
+        return Err(format!(
+            "external probe route {} body_sha256 mismatch",
+            route.route
+        ));
+    }
+    Ok(())
+}
+
+fn external_probe_signature_payload(receipt: &ExternalProbeReceiptFile) -> Result<Vec<u8>, String> {
+    let mut fields = BTreeMap::<String, String>::new();
+    fields.insert("receipt_kind".to_string(), receipt.receipt_kind.clone());
+    fields.insert(
+        "receipt_version".to_string(),
+        receipt.receipt_version.to_string(),
+    );
+    fields.insert("receipt_id".to_string(), receipt.receipt_id.clone());
+    fields.insert("observer_id".to_string(), receipt.observer_id.clone());
+    fields.insert(
+        "observer_key_id".to_string(),
+        receipt.observer_key_id.clone(),
+    );
+    fields.insert("fleet_id".to_string(), receipt.fleet_id.clone());
+    fields.insert("lane_id".to_string(), receipt.lane_id.clone());
+    fields.insert("model_id".to_string(), receipt.model_id.clone());
+    fields.insert(
+        "public_base_url".to_string(),
+        receipt.public_base_url.clone(),
+    );
+    fields.insert(
+        "artifact_sha256".to_string(),
+        receipt.artifact_sha256.clone(),
+    );
+    fields.insert(
+        "piece_set_sha256".to_string(),
+        receipt.piece_set_sha256.clone(),
+    );
+    fields.insert("checked_utc".to_string(), receipt.checked_utc.clone());
+    fields.insert("expires_utc".to_string(), receipt.expires_utc.clone());
+    fields.insert(
+        "probe_implementation_version".to_string(),
+        receipt.probe_implementation_version.clone(),
+    );
+    fields.insert("network_scope".to_string(), receipt.network_scope.clone());
+    fields.insert(
+        "checked_routes.count".to_string(),
+        receipt.checked_routes.len().to_string(),
+    );
+    for (index, route) in receipt.checked_routes.iter().enumerate() {
+        fields.insert(format!("checked_routes.{index}.route"), route.route.clone());
+        fields.insert(
+            format!("checked_routes.{index}.http_status"),
+            route.http_status.to_string(),
+        );
+        fields.insert(
+            format!("checked_routes.{index}.body_byte_count"),
+            route.body_byte_count.to_string(),
+        );
+        fields.insert(
+            format!("checked_routes.{index}.body_sha256"),
+            route.body_sha256.clone(),
+        );
+    }
+    serde_json::to_vec(&fields)
+        .map_err(|error| format!("failed to encode external probe signature payload: {error}"))
+}
+
+/// Serve one independently restartable seed lane after validating the whole fleet.
+pub fn serve_seed_fleet_lane_path(config_path: &Path, lane_id: &str) -> Result<(), String> {
+    serve_seed_fleet_lane(config_path, lane_id, None)
+}
+
+/// Serve one seed lane until an owned shutdown file appears.
+pub fn serve_seed_fleet_lane_with_shutdown_path(
+    config_path: &Path,
+    lane_id: &str,
+    shutdown_path: &Path,
+) -> Result<(), String> {
+    let shutdown_path = validate_seed_lane_shutdown_path(config_path, shutdown_path)?;
+    serve_seed_fleet_lane(config_path, lane_id, Some(shutdown_path))
+}
+
+fn serve_seed_fleet_lane(
+    config_path: &Path,
+    lane_id: &str,
+    shutdown_path: Option<PathBuf>,
+) -> Result<(), String> {
+    let plan = read_seed_fleet_plan(config_path)?;
+    let lane = plan
+        .lanes
+        .into_iter()
+        .find(|lane| lane.lane_id == lane_id)
+        .ok_or_else(|| format!("seed fleet does not contain lane_id {lane_id}"))?;
+    let enabled_endpoints: Vec<SeedFleetEndpointPlan> = lane
+        .endpoints
+        .into_iter()
+        .filter(|endpoint| endpoint.enabled)
+        .collect();
+    if enabled_endpoints.is_empty() {
+        return Err(format!("seed lane {lane_id} has no enabled endpoints"));
+    }
+
+    let mut listeners = Vec::with_capacity(enabled_endpoints.len());
+    for endpoint in enabled_endpoints {
+        let listener = TcpListener::bind(endpoint.bind_addr).map_err(|error| {
+            format!(
+                "failed to bind seed lane {lane_id} model {} at {}: {error}",
+                endpoint.model_id, endpoint.bind_addr
+            )
+        })?;
+        listeners.push((endpoint, listener));
+    }
+
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let endpoint_count = listeners.len();
+    let (terminated_tx, terminated_rx) = mpsc::channel();
+    for (endpoint, listener) in listeners {
+        let peer_id = format!("{lane_id}:{}", endpoint.model_id);
+        let terminated_tx = terminated_tx.clone();
+        let endpoint_shutdown = Arc::clone(&shutdown);
+        thread::Builder::new()
+            .name(format!(
+                "minimodel-{lane_id}-{}",
+                endpoint.model_id.replace('/', "-")
+            ))
+            .spawn(move || {
+                let result = serve_verified_peer_companion_http_listener(
+                    &endpoint.state_path,
+                    &endpoint.piece_dir,
+                    listener,
+                    None,
+                    Some(endpoint_shutdown),
+                    endpoint.serve,
+                );
+                let _ = terminated_tx.send((peer_id, result));
+            })
+            .map_err(|error| format!("failed to start seed endpoint thread: {error}"))?;
+    }
+    drop(terminated_tx);
+
+    let mut shutdown_requested = false;
+    let mut stopped_endpoints = 0usize;
+    loop {
+        if !shutdown_requested {
+            if let Some(path) = shutdown_path.as_ref() {
+                if seed_lane_shutdown_requested(path)? {
+                    shutdown_requested = true;
+                    shutdown.store(true, Ordering::Release);
+                }
+            }
+        }
+        match terminated_rx.recv_timeout(Duration::from_millis(25)) {
+            Ok((peer_id, result)) if shutdown_requested => {
+                result.map_err(|error| {
+                    format!("seed endpoint {peer_id} failed during shutdown: {error}")
+                })?;
+                stopped_endpoints += 1;
+                if stopped_endpoints == endpoint_count {
+                    return Ok(());
+                }
+            }
+            Ok((peer_id, Ok(_))) => {
+                return Err(format!("seed endpoint {peer_id} terminated unexpectedly"));
+            }
+            Ok((peer_id, Err(error))) => {
+                return Err(format!("seed endpoint {peer_id} failed: {error}"));
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(format!(
+                    "seed lane {lane_id} stopped without all endpoint results"
+                ));
+            }
+        }
+    }
+}
+
+fn seed_lane_shutdown_requested(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_file() && !metadata.file_type().is_symlink() => {
+            Ok(true)
+        }
+        Ok(_) => Err("seed lane shutdown signal must be a regular non-symlink file".to_string()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!(
+            "failed to inspect seed lane shutdown file: {error}"
+        )),
+    }
+}
+
+fn validate_seed_lane_shutdown_path(
+    config_path: &Path,
+    shutdown_path: &Path,
+) -> Result<PathBuf, String> {
+    let canonical_config = fs::canonicalize(config_path)
+        .map_err(|error| format!("failed to resolve seed fleet config: {error}"))?;
+    let fleet_root = canonical_config
+        .parent()
+        .ok_or_else(|| "seed fleet config must have a parent directory".to_string())?;
+    let absolute = if shutdown_path.is_absolute() {
+        shutdown_path.to_path_buf()
+    } else {
+        fleet_root.join(shutdown_path)
+    };
+    let parent = absolute
+        .parent()
+        .ok_or_else(|| "seed lane shutdown path must have a parent directory".to_string())?;
+    let canonical_parent = fs::canonicalize(parent)
+        .map_err(|error| format!("failed to resolve seed lane shutdown directory: {error}"))?;
+    if !canonical_parent.starts_with(fleet_root) {
+        return Err("seed lane shutdown path must stay inside the fleet root".to_string());
+    }
+    if absolute.exists() {
+        return Err("seed lane shutdown file must not exist before startup".to_string());
+    }
+    let file_name = absolute
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "seed lane shutdown path must end in a UTF-8 file name".to_string())?;
+    if file_name.is_empty() || file_name == "." || file_name == ".." {
+        return Err("seed lane shutdown path has an unsafe file name".to_string());
+    }
+    Ok(absolute)
+}
+
+fn read_seed_fleet_plan(config_path: &Path) -> Result<SeedFleetPlan, String> {
+    let config_metadata = fs::symlink_metadata(config_path)
+        .map_err(|error| format!("failed to inspect seed fleet config: {error}"))?;
+    if !config_metadata.file_type().is_file() || config_metadata.file_type().is_symlink() {
+        return Err("seed fleet config must be a regular non-symlink file".to_string());
+    }
+    if config_metadata.len() == 0 || config_metadata.len() > MAX_METADATA_JSON_BYTES {
+        return Err(format!(
+            "seed fleet config must contain 1 to {MAX_METADATA_JSON_BYTES} bytes"
+        ));
+    }
+    let canonical_config = fs::canonicalize(config_path)
+        .map_err(|error| format!("failed to resolve seed fleet config: {error}"))?;
+    let fleet_root = canonical_config
+        .parent()
+        .ok_or_else(|| "seed fleet config must have a parent directory".to_string())?;
+    let config_bytes = fs::read(&canonical_config)
+        .map_err(|error| format!("failed to read seed fleet config: {error}"))?;
+    let config: SeedFleetFile = serde_json::from_slice(&config_bytes)
+        .map_err(|error| format!("failed to parse seed fleet config JSON: {error}"))?;
+
+    if config.fleet_kind != SEED_FLEET_KIND {
+        return Err(format!("seed fleet fleet_kind must be {SEED_FLEET_KIND}"));
+    }
+    validate_seed_fleet_id(&config.fleet_id, "fleet_id")?;
+    if config.fleet_version != SEED_FLEET_VERSION {
+        return Err(format!(
+            "seed fleet fleet_version must be {SEED_FLEET_VERSION}"
+        ));
+    }
+    if config.target_model_count != SEED_FLEET_TARGET_MODEL_COUNT {
+        return Err(format!(
+            "seed fleet target_model_count must be {SEED_FLEET_TARGET_MODEL_COUNT}"
+        ));
+    }
+    if config.replica_lane_count != SEED_FLEET_REPLICA_LANE_COUNT {
+        return Err(format!(
+            "seed fleet replica_lane_count must be {SEED_FLEET_REPLICA_LANE_COUNT}"
+        ));
+    }
+    if config.lanes.len() != SEED_FLEET_REPLICA_LANE_COUNT {
+        return Err(format!(
+            "seed fleet must contain exactly {SEED_FLEET_REPLICA_LANE_COUNT} lanes"
+        ));
+    }
+    validate_seed_fleet_boundary(&config.boundary)?;
+    if config.models.len() > SEED_FLEET_TARGET_MODEL_COUNT {
+        return Err(format!(
+            "seed fleet supports at most {SEED_FLEET_TARGET_MODEL_COUNT} active models"
+        ));
+    }
+
+    let mut models = BTreeMap::new();
+    let mut artifact_models = BTreeMap::new();
+    for model in config.models {
+        validate_minimodel_model_id(&model.model_id)?;
+        if models.contains_key(&model.model_id) {
+            return Err(format!(
+                "seed fleet contains duplicate model_id {}",
+                model.model_id
+            ));
+        }
+        let manifest_path = resolve_seed_fleet_owned_path(
+            fleet_root,
+            &model.manifest_path,
+            "seed fleet manifest_path",
+            false,
+        )?;
+        let piece_dir = resolve_seed_fleet_owned_path(
+            fleet_root,
+            &model.piece_dir,
+            "seed fleet piece_dir",
+            true,
+        )?;
+        let manifest = verify_manifest_path(&manifest_path)?;
+        let manifest_model_id = manifest.require("model.id")?;
+        if manifest_model_id != model.model_id {
+            return Err(format!(
+                "seed fleet model_id {} does not match manifest model.id {manifest_model_id}",
+                model.model_id
+            ));
+        }
+        let share = inspect_peer_piece_dir_path(&manifest_path, &piece_dir)?;
+        if share.model_id != model.model_id {
+            return Err(format!(
+                "seed fleet model_id {} does not match peer piece model_id {}",
+                model.model_id, share.model_id
+            ));
+        }
+        if let Some(existing_model_id) =
+            artifact_models.insert(share.artifact_sha256.clone(), model.model_id.clone())
+        {
+            return Err(format!(
+                "seed fleet duplicate artifact_sha256 {} aliases model_id {} as {}",
+                share.artifact_sha256, existing_model_id, model.model_id
+            ));
+        }
+        models.insert(
+            model.model_id.clone(),
+            SeedFleetModelPlan {
+                model_id: model.model_id,
+                enabled: model.enabled,
+                piece_dir,
+                share,
+            },
+        );
+    }
+
+    let expected_model_ids: BTreeSet<String> = models.keys().cloned().collect();
+    let mut lane_ids = BTreeSet::new();
+    let mut bind_addrs = BTreeSet::new();
+    let mut public_urls = BTreeSet::new();
+    let mut lanes = Vec::with_capacity(SEED_FLEET_REPLICA_LANE_COUNT);
+
+    for lane in config.lanes {
+        validate_seed_fleet_id(&lane.lane_id, "lane_id")?;
+        if !lane_ids.insert(lane.lane_id.clone()) {
+            return Err(format!(
+                "seed fleet contains duplicate lane_id {}",
+                lane.lane_id
+            ));
+        }
+        if lane.endpoints.len() != models.len() {
+            return Err(format!(
+                "seed fleet lane {} must contain exactly one endpoint for each active model",
+                lane.lane_id
+            ));
+        }
+        let mut lane_model_ids = BTreeSet::new();
+        let mut endpoints = Vec::with_capacity(lane.endpoints.len());
+        for endpoint in lane.endpoints {
+            validate_minimodel_model_id(&endpoint.model_id)?;
+            if !lane_model_ids.insert(endpoint.model_id.clone()) {
+                return Err(format!(
+                    "seed fleet lane {} contains duplicate model_id {}",
+                    lane.lane_id, endpoint.model_id
+                ));
+            }
+            let model = models.get(&endpoint.model_id).ok_or_else(|| {
+                format!(
+                    "seed fleet lane {} references unknown model_id {}",
+                    lane.lane_id, endpoint.model_id
+                )
+            })?;
+            let bind_addr = endpoint.bind_addr.parse::<SocketAddr>().map_err(|_| {
+                format!(
+                    "seed fleet lane {} model {} bind_addr must be an IP socket address",
+                    lane.lane_id, endpoint.model_id
+                )
+            })?;
+            if bind_addr.port() == 0 {
+                return Err("seed fleet bind_addr port must not be zero".to_string());
+            }
+            if !bind_addrs.insert(bind_addr) {
+                return Err(format!(
+                    "seed fleet contains duplicate bind_addr {bind_addr}"
+                ));
+            }
+            let public_base_url = normalize_known_peer_base_url(&endpoint.public_base_url)?;
+            if !public_urls.insert(public_base_url.clone()) {
+                return Err(format!(
+                    "seed fleet contains duplicate public_base_url {public_base_url}"
+                ));
+            }
+            let state_path = resolve_seed_fleet_owned_path(
+                fleet_root,
+                &endpoint.state_path,
+                "seed fleet state_path",
+                false,
+            )?;
+            let serve = inspect_peer_companion_state_with_share(
+                &state_path,
+                &model.model_id,
+                &model.share,
+            )?;
+            if serve.peer_base_url != public_base_url {
+                return Err(format!(
+                    "seed fleet lane {} model {} public_base_url mismatch: state has {}, config has {}",
+                    lane.lane_id, endpoint.model_id, serve.peer_base_url, public_base_url
+                ));
+            }
+            endpoints.push(SeedFleetEndpointPlan {
+                model_id: endpoint.model_id,
+                enabled: model.enabled,
+                state_path,
+                piece_dir: model.piece_dir.clone(),
+                bind_addr,
+                serve,
+            });
+        }
+        if lane_model_ids != expected_model_ids {
+            return Err(format!(
+                "seed fleet lane {} model set does not match the active model set",
+                lane.lane_id
+            ));
+        }
+        lanes.push(SeedFleetLanePlan {
+            lane_id: lane.lane_id,
+            endpoints,
+        });
+    }
+
+    let admitted_model_count = models.len();
+    let active_model_ids: Vec<String> = models
+        .values()
+        .filter(|model| model.enabled)
+        .map(|model| model.model_id.clone())
+        .collect();
+    let active_model_count = active_model_ids.len();
+    let lane_ids: Vec<String> = lane_ids.into_iter().collect();
+    let model_ids: Vec<String> = expected_model_ids.into_iter().collect();
+    let inspection = SeedFleetInspection {
+        config_path: canonical_config.display().to_string(),
+        fleet_id: config.fleet_id,
+        target_model_count: SEED_FLEET_TARGET_MODEL_COUNT,
+        admitted_model_count,
+        active_model_count,
+        remaining_model_capacity: SEED_FLEET_TARGET_MODEL_COUNT - admitted_model_count,
+        replica_lane_count: SEED_FLEET_REPLICA_LANE_COUNT,
+        peer_endpoint_count: active_model_count * SEED_FLEET_REPLICA_LANE_COUNT,
+        lane_ids,
+        model_ids,
+        active_model_ids,
+        advertisement_status: "external-probe-required".to_string(),
+    };
+    Ok(SeedFleetPlan { inspection, lanes })
+}
+
+fn validate_seed_fleet_boundary(boundary: &SeedFleetBoundaryFile) -> Result<(), String> {
+    if !boundary.operator_consent {
+        return Err("seed fleet boundary operator_consent must be true".to_string());
+    }
+    if !boundary.advertise_only_after_external_probe {
+        return Err(
+            "seed fleet boundary advertise_only_after_external_probe must be true".to_string(),
+        );
+    }
+    if boundary.project_server_serves_model_bytes {
+        return Err(
+            "seed fleet boundary project_server_serves_model_bytes must be false".to_string(),
+        );
+    }
+    if boundary.project_server_runs_model_bytes {
+        return Err(
+            "seed fleet boundary project_server_runs_model_bytes must be false".to_string(),
+        );
+    }
+    if boundary.project_server_proxies_model_bytes {
+        return Err(
+            "seed fleet boundary project_server_proxies_model_bytes must be false".to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn validate_seed_fleet_id(value: &str, label: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value.len() > 64
+        || !value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
+        })
+    {
+        return Err(format!(
+            "seed fleet {label} must be 1 to 64 lowercase route-safe ASCII characters"
+        ));
+    }
+    Ok(())
+}
+
+fn resolve_seed_fleet_owned_path(
+    fleet_root: &Path,
+    path_hint: &str,
+    label: &str,
+    require_directory: bool,
+) -> Result<PathBuf, String> {
+    let path = Path::new(path_hint);
+    validate_local_path_hint(path, label)?;
+    if path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return Err(format!(
+            "{label} must be a relative path inside the fleet root"
+        ));
+    }
+    let resolved = fs::canonicalize(fleet_root.join(path))
+        .map_err(|error| format!("failed to resolve {label}: {error}"))?;
+    if !resolved.starts_with(fleet_root) {
+        return Err(format!("{label} escapes the fleet root"));
+    }
+    let metadata =
+        fs::metadata(&resolved).map_err(|error| format!("failed to inspect {label}: {error}"))?;
+    if require_directory && !metadata.is_dir() {
+        return Err(format!("{label} must name a directory"));
+    }
+    if !require_directory && !metadata.is_file() {
+        return Err(format!("{label} must name a file"));
+    }
+    Ok(resolved)
 }
 
 /// Write a reusable metadata-only contact card for a consenting direct peer.
@@ -2973,6 +4745,20 @@ pub fn write_peer_source_announcement_path(
     output_path: &Path,
     known_peer_base_url: &str,
 ) -> Result<PeerSourceAnnouncementReport, String> {
+    let (text, report) =
+        build_peer_source_announcement(catalog_entry_path, output_path, known_peer_base_url, None)?;
+    ensure_parent_dir(output_path, "peer source announcement")?;
+    fs::write(output_path, text)
+        .map_err(|error| format!("failed to write peer source announcement: {error}"))?;
+    Ok(report)
+}
+
+fn build_peer_source_announcement(
+    catalog_entry_path: &Path,
+    output_path: &Path,
+    known_peer_base_url: &str,
+    external_probe: Option<&ExternalProbeReceiptInspection>,
+) -> Result<(String, PeerSourceAnnouncementReport), String> {
     let peer_base_url = normalize_known_peer_base_url(known_peer_base_url)?;
     let label = catalog_entry_path.display().to_string();
     let text = fs::read_to_string(catalog_entry_path)
@@ -2998,11 +4784,20 @@ pub fn write_peer_source_announcement_path(
         "announcement_kind".to_string(),
         Value::String("minimodel.peer_source_announcement".to_string()),
     );
-    object.insert("announcement_version".to_string(), Value::Number(0.into()));
+    object.insert(
+        "announcement_version".to_string(),
+        Value::Number(external_probe.map_or(0, |_| 1).into()),
+    );
     object.insert("created_utc".to_string(), Value::String(utc_now()?));
     object.insert(
         "announcement_status".to_string(),
-        Value::String("peer-source-available-metadata-only".to_string()),
+        Value::String(
+            external_probe
+                .map_or("peer-source-available-metadata-only", |_| {
+                    "peer-source-externally-verified-metadata-only"
+                })
+                .to_string(),
+        ),
     );
     object.insert(
         "model_id".to_string(),
@@ -3056,24 +4851,230 @@ pub fn write_peer_source_announcement_path(
         "peer_source".to_string(),
         known_peer_source_value(&peer_base_url),
     );
+    if let Some(probe) = external_probe {
+        object.insert(
+            "external_reachability".to_string(),
+            external_reachability_announcement_value(probe),
+        );
+    }
 
     let announcement = Value::Object(object);
     validate_peer_source_announcement_value(&announcement, &output_path.display().to_string())?;
     let text = serde_json::to_string_pretty(&announcement)
         .map_err(|error| format!("failed to format peer source announcement JSON: {error}"))?
         + "\n";
-    ensure_parent_dir(output_path, "peer source announcement")?;
-    fs::write(output_path, text)
-        .map_err(|error| format!("failed to write peer source announcement: {error}"))?;
+    Ok((
+        text,
+        PeerSourceAnnouncementReport {
+            catalog_entry_path: catalog_entry_path.display().to_string(),
+            announcement_path: output_path.display().to_string(),
+            model_id: summary.model_id,
+            artifact_sha256,
+            peer_offer_sha256,
+            peer_base_url,
+        },
+    ))
+}
 
-    Ok(PeerSourceAnnouncementReport {
-        catalog_entry_path: catalog_entry_path.display().to_string(),
+/// Prepare one externally verified seed announcement and consume its receipt once.
+///
+/// The replay reservation is persisted before the announcement. A crash may consume a receipt
+/// without producing output, but can never produce replayable or unreserved publication metadata.
+pub fn prepare_seed_peer_source_announcement_path(
+    catalog_entry_path: &Path,
+    output_path: &Path,
+    receipt_path: &Path,
+    trust_path: &Path,
+    config_path: &Path,
+) -> Result<SeedPeerSourceAnnouncementReport, String> {
+    let probe = inspect_external_probe_receipt_path(receipt_path, trust_path, config_path)?;
+    let (text, announcement) = build_peer_source_announcement(
+        catalog_entry_path,
+        output_path,
+        &probe.public_base_url,
+        Some(&probe),
+    )?;
+    if announcement.model_id != probe.model_id {
+        return Err(format!(
+            "external probe model_id {} does not match catalog model_id {}",
+            probe.model_id, announcement.model_id
+        ));
+    }
+    if announcement.artifact_sha256 != probe.artifact_sha256 {
+        return Err(
+            "external probe artifact_sha256 does not match the catalog announcement".to_string(),
+        );
+    }
+    if announcement.peer_base_url != probe.public_base_url {
+        return Err(
+            "external probe public_base_url does not match the catalog announcement".to_string(),
+        );
+    }
+    ensure_parent_dir(output_path, "proof-gated peer source announcement")?;
+    if fs::symlink_metadata(output_path).is_ok() {
+        return Err(
+            "proof-gated peer source announcement output must not already exist".to_string(),
+        );
+    }
+    let announcement_sha256 = sha256_prefixed(text.as_bytes());
+    let replay_record_path = reserve_external_probe_receipt_once(
+        config_path,
+        &probe,
+        &announcement_sha256,
+        output_path,
+    )?;
+    write_new_synced_file(
+        output_path,
+        text.as_bytes(),
+        "proof-gated peer source announcement",
+    )?;
+
+    Ok(SeedPeerSourceAnnouncementReport {
         announcement_path: output_path.display().to_string(),
-        model_id: summary.model_id,
-        artifact_sha256,
-        peer_offer_sha256,
-        peer_base_url,
+        announcement_sha256,
+        replay_record_path: replay_record_path.display().to_string(),
+        fleet_id: probe.fleet_id,
+        lane_id: probe.lane_id,
+        model_id: probe.model_id,
+        artifact_sha256: probe.artifact_sha256,
+        piece_set_sha256: probe.piece_set_sha256,
+        peer_base_url: probe.public_base_url,
+        external_probe_receipt_id: probe.receipt_id,
+        external_probe_receipt_sha256: probe.receipt_sha256,
+        external_probe_expires_utc: probe.expires_utc,
+        externally_reachable: true,
+        announcement_eligible: true,
+        advertised: false,
+        project_server_serves_model_bytes: false,
+        project_server_runs_model_bytes: false,
+        project_server_proxies_model_bytes: false,
     })
+}
+
+fn external_reachability_announcement_value(probe: &ExternalProbeReceiptInspection) -> Value {
+    serde_json::json!({
+        "proof_kind": "minimodel.external_reachability_proof",
+        "proof_version": 0,
+        "receipt_id": probe.receipt_id,
+        "receipt_sha256": probe.receipt_sha256,
+        "observer_id": probe.observer_id,
+        "observer_key_id": probe.observer_key_id,
+        "observer_public_key_sha256": probe.observer_public_key_sha256,
+        "fleet_id": probe.fleet_id,
+        "lane_id": probe.lane_id,
+        "model_id": probe.model_id,
+        "public_base_url": probe.public_base_url,
+        "artifact_sha256": probe.artifact_sha256,
+        "piece_set_sha256": probe.piece_set_sha256,
+        "checked_utc": probe.checked_utc,
+        "expires_utc": probe.expires_utc,
+        "checked_route_count": probe.checked_route_count,
+        "probe_implementation_version": probe.probe_implementation_version,
+        "network_scope": probe.network_scope,
+        "signature_payload_sha256": probe.signature_payload_sha256,
+        "externally_reachable": true,
+        "announcement_eligible": true,
+        "project_server_serves_model_bytes": false,
+        "project_server_runs_model_bytes": false,
+        "project_server_proxies_model_bytes": false
+    })
+}
+
+fn reserve_external_probe_receipt_once(
+    config_path: &Path,
+    probe: &ExternalProbeReceiptInspection,
+    announcement_sha256: &str,
+    output_path: &Path,
+) -> Result<PathBuf, String> {
+    let canonical_config = fs::canonicalize(config_path)
+        .map_err(|error| format!("failed to resolve seed fleet config: {error}"))?;
+    let fleet_root = canonical_config
+        .parent()
+        .ok_or_else(|| "seed fleet config must have a parent directory".to_string())?;
+    let replay_dir = fleet_root.join(EXTERNAL_PROBE_REPLAY_DIRECTORY);
+    match fs::create_dir(&replay_dir) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => {
+            return Err(format!(
+                "failed to create external probe replay directory: {error}"
+            ))
+        }
+    }
+    let replay_metadata = fs::symlink_metadata(&replay_dir)
+        .map_err(|error| format!("failed to inspect external probe replay directory: {error}"))?;
+    if !replay_metadata.file_type().is_dir() || replay_metadata.file_type().is_symlink() {
+        return Err(
+            "external probe replay path must be a regular non-symlink directory".to_string(),
+        );
+    }
+    let canonical_replay_dir = fs::canonicalize(&replay_dir)
+        .map_err(|error| format!("failed to resolve external probe replay directory: {error}"))?;
+    if !canonical_replay_dir.starts_with(fleet_root) {
+        return Err("external probe replay directory escapes the fleet root".to_string());
+    }
+    let receipt_hash = probe
+        .receipt_sha256
+        .strip_prefix("sha256:")
+        .ok_or_else(|| "external probe receipt hash was not normalized".to_string())?;
+    let record_path = canonical_replay_dir.join(format!("{receipt_hash}.consumed.json"));
+    let output_name = output_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "announcement output must end in a UTF-8 file name".to_string())?;
+    let record = serde_json::json!({
+        "replay_record_kind": "minimodel.external_probe_consumption",
+        "replay_record_version": 0,
+        "consumed_utc": utc_now()?,
+        "receipt_id": probe.receipt_id,
+        "receipt_sha256": probe.receipt_sha256,
+        "fleet_id": probe.fleet_id,
+        "lane_id": probe.lane_id,
+        "model_id": probe.model_id,
+        "public_base_url": probe.public_base_url,
+        "artifact_sha256": probe.artifact_sha256,
+        "piece_set_sha256": probe.piece_set_sha256,
+        "receipt_expires_utc": probe.expires_utc,
+        "announcement_file_name": output_name,
+        "announcement_sha256": announcement_sha256,
+        "advertised": false,
+        "project_server_serves_model_bytes": false,
+        "project_server_runs_model_bytes": false,
+        "project_server_proxies_model_bytes": false
+    });
+    let record_bytes = serde_json::to_vec_pretty(&record)
+        .map_err(|error| format!("failed to encode external probe replay record: {error}"))?;
+    write_new_synced_file(
+        &record_path,
+        &record_bytes,
+        "external probe replay reservation",
+    )
+    .map_err(|error| {
+        if error.contains("already exists") {
+            "external probe receipt replay rejected: receipt was already consumed".to_string()
+        } else {
+            error
+        }
+    })?;
+    Ok(record_path)
+}
+
+fn write_new_synced_file(path: &Path, bytes: &[u8], label: &str) -> Result<(), String> {
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                format!("failed to create {label}: already exists")
+            } else {
+                format!("failed to create {label}: {error}")
+            }
+        })?;
+    file.write_all(bytes)
+        .map_err(|error| format!("failed to write {label}: {error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("failed to flush {label}: {error}"))
 }
 
 pub fn apply_peer_source_announcements_path(
@@ -3126,6 +5127,46 @@ pub fn prepare_peer_share_path(
     source_huggingface_model_id: Option<&str>,
     known_peer_base_url: Option<&str>,
 ) -> Result<PeerSharePreparation, String> {
+    prepare_peer_share_internal(
+        artifact_path,
+        output_dir,
+        model_id,
+        source_huggingface_model_id,
+        known_peer_base_url,
+        None,
+        false,
+    )
+}
+
+/// Prepares a trained-model peer share with checksum-bound public provenance.
+pub fn prepare_peer_share_with_provenance_path(
+    artifact_path: &Path,
+    output_dir: &Path,
+    model_id: &str,
+    source_huggingface_model_id: Option<&str>,
+    known_peer_base_url: Option<&str>,
+    provenance: Option<&PeerShareProvenance>,
+) -> Result<PeerSharePreparation, String> {
+    prepare_peer_share_internal(
+        artifact_path,
+        output_dir,
+        model_id,
+        source_huggingface_model_id,
+        known_peer_base_url,
+        provenance,
+        true,
+    )
+}
+
+fn prepare_peer_share_internal(
+    artifact_path: &Path,
+    output_dir: &Path,
+    model_id: &str,
+    source_huggingface_model_id: Option<&str>,
+    known_peer_base_url: Option<&str>,
+    provenance: Option<&PeerShareProvenance>,
+    require_trained_provenance: bool,
+) -> Result<PeerSharePreparation, String> {
     let model_id = validate_minimodel_model_id(model_id)?;
     let source_huggingface_model_id = match source_huggingface_model_id {
         Some(value) if !value.trim().is_empty() => Some(validate_huggingface_model_id(value)?),
@@ -3135,8 +5176,17 @@ pub fn prepare_peer_share_path(
         Some(value) if !value.trim().is_empty() => Some(normalize_known_peer_base_url(value)?),
         _ => None,
     };
+    if require_trained_provenance && source_huggingface_model_id.is_some() && provenance.is_none() {
+        return Err("trained Hugging Face source requires provenance".to_string());
+    }
+    if provenance.is_some() && source_huggingface_model_id.is_none() {
+        return Err("trained provenance requires a source Hugging Face model id".to_string());
+    }
     let artifact_file_name = artifact_file_name_for_share(artifact_path)?;
     let stem = artifact_stem_for_share(&artifact_file_name)?;
+    let prepared_provenance = provenance
+        .map(|value| prepare_peer_share_provenance(value, &stem))
+        .transpose()?;
     let artifact_bytes =
         fs::read(artifact_path).map_err(|error| format!("failed to read artifact: {error}"))?;
     let slm = slm::validate_slm_bytes(&artifact_bytes)?;
@@ -3146,15 +5196,16 @@ pub fn prepare_peer_share_path(
     let peer_offer_text = peer_offer_text(&artifact_bytes, &slm, &artifact_file_name, &chunks)?;
     let peer_offer_sha256 = sha256_prefixed(peer_offer_text.as_bytes());
     let manifest_path = output_dir.join(format!("{stem}.minimodel.manifest.v0"));
-    let manifest_text = minimodel_manifest_text(
-        &model_id,
-        &artifact_bytes,
-        &slm,
-        &chunks,
-        &peer_offer_route,
-        &peer_offer_sha256,
-        source_huggingface_model_id.as_deref(),
-    )?;
+    let manifest_text = minimodel_manifest_text(MiniModelManifestText {
+        model_id: &model_id,
+        artifact_bytes: &artifact_bytes,
+        slm: &slm,
+        chunks: &chunks,
+        peer_offer_route: &peer_offer_route,
+        peer_offer_sha256: &peer_offer_sha256,
+        source_huggingface_model_id: source_huggingface_model_id.as_deref(),
+        provenance: prepared_provenance.as_ref(),
+    })?;
     let manifest = Manifest::parse(&manifest_text)?;
     manifest.validate()?;
     verify_artifact_bytes(&manifest, manifest_text.as_bytes(), &artifact_bytes)?;
@@ -3164,6 +5215,9 @@ pub fn prepare_peer_share_path(
         .map_err(|error| format!("failed to write MiniModel manifest: {error}"))?;
     fs::write(&peer_offer_path, peer_offer_text)
         .map_err(|error| format!("failed to write peer offer proof: {error}"))?;
+    if let Some(provenance) = &prepared_provenance {
+        write_peer_share_provenance(output_dir, provenance)?;
+    }
 
     let piece_dir = output_dir.join(format!("{stem}.peer-pieces"));
     let piece_report = export_peer_pieces_path(&manifest_path, artifact_path, &piece_dir)?;
@@ -3186,6 +5240,231 @@ pub fn prepare_peer_share_path(
         piece_count: piece_report.piece_count,
         peer_source_count: usize::from(known_peer_base_url.is_some()),
     })
+}
+
+/// Serves a prepared share over loopback, imports it through the real peer protocol, and records
+/// a path-free receipt only after the complete imported-artifact receipt chain verifies.
+pub fn verify_local_peer_round_trip_path(
+    manifest_path: &Path,
+    artifact_path: &Path,
+    piece_dir: &Path,
+    work_dir: &Path,
+    receipt_path: &Path,
+) -> Result<LocalPeerRoundTripVerification, String> {
+    if work_dir.exists() {
+        return Err("local peer round-trip work directory must not already exist".to_string());
+    }
+    if receipt_path.exists() {
+        return Err("local peer round-trip receipt path already exists".to_string());
+    }
+    let artifact = verify_artifact_path(manifest_path, artifact_path)?;
+    let share = inspect_peer_piece_dir_path(manifest_path, piece_dir)?;
+    if artifact.manifest_model_id != share.model_id
+        || artifact.manifest_sha256 != share.manifest_sha256
+        || artifact.artifact_sha256 != share.artifact_sha256
+    {
+        return Err(
+            "local peer round-trip source artifact and piece share identities differ".to_string(),
+        );
+    }
+    ensure_parent_dir(work_dir, "local peer round-trip work")?;
+    fs::create_dir(work_dir)
+        .map_err(|error| format!("failed to create local peer round-trip work: {error}"))?;
+
+    let round_trip =
+        run_local_peer_round_trip(manifest_path, piece_dir, work_dir, &artifact, &share);
+    let cleanup = fs::remove_dir_all(work_dir)
+        .map_err(|error| format!("failed to remove local peer round-trip work: {error}"));
+    let completed = match (round_trip, cleanup) {
+        (Ok(value), Ok(())) => value,
+        (Err(error), _) => return Err(error),
+        (Ok(_), Err(error)) => return Err(error),
+    };
+
+    let receipt_text = local_peer_round_trip_receipt_text(&artifact, &share, &completed)?;
+    ensure_parent_dir(receipt_path, "local peer round-trip receipt")?;
+    write_new_synced_file(
+        receipt_path,
+        receipt_text.as_bytes(),
+        "local peer round-trip receipt",
+    )?;
+    let receipt_sha256 = sha256_prefixed(receipt_text.as_bytes());
+    Ok(LocalPeerRoundTripVerification {
+        receipt_path: receipt_path.display().to_string(),
+        receipt_sha256,
+        model_id: share.model_id,
+        manifest_sha256: share.manifest_sha256,
+        artifact_byte_count: artifact.artifact_byte_count,
+        artifact_sha256: share.artifact_sha256,
+        piece_set_sha256: share.piece_set_sha256,
+        piece_count: share.piece_count,
+        merkle_root_sha256: share.merkle_root_sha256,
+        import_receipt_sha256: completed.receipt_sha256,
+        peer_status_checked: true,
+        peer_piece_set_checked: completed.peer_piece_set_metadata_fetched,
+        peer_companion_state_checked: completed.peer_companion_state_metadata_fetched,
+        final_receipt_checked: true,
+        project_server_serves_model_bytes: false,
+        project_server_runs_model_bytes: false,
+        project_server_proxies_model_bytes: false,
+    })
+}
+
+fn run_local_peer_round_trip(
+    manifest_path: &Path,
+    piece_dir: &Path,
+    work_dir: &Path,
+    artifact: &ArtifactVerification,
+    share: &PeerPieceServe,
+) -> Result<PeerImportReceiptInspection, String> {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .map_err(|error| format!("failed to bind local peer round-trip listener: {error}"))?;
+    let address = listener
+        .local_addr()
+        .map_err(|error| format!("failed to inspect local peer round-trip listener: {error}"))?;
+    let peer_base_url = format!("http://{address}/");
+    let state_path = work_dir.join(PEER_COMPANION_STATE_ROUTE);
+    write_peer_companion_state_path(manifest_path, piece_dir, &state_path, &peer_base_url)?;
+    let serve = inspect_peer_companion_state_path(&state_path, manifest_path, piece_dir)?;
+    let request_path = work_dir.join("local-round-trip.peer-import-request.v0.json");
+    let output_dir = work_dir.join("imported");
+    let request = serde_json::json!({
+        "request_kind": "minimodel.peer_import_request.v0",
+        "request_version": 0,
+        "model": {
+            "model_id": share.model_id,
+            "artifact_kind": "slm",
+            "artifact_byte_count": artifact.artifact_byte_count,
+            "artifact_sha256": artifact.artifact_sha256,
+        },
+        "local_peer_piece_contract": {
+            "expected_piece_set_kind": "minimodel.peer_piece_set.v0",
+            "expected_peer_base_url": peer_base_url,
+            "expected_piece_dir": "local-round-trip-peer-pieces",
+            "assembled_output_slm": "local-round-trip-assembled.slm",
+            "metadata_routes": {
+                "peer_status": PEER_STATUS_ROUTE,
+                "peer_piece_set": PEER_PIECE_SET_ROUTE,
+                "peer_companion_state": PEER_COMPANION_STATE_ROUTE,
+            },
+            "receiver_validation_contract": {
+                "check_peer_status_before_piece_fetch": true,
+                "preflight_fetches_piece_set_before_pieces": true,
+                "validate_advertised_companion_state_before_piece_fetch": true,
+                "import_receipt_required_before_browser_load": true,
+            },
+        },
+        "boundary": {
+            "project_server_serves_model_bytes": false,
+            "project_server_runs_model_bytes": false,
+            "project_server_proxies_huggingface_bytes": false,
+            "transfer_requires_user_consent_and_local_reverify": true,
+        },
+    });
+    let request_bytes = serde_json::to_vec_pretty(&request)
+        .map_err(|error| format!("failed to encode local peer import request: {error}"))?;
+    fs::write(&request_path, request_bytes)
+        .map_err(|error| format!("failed to write local peer import request: {error}"))?;
+
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let server_shutdown = Arc::clone(&shutdown);
+    let server_state_path = state_path.clone();
+    let server_piece_dir = piece_dir.to_path_buf();
+    let server = thread::Builder::new()
+        .name("minimodel-local-round-trip".to_string())
+        .spawn(move || {
+            serve_verified_peer_companion_http_listener(
+                &server_state_path,
+                &server_piece_dir,
+                listener,
+                None,
+                Some(server_shutdown),
+                serve,
+            )
+        })
+        .map_err(|error| format!("failed to start local peer round-trip server: {error}"))?;
+
+    let imported = execute_peer_import_request_path(&request_path, manifest_path, &output_dir)
+        .and_then(|execution| {
+            inspect_peer_import_receipt_path(
+                Path::new(&execution.receipt_path),
+                &request_path,
+                Path::new(&execution.preflight_path),
+                manifest_path,
+                Path::new(&execution.output_artifact_path),
+            )
+        });
+    shutdown.store(true, Ordering::Release);
+    let server_result = server
+        .join()
+        .map_err(|_| "local peer round-trip server terminated unexpectedly".to_string())?;
+    server_result.map_err(|error| format!("local peer round-trip server failed: {error}"))?;
+    let receipt = imported?;
+    if receipt.model_id != share.model_id
+        || receipt.manifest_sha256 != share.manifest_sha256
+        || receipt.artifact_sha256 != share.artifact_sha256
+        || receipt.piece_set_sha256 != share.piece_set_sha256
+        || receipt.piece_count != share.piece_count
+        || receipt.merkle_root_sha256 != share.merkle_root_sha256
+        || receipt.companion_state_status != "validated"
+        || !receipt.peer_piece_set_metadata_fetched
+        || !receipt.peer_companion_state_metadata_fetched
+        || !receipt.peer_piece_bytes_fetched
+        || !receipt.artifact_assembled_from_peer_pieces
+        || receipt.project_server_serves_model_bytes
+        || receipt.project_server_runs_model_bytes
+        || receipt.project_server_proxies_huggingface_bytes
+    {
+        return Err("local peer round-trip receipt boundary or identity mismatch".to_string());
+    }
+    Ok(receipt)
+}
+
+fn local_peer_round_trip_receipt_text(
+    artifact: &ArtifactVerification,
+    share: &PeerPieceServe,
+    imported: &PeerImportReceiptInspection,
+) -> Result<String, String> {
+    let mut text = String::new();
+    push_line(&mut text, "round_trip.version", "0");
+    push_line(
+        &mut text,
+        "round_trip.kind",
+        "minimodel.local_peer_round_trip",
+    );
+    push_line(&mut text, "round_trip.created_utc", &utc_now()?);
+    push_line(&mut text, "round_trip.status", "passed");
+    push_line(&mut text, "model.id", &share.model_id);
+    push_line(&mut text, "manifest.sha256", &share.manifest_sha256);
+    push_line(
+        &mut text,
+        "artifact.byte_count",
+        &artifact.artifact_byte_count.to_string(),
+    );
+    push_line(&mut text, "artifact.sha256", &share.artifact_sha256);
+    push_line(&mut text, "piece_set.sha256", &share.piece_set_sha256);
+    push_line(
+        &mut text,
+        "piece_set.piece_count",
+        &share.piece_count.to_string(),
+    );
+    push_line(
+        &mut text,
+        "chunks.merkle_root_sha256",
+        &share.merkle_root_sha256,
+    );
+    push_line(&mut text, "transport", "loopback-http-companion-v0");
+    push_line(&mut text, "checked.peer_status", "true");
+    push_line(&mut text, "checked.peer_piece_set", "true");
+    push_line(&mut text, "checked.peer_companion_state", "true");
+    push_line(&mut text, "checked.every_piece_sha256", "true");
+    push_line(&mut text, "checked.final_slm", "true");
+    push_line(&mut text, "checked.final_import_receipt", "true");
+    push_line(&mut text, "import.receipt_sha256", &imported.receipt_sha256);
+    push_line(&mut text, "project_server_serves_model_bytes", "false");
+    push_line(&mut text, "project_server_runs_model_bytes", "false");
+    push_line(&mut text, "project_server_proxies_model_bytes", "false");
+    Ok(text)
 }
 
 pub fn serve_peer_pieces_http_path(
@@ -3230,6 +5509,7 @@ struct PeerImportRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PeerImportRequestFile {
     request_kind: String,
     request_version: u64,
@@ -3239,6 +5519,7 @@ struct PeerImportRequestFile {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PeerImportRequestModel {
     model_id: String,
     artifact_kind: String,
@@ -3247,6 +5528,7 @@ struct PeerImportRequestModel {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PeerImportPieceContract {
     expected_piece_set_kind: String,
     expected_peer_base_url: String,
@@ -3257,6 +5539,7 @@ struct PeerImportPieceContract {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PeerImportMetadataRoutes {
     peer_status: Option<String>,
     peer_piece_set: Option<String>,
@@ -3264,6 +5547,7 @@ struct PeerImportMetadataRoutes {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PeerImportReceiverValidationContract {
     check_peer_status_before_piece_fetch: Option<bool>,
     preflight_fetches_piece_set_before_pieces: Option<bool>,
@@ -3285,6 +5569,7 @@ struct PeerImportRequestContractSummary {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PeerImportBoundary {
     project_server_serves_model_bytes: bool,
     project_server_runs_model_bytes: bool,
@@ -4429,18 +6714,57 @@ fn catalog_entry_json(
     if let Some(value) = manifest.get("source.config.sha256") {
         fields.push(json_string_field("slm_config_checksum", value));
     }
+    for (manifest_key, catalog_key) in [
+        ("source.license.id", "source_license_id"),
+        ("source.license.route", "source_license_route"),
+        ("source.license.sha256", "source_license_sha256"),
+        (
+            "source.modification_notice.route",
+            "modification_notice_route",
+        ),
+        (
+            "source.modification_notice.sha256",
+            "modification_notice_sha256",
+        ),
+        ("evidence.conversation.route", "conversation_evidence_route"),
+        (
+            "evidence.conversation.sha256",
+            "conversation_evidence_sha256",
+        ),
+        ("evidence.eval.route", "evaluation_evidence_route"),
+        ("evidence.eval.sha256", "evaluation_evidence_sha256"),
+    ] {
+        if let Some(value) = manifest.get(manifest_key) {
+            fields.push(json_string_field(catalog_key, value));
+        }
+    }
+    if let Some(value) = manifest.get("quality.tier") {
+        fields.push(json_string_field("quality_tier", value));
+    }
     fields.push(json_string_field(
         "quality_claim",
-        "not-endorsed-by-project",
+        manifest
+            .get("quality.claim")
+            .unwrap_or("not-endorsed-by-project"),
     ));
-    fields.push(json_string_field("trained_quality_claim", "not-claimed"));
+    fields.push(json_string_field(
+        "trained_quality_claim",
+        manifest
+            .get("quality.trained_claim")
+            .unwrap_or("not-claimed"),
+    ));
+    if let Some(value) = manifest.get("quality.known_limitation") {
+        fields.push(json_string_field("known_limitation", value));
+    }
     fields.push(json_string_field(
         "evidence_admission_status",
         manifest.require("evidence.admission.status")?,
     ));
     fields.push(json_string_field(
         "required_next_gate",
-        "known-consenting-peer-fetch-assemble-rust-reverify-before-browser-import",
+        manifest
+            .get("quality.required_next_gate")
+            .unwrap_or("known-consenting-peer-fetch-assemble-rust-reverify-before-browser-import"),
     ));
     let mut text = String::new();
     text.push_str("{\n");
@@ -5432,7 +7756,12 @@ fn validate_peer_source_announcement_value(
     value: &Value,
     label: &str,
 ) -> Result<PeerSourceAnnouncement, String> {
-    require_json_u64_field(value, "announcement_version", label, 0)?;
+    let announcement_version = json_required_usize(value, "announcement_version", label)?;
+    if announcement_version > 1 {
+        return Err(format!(
+            "{label} announcement_version must be 0 or 1, got {announcement_version}"
+        ));
+    }
     require_json_string_field(
         value,
         "announcement_kind",
@@ -5443,7 +7772,11 @@ fn validate_peer_source_announcement_value(
         value,
         "announcement_status",
         label,
-        "peer-source-available-metadata-only",
+        if announcement_version == 0 {
+            "peer-source-available-metadata-only"
+        } else {
+            "peer-source-externally-verified-metadata-only"
+        },
     )?;
     require_json_string_field(value, "artifact_kind", label, "slm")?;
     require_json_bool_false(value, "project_server_serves_model_bytes", label)?;
@@ -5480,6 +7813,15 @@ fn validate_peer_source_announcement_value(
         .ok_or_else(|| format!("{label} missing object peer_source"))?;
     let peer_base_url =
         validate_catalog_peer_source_value(peer_source, &format!("{label} peer_source"))?;
+    if announcement_version == 1 {
+        validate_announcement_external_reachability(
+            value,
+            label,
+            &model_id,
+            &artifact_sha256,
+            &peer_base_url,
+        )?;
+    }
 
     Ok(PeerSourceAnnouncement {
         model_id,
@@ -5492,6 +7834,145 @@ fn validate_peer_source_announcement_value(
         peer_source: known_peer_source_value(&peer_base_url),
         peer_base_url,
     })
+}
+
+fn validate_announcement_external_reachability(
+    announcement: &Value,
+    label: &str,
+    model_id: &str,
+    artifact_sha256: &str,
+    peer_base_url: &str,
+) -> Result<(), String> {
+    let proof_label = format!("{label} external_reachability");
+    let proof = json_required_object(announcement, "external_reachability", label)?;
+    require_json_string_field(
+        proof,
+        "proof_kind",
+        &proof_label,
+        "minimodel.external_reachability_proof",
+    )?;
+    require_json_u64_field(proof, "proof_version", &proof_label, 0)?;
+    require_json_bool_true(proof, "externally_reachable", &proof_label)?;
+    require_json_bool_true(proof, "announcement_eligible", &proof_label)?;
+    require_json_bool_false(proof, "project_server_serves_model_bytes", &proof_label)?;
+    require_json_bool_false(proof, "project_server_runs_model_bytes", &proof_label)?;
+    require_json_bool_false(proof, "project_server_proxies_model_bytes", &proof_label)?;
+
+    validate_seed_fleet_id(
+        &json_required_string(proof, "receipt_id", &proof_label)?,
+        "announcement receipt_id",
+    )?;
+    normalize_sha256(&json_required_string(
+        proof,
+        "receipt_sha256",
+        &proof_label,
+    )?)?;
+    validate_seed_fleet_id(
+        &json_required_string(proof, "observer_id", &proof_label)?,
+        "announcement observer_id",
+    )?;
+    validate_seed_fleet_id(
+        &json_required_string(proof, "observer_key_id", &proof_label)?,
+        "announcement observer_key_id",
+    )?;
+    normalize_sha256(&json_required_string(
+        proof,
+        "observer_public_key_sha256",
+        &proof_label,
+    )?)?;
+    validate_seed_fleet_id(
+        &json_required_string(proof, "fleet_id", &proof_label)?,
+        "announcement fleet_id",
+    )?;
+    validate_seed_fleet_id(
+        &json_required_string(proof, "lane_id", &proof_label)?,
+        "announcement lane_id",
+    )?;
+    let proof_model =
+        validate_minimodel_model_id(&json_required_string(proof, "model_id", &proof_label)?)?;
+    if proof_model != model_id {
+        return Err(format!(
+            "{proof_label} model_id {proof_model} does not match announcement model_id {model_id}"
+        ));
+    }
+    let proof_url = normalize_known_peer_base_url(&json_required_string(
+        proof,
+        "public_base_url",
+        &proof_label,
+    )?)?;
+    if proof_url != peer_base_url {
+        return Err(format!(
+            "{proof_label} public_base_url does not match announcement peer_source"
+        ));
+    }
+    let proof_artifact = normalize_sha256(&json_required_string(
+        proof,
+        "artifact_sha256",
+        &proof_label,
+    )?)?;
+    if proof_artifact != artifact_sha256 {
+        return Err(format!(
+            "{proof_label} artifact_sha256 does not match announcement artifact_sha256"
+        ));
+    }
+    normalize_sha256(&json_required_string(
+        proof,
+        "piece_set_sha256",
+        &proof_label,
+    )?)?;
+    normalize_sha256(&json_required_string(
+        proof,
+        "signature_payload_sha256",
+        &proof_label,
+    )?)?;
+    require_json_string_field(
+        proof,
+        "network_scope",
+        &proof_label,
+        EXTERNAL_PROBE_NETWORK_SCOPE,
+    )?;
+    let route_count = json_required_usize(proof, "checked_route_count", &proof_label)?;
+    if route_count != 4 {
+        return Err(format!(
+            "{proof_label} checked_route_count must be 4, got {route_count}"
+        ));
+    }
+    let implementation = json_required_string(proof, "probe_implementation_version", &proof_label)?;
+    if implementation.len() > 64
+        || !implementation
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
+        return Err(format!(
+            "{proof_label} probe_implementation_version must be route-safe ASCII"
+        ));
+    }
+    let checked = parse_utc_timestamp_seconds(
+        &json_required_string(proof, "checked_utc", &proof_label)?,
+        "announcement external proof checked_utc",
+    )?;
+    let expires = parse_utc_timestamp_seconds(
+        &json_required_string(proof, "expires_utc", &proof_label)?,
+        "announcement external proof expires_utc",
+    )?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "system clock is before the Unix epoch".to_string())?
+        .as_secs() as i64;
+    if checked > now + EXTERNAL_PROBE_CLOCK_SKEW_SECONDS {
+        return Err(format!(
+            "{proof_label} checked_utc is too far in the future"
+        ));
+    }
+    if expires <= now {
+        return Err(format!("{proof_label} is stale or expired"));
+    }
+    if expires <= checked || expires - checked > EXTERNAL_PROBE_MAX_VALIDITY_SECONDS {
+        return Err(format!(
+            "{proof_label} validity must be greater than zero and at most {EXTERNAL_PROBE_MAX_VALIDITY_SECONDS} seconds"
+        ));
+    }
+    Ok(())
 }
 
 fn require_json_string_field(
@@ -6418,6 +8899,153 @@ fn file_name_for_route(path: &Path, label: &str) -> Result<String, String> {
     Ok(file_name.to_string())
 }
 
+fn prepare_peer_share_provenance(
+    provenance: &PeerShareProvenance,
+    artifact_stem: &str,
+) -> Result<PreparedPeerShareProvenance, String> {
+    let source_revision = provenance.source_revision.trim();
+    if source_revision.len() != 40
+        || !source_revision
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(
+            "source revision must be a canonical 40-character lowercase commit SHA".to_string(),
+        );
+    }
+    let source_license_id = provenance.source_license_id.trim();
+    if source_license_id.is_empty()
+        || source_license_id.len() > 64
+        || !source_license_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+'))
+    {
+        return Err("source license id must be a single SPDX-style identifier".to_string());
+    }
+    let known_limitation = provenance.known_limitation.trim();
+    if known_limitation.is_empty()
+        || known_limitation.len() > 128
+        || !known_limitation.bytes().all(|byte| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || matches!(byte, b'.' | b'-' | b'_' | b',')
+        })
+    {
+        return Err("known limitation must be bounded route-safe lowercase ASCII".to_string());
+    }
+
+    let (source_license_bytes, source_license_sha256) = read_checksum_bound_provenance_file(
+        &provenance.source_license_path,
+        &provenance.source_license_sha256,
+        "source license",
+    )?;
+    let (modification_notice_bytes, modification_notice_sha256) =
+        read_checksum_bound_provenance_file(
+            &provenance.modification_notice_path,
+            &provenance.modification_notice_sha256,
+            "modification notice",
+        )?;
+    let (conversation_evidence_bytes, conversation_evidence_sha256) =
+        read_checksum_bound_provenance_file(
+            &provenance.conversation_evidence_path,
+            &provenance.conversation_evidence_sha256,
+            "conversation evidence",
+        )?;
+    let (evaluation_evidence_bytes, evaluation_evidence_sha256) =
+        read_checksum_bound_provenance_file(
+            &provenance.evaluation_evidence_path,
+            &provenance.evaluation_evidence_sha256,
+            "evaluation evidence",
+        )?;
+
+    Ok(PreparedPeerShareProvenance {
+        source_revision: source_revision.to_string(),
+        source_license_id: source_license_id.to_string(),
+        source_license_route: format!("{artifact_stem}.source-license.txt"),
+        source_license_sha256,
+        source_license_bytes,
+        modification_notice_route: format!("{artifact_stem}.modification-notice.md"),
+        modification_notice_sha256,
+        modification_notice_bytes,
+        conversation_evidence_route: format!("{artifact_stem}.conversation-evidence.v1"),
+        conversation_evidence_sha256,
+        conversation_evidence_bytes,
+        evaluation_evidence_route: format!("{artifact_stem}.quality-evaluation.v1"),
+        evaluation_evidence_sha256,
+        evaluation_evidence_bytes,
+        quality_tier: provenance.quality_tier,
+        known_limitation: known_limitation.to_string(),
+    })
+}
+
+fn read_checksum_bound_provenance_file(
+    path: &Path,
+    expected_sha256: &str,
+    label: &str,
+) -> Result<(Vec<u8>, String), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("failed to inspect {label}: {error}"))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!("{label} must be a regular non-symlink file"));
+    }
+    if metadata.len() == 0 || metadata.len() > MAX_METADATA_JSON_BYTES {
+        return Err(format!(
+            "{label} must contain 1 to {MAX_METADATA_JSON_BYTES} bytes"
+        ));
+    }
+    let bytes = fs::read(path).map_err(|error| format!("failed to read {label}: {error}"))?;
+    if bytes.is_empty() || bytes.len() as u64 > MAX_METADATA_JSON_BYTES {
+        return Err(format!(
+            "{label} must contain 1 to {MAX_METADATA_JSON_BYTES} bytes"
+        ));
+    }
+    let text = std::str::from_utf8(&bytes).map_err(|_| format!("{label} must be UTF-8 text"))?;
+    if text.contains('\0') {
+        return Err(format!("{label} must not contain NUL characters"));
+    }
+    let expected = normalize_sha256(expected_sha256)
+        .map_err(|_| format!("{label} expected SHA-256 is invalid"))?;
+    let actual = sha256_prefixed(&bytes);
+    if actual != expected {
+        return Err(format!(
+            "{label} SHA-256 mismatch: expected {expected}, got {actual}"
+        ));
+    }
+    Ok((bytes, actual))
+}
+
+fn write_peer_share_provenance(
+    output_dir: &Path,
+    provenance: &PreparedPeerShareProvenance,
+) -> Result<(), String> {
+    for (route, bytes, label) in [
+        (
+            &provenance.source_license_route,
+            provenance.source_license_bytes.as_slice(),
+            "source license",
+        ),
+        (
+            &provenance.modification_notice_route,
+            provenance.modification_notice_bytes.as_slice(),
+            "modification notice",
+        ),
+        (
+            &provenance.conversation_evidence_route,
+            provenance.conversation_evidence_bytes.as_slice(),
+            "conversation evidence",
+        ),
+        (
+            &provenance.evaluation_evidence_route,
+            provenance.evaluation_evidence_bytes.as_slice(),
+            "evaluation evidence",
+        ),
+    ] {
+        fs::write(output_dir.join(route), bytes)
+            .map_err(|error| format!("failed to write {label}: {error}"))?;
+    }
+    Ok(())
+}
+
 fn validate_huggingface_model_id(value: &str) -> Result<String, String> {
     let text = value.trim();
     let bytes = text.as_bytes();
@@ -6538,15 +9166,28 @@ fn known_peer_source_json_fields(peer_base_url: &str) -> [String; 6] {
     ]
 }
 
-fn minimodel_manifest_text(
-    model_id: &str,
-    artifact_bytes: &[u8],
-    slm: &SlmReport,
-    chunks: &[ChunkProof],
-    peer_offer_route: &str,
-    peer_offer_sha256: &str,
-    source_huggingface_model_id: Option<&str>,
-) -> Result<String, String> {
+struct MiniModelManifestText<'a> {
+    model_id: &'a str,
+    artifact_bytes: &'a [u8],
+    slm: &'a SlmReport,
+    chunks: &'a [ChunkProof],
+    peer_offer_route: &'a str,
+    peer_offer_sha256: &'a str,
+    source_huggingface_model_id: Option<&'a str>,
+    provenance: Option<&'a PreparedPeerShareProvenance>,
+}
+
+fn minimodel_manifest_text(input: MiniModelManifestText<'_>) -> Result<String, String> {
+    let MiniModelManifestText {
+        model_id,
+        artifact_bytes,
+        slm,
+        chunks,
+        peer_offer_route,
+        peer_offer_sha256,
+        source_huggingface_model_id,
+        provenance,
+    } = input;
     let source_kind = if source_huggingface_model_id.is_some() {
         "safetensors"
     } else {
@@ -6573,8 +9214,20 @@ fn minimodel_manifest_text(
     push_line(&mut text, "model.version", "0.1.0-local");
     push_line(&mut text, "publisher.id", "local-user");
     push_line(&mut text, "publisher.key_id", "local-user-unsigned");
-    push_line(&mut text, "model_card.route", "none");
-    push_line(&mut text, "license.route", "none");
+    push_line(
+        &mut text,
+        "model_card.route",
+        provenance
+            .map(|value| value.modification_notice_route.as_str())
+            .unwrap_or("none"),
+    );
+    push_line(
+        &mut text,
+        "license.route",
+        provenance
+            .map(|value| value.source_license_route.as_str())
+            .unwrap_or("none"),
+    );
     push_line(&mut text, "artifact.kind", "slm");
     push_line(
         &mut text,
@@ -6614,13 +9267,93 @@ fn minimodel_manifest_text(
     push_line(&mut text, "runtime.minimum_version", "0.1.0");
     push_line(&mut text, "source.kind", source_kind);
     push_line(&mut text, "source.id", source_id);
-    push_line(&mut text, "source.revision", "local-conversion");
+    push_line(
+        &mut text,
+        "source.revision",
+        provenance
+            .map(|value| value.source_revision.as_str())
+            .unwrap_or("local-conversion"),
+    );
     push_line(&mut text, "source.discovery.kind", source_discovery_kind);
     push_line(&mut text, "source.discovery.route", "none");
-    push_line(&mut text, "source.discovery.revision", "unknown");
+    push_line(
+        &mut text,
+        "source.discovery.revision",
+        provenance
+            .map(|value| value.source_revision.as_str())
+            .unwrap_or("unknown"),
+    );
     push_line(&mut text, "source.discovery.user_token_required", "false");
     if let Some(source_id) = source_huggingface_model_id {
         push_line(&mut text, "source.huggingface_model_id", source_id);
+    }
+    if let Some(provenance) = provenance {
+        push_line(
+            &mut text,
+            "source.license.id",
+            &provenance.source_license_id,
+        );
+        push_line(
+            &mut text,
+            "source.license.route",
+            &provenance.source_license_route,
+        );
+        push_line(
+            &mut text,
+            "source.license.sha256",
+            &provenance.source_license_sha256,
+        );
+        push_line(
+            &mut text,
+            "source.modification_notice.route",
+            &provenance.modification_notice_route,
+        );
+        push_line(
+            &mut text,
+            "source.modification_notice.sha256",
+            &provenance.modification_notice_sha256,
+        );
+        push_line(&mut text, "quality.tier", provenance.quality_tier.as_str());
+        push_line(
+            &mut text,
+            "quality.claim",
+            provenance.quality_tier.quality_claim(),
+        );
+        push_line(
+            &mut text,
+            "quality.trained_claim",
+            provenance.quality_tier.trained_quality_claim(),
+        );
+        push_line(
+            &mut text,
+            "quality.known_limitation",
+            &provenance.known_limitation,
+        );
+        push_line(
+            &mut text,
+            "quality.required_next_gate",
+            provenance.quality_tier.required_next_gate(),
+        );
+        push_line(
+            &mut text,
+            "evidence.conversation.route",
+            &provenance.conversation_evidence_route,
+        );
+        push_line(
+            &mut text,
+            "evidence.conversation.sha256",
+            &provenance.conversation_evidence_sha256,
+        );
+        push_line(
+            &mut text,
+            "evidence.eval.route",
+            &provenance.evaluation_evidence_route,
+        );
+        push_line(
+            &mut text,
+            "evidence.eval.sha256",
+            &provenance.evaluation_evidence_sha256,
+        );
     }
     push_line(&mut text, "evidence.admission.status", "passed");
     push_line(&mut text, "evidence.admission.route", peer_offer_route);
@@ -7385,6 +10118,7 @@ fn serve_peer_piece_dir_http_listener(
         request_limit,
         BTreeMap::new(),
         "/",
+        None,
     )
 }
 
@@ -7408,6 +10142,7 @@ fn serve_peer_pieces_http_listener(
         request_limit,
         extra_files,
         &serve_path_prefix,
+        None,
     )?;
     Ok(report)
 }
@@ -7420,6 +10155,24 @@ fn serve_peer_companion_http_listener(
     request_limit: Option<usize>,
 ) -> Result<PeerCompanionServe, String> {
     let report = inspect_peer_companion_state_path(state_path, manifest_path, piece_dir)?;
+    serve_verified_peer_companion_http_listener(
+        state_path,
+        piece_dir,
+        listener,
+        request_limit,
+        None,
+        report,
+    )
+}
+
+fn serve_verified_peer_companion_http_listener(
+    state_path: &Path,
+    piece_dir: &Path,
+    listener: TcpListener,
+    request_limit: Option<usize>,
+    shutdown: Option<Arc<AtomicBool>>,
+    report: PeerCompanionServe,
+) -> Result<PeerCompanionServe, String> {
     let mut extra_files = BTreeMap::new();
     extra_files.insert(
         PEER_STATUS_ROUTE.to_string(),
@@ -7449,6 +10202,7 @@ fn serve_peer_companion_http_listener(
         request_limit,
         extra_files,
         &serve_path_prefix,
+        shutdown.as_deref(),
     )?;
     Ok(report)
 }
@@ -7459,22 +10213,36 @@ fn serve_peer_piece_dir_http_listener_with_extra(
     request_limit: Option<usize>,
     extra_files: BTreeMap<String, ServedPeerExtra>,
     serve_path_prefix: &str,
+    shutdown: Option<&AtomicBool>,
 ) -> Result<(), String> {
     let piece_set_text = fs::read_to_string(piece_dir.join("minimodel.peer_piece_set.v0"))
         .map_err(|error| format!("failed to read peer piece set: {error}"))?;
     let piece_set = Manifest::parse(&piece_set_text)?;
     let allowed_names = allowed_peer_piece_names(&piece_set, &extra_files)?;
     let serve_path_prefix = normalize_serve_path_prefix(serve_path_prefix)?;
+    if shutdown.is_some() {
+        listener
+            .set_nonblocking(true)
+            .map_err(|error| format!("failed to configure shutdown-aware listener: {error}"))?;
+    }
     let mut served = 0usize;
     loop {
+        if shutdown.is_some_and(|value| value.load(Ordering::Acquire)) {
+            return Ok(());
+        }
         if let Some(limit) = request_limit {
             if served >= limit {
                 return Ok(());
             }
         }
-        let (mut stream, _) = listener
-            .accept()
-            .map_err(|error| format!("failed to accept peer request: {error}"))?;
+        let (mut stream, _) = match listener.accept() {
+            Ok(connection) => connection,
+            Err(error) if shutdown.is_some() && error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(10));
+                continue;
+            }
+            Err(error) => return Err(format!("failed to accept peer request: {error}")),
+        };
         served = served
             .checked_add(1)
             .ok_or_else(|| "served request count overflow".to_string())?;
@@ -8127,8 +10895,35 @@ fn reject_project_server_peer_host(host: &str) -> Result<(), String> {
 }
 
 fn http_get_bytes(url: &HttpUrl, max_body_bytes: usize) -> Result<Vec<u8>, String> {
-    let mut stream = TcpStream::connect((url.host.as_str(), url.port))
-        .map_err(|error| format!("failed to connect to peer {}: {error}", url.host))?;
+    let addresses = (url.host.as_str(), url.port)
+        .to_socket_addrs()
+        .map_err(|error| format!("failed to resolve peer {}: {error}", url.host))?;
+    let mut last_connect_error = None;
+    let mut stream = None;
+    for address in addresses.take(16) {
+        match TcpStream::connect_timeout(&address, PEER_CONNECT_TIMEOUT) {
+            Ok(connected) => {
+                stream = Some(connected);
+                break;
+            }
+            Err(error) => last_connect_error = Some(error),
+        }
+    }
+    let mut stream = stream.ok_or_else(|| {
+        format!(
+            "failed to connect to peer {}: {}",
+            url.host,
+            last_connect_error
+                .map(|error| error.to_string())
+                .unwrap_or_else(|| "host resolved to no usable addresses".to_string())
+        )
+    })?;
+    stream
+        .set_read_timeout(Some(PEER_IO_TIMEOUT))
+        .map_err(|error| format!("failed to set peer read timeout: {error}"))?;
+    stream
+        .set_write_timeout(Some(PEER_IO_TIMEOUT))
+        .map_err(|error| format!("failed to set peer write timeout: {error}"))?;
     let request = format!(
         "GET {} HTTP/1.0\r\nHost: {}\r\nConnection: close\r\nUser-Agent: minimodel-peer-fetch/0\r\n\r\n",
         url.path, url.host
@@ -8136,14 +10931,35 @@ fn http_get_bytes(url: &HttpUrl, max_body_bytes: usize) -> Result<Vec<u8>, Strin
     stream
         .write_all(request.as_bytes())
         .map_err(|error| format!("failed to request peer piece: {error}"))?;
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|error| format!("failed to read peer response: {error}"))?;
+    let response_limit = MAX_PEER_HTTP_HEADER_BYTES
+        .checked_add(4)
+        .and_then(|value| value.checked_add(max_body_bytes))
+        .ok_or_else(|| "peer HTTP response byte limit overflow".to_string())?;
+    let mut response = Vec::with_capacity(response_limit.min(64 * 1024));
+    let mut buffer = [0u8; 16 * 1024];
+    loop {
+        let count = stream
+            .read(&mut buffer)
+            .map_err(|error| format!("failed to read peer response: {error}"))?;
+        if count == 0 {
+            break;
+        }
+        if response.len().saturating_add(count) > response_limit {
+            return Err(format!(
+                "peer HTTP response exceeded bounded header and body limit {response_limit}"
+            ));
+        }
+        response.extend_from_slice(&buffer[..count]);
+    }
     let header_end = response
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
         .ok_or_else(|| "peer HTTP response is missing a header terminator".to_string())?;
+    if header_end > MAX_PEER_HTTP_HEADER_BYTES {
+        return Err(format!(
+            "peer HTTP response headers exceeded {MAX_PEER_HTTP_HEADER_BYTES} bytes"
+        ));
+    }
     let header_bytes = &response[..header_end];
     let body = response[header_end + 4..].to_vec();
     if body.len() > max_body_bytes {
@@ -8160,6 +10976,7 @@ fn http_get_bytes(url: &HttpUrl, max_body_bytes: usize) -> Result<Vec<u8>, Strin
     if !(status.starts_with("HTTP/1.0 200 ") || status.starts_with("HTTP/1.1 200 ")) {
         return Err(format!("peer HTTP request failed: {status}"));
     }
+    let mut content_length = None;
     for line in lines {
         if let Some((name, value)) = line.split_once(':') {
             if name.trim().eq_ignore_ascii_case("transfer-encoding")
@@ -8172,14 +10989,19 @@ fn http_get_bytes(url: &HttpUrl, max_body_bytes: usize) -> Result<Vec<u8>, Strin
                     .trim()
                     .parse::<usize>()
                     .map_err(|_| "peer HTTP content-length must be decimal".to_string())?;
-                if expected != body.len() {
-                    return Err(format!(
-                        "peer HTTP content-length mismatch: header {expected}, body {}",
-                        body.len()
-                    ));
+                if content_length.replace(expected).is_some() {
+                    return Err("peer HTTP response contains duplicate content-length".to_string());
                 }
             }
         }
+    }
+    let expected =
+        content_length.ok_or_else(|| "peer HTTP response is missing content-length".to_string())?;
+    if expected != body.len() {
+        return Err(format!(
+            "peer HTTP content-length mismatch: header {expected}, body {}",
+            body.len()
+        ));
     }
     Ok(body)
 }
@@ -8342,6 +11164,18 @@ mod tests {
         ] {
             assert!(HttpUrl::parse(url).is_err(), "{url} should be rejected");
         }
+    }
+
+    #[test]
+    fn example_peer_import_request_matches_strict_schema() {
+        let file: PeerImportRequestFile = serde_json::from_str(REAL_Q8_PEER_IMPORT_REQUEST)
+            .expect("checked-in peer import request must match the strict schema");
+        let request = PeerImportRequest::from(file);
+
+        validate_peer_import_request_static_fields(&request)
+            .expect("checked-in peer import request must satisfy the static contract");
+        assert_eq!(request.model_id, "tinyrustlm/tiny-test-model-q8");
+        assert_eq!(request.expected_peer_base_url, "http://127.0.0.1:8123/");
     }
 
     #[test]
@@ -8564,7 +11398,7 @@ mod tests {
         std::fs::write(&manifest_path, REAL_Q8_MANIFEST).unwrap();
         let served_piece_dir = dir.join("served-pieces");
         export_peer_pieces_path(&manifest_path, &artifact_path, &served_piece_dir).unwrap();
-        let peer_url = start_peer_piece_server(served_piece_dir, 3);
+        let peer_url = start_peer_status_server(manifest_path.clone(), served_piece_dir, 16);
         let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
         std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
         let output_dir = dir.join("imported");
@@ -8626,7 +11460,7 @@ mod tests {
             manifest_path.clone(),
             served_piece_dir,
             state_path,
-            6,
+            20,
         );
         let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
         std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
@@ -8780,7 +11614,7 @@ mod tests {
             served_piece_dir,
             state_path,
             "peer-pieces",
-            3,
+            16,
         );
         let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
         std::fs::write(&request_path, peer_import_request_json(&peer_url)).unwrap();
@@ -9011,6 +11845,7 @@ mod tests {
                 Some(2),
                 extra_files,
                 "/",
+                None,
             )
             .unwrap();
         });
@@ -9883,14 +12718,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let request_path = dir.join("tiny-test-model-q8.minimodel-peer-import-request.json");
-        std::fs::write(
-            &request_path,
-            peer_import_request_json("http://127.0.0.1:8123/").replace(
-                "    \"artifact_sha256\": \"sha256:6af985853325eaa6d3eaaa8aadd3511da9596eb542fb2d03a9bc9dc1f4377adf\",\n",
-                "",
-            ),
-        )
-        .unwrap();
+        let mut request: Value =
+            serde_json::from_str(&peer_import_request_json("http://127.0.0.1:8123/")).unwrap();
+        request["model"]
+            .as_object_mut()
+            .unwrap()
+            .remove("artifact_sha256");
+        std::fs::write(&request_path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
         let error = execute_peer_import_request_path(
             &request_path,
             Path::new("missing-manifest"),
@@ -9899,6 +12733,51 @@ mod tests {
         .unwrap_err();
         assert!(error.contains("artifact_sha256"));
         assert!(!dir.join("imported").exists());
+    }
+
+    #[test]
+    fn rejects_unknown_peer_import_request_fields_at_every_nested_boundary() {
+        let dir = unique_dir("peer-import-unknown-fields");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let base: Value =
+            serde_json::from_str(&peer_import_request_json("http://127.0.0.1:8123/")).unwrap();
+        let object_paths = [
+            ("root", ""),
+            ("model", "/model"),
+            ("piece-contract", "/local_peer_piece_contract"),
+            (
+                "metadata-routes",
+                "/local_peer_piece_contract/metadata_routes",
+            ),
+            (
+                "receiver-contract",
+                "/local_peer_piece_contract/receiver_validation_contract",
+            ),
+            ("boundary", "/boundary"),
+        ];
+
+        for (label, object_path) in object_paths {
+            let mut request = base.clone();
+            request
+                .pointer_mut(object_path)
+                .and_then(Value::as_object_mut)
+                .unwrap()
+                .insert("unreviewed_extension".to_string(), Value::Bool(true));
+            let request_path = dir.join(format!("request-{label}.json"));
+            let output_dir = dir.join(format!("imported-{label}"));
+            std::fs::write(&request_path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
+
+            let error = execute_peer_import_request_path(
+                &request_path,
+                Path::new("missing-manifest"),
+                &output_dir,
+            )
+            .unwrap_err();
+
+            assert!(error.contains("unknown field"), "{label}: {error}");
+            assert!(!output_dir.exists(), "{label} unexpectedly wrote output");
+        }
     }
 
     #[test]
@@ -10904,6 +13783,149 @@ mod tests {
     }
 
     #[test]
+    fn prepares_trained_peer_share_with_checksum_bound_provenance() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping trained peer share test; TinyRustLM fixture not present");
+            return;
+        };
+        let root = unique_dir("prepare-trained-peer-share");
+        let _ = std::fs::remove_dir_all(&root);
+        let provenance = write_peer_share_provenance_fixture(&root.join("inputs"));
+        let output = root.join("share");
+
+        let report = prepare_peer_share_with_provenance_path(
+            &artifact_path,
+            &output,
+            "tinyrustlm/prepared-trained-test-model-q8",
+            Some("ExampleOrg/Tiny-Q8-Source"),
+            None,
+            Some(&provenance),
+        )
+        .unwrap();
+
+        let manifest = std::fs::read_to_string(&report.manifest_path).unwrap();
+        assert!(manifest.contains("source.revision=0123456789abcdef0123456789abcdef01234567"));
+        assert!(manifest.contains("source.license.id=Apache-2.0"));
+        assert!(manifest.contains("license.route=tiny-test-model-q8.source-license.txt"));
+        assert!(manifest.contains("model_card.route=tiny-test-model-q8.modification-notice.md"));
+        assert!(manifest.contains("quality.tier=conversation-proven-full-assistant-pending"));
+        assert!(manifest.contains(
+            "quality.claim=coherent-multi-turn-conversation-evidence-not-full-assistant-quality"
+        ));
+        assert!(manifest.contains("quality.trained_claim=converted-trained-conversation-evidence"));
+        assert!(manifest.contains("quality.known_limitation=strict-json"));
+        assert!(manifest.contains("evidence.conversation.route="));
+        assert!(manifest.contains("evidence.conversation.sha256="));
+        assert!(manifest.contains("evidence.eval.route="));
+        assert!(manifest.contains("evidence.eval.sha256="));
+        assert!(!manifest.contains(&root.display().to_string()));
+        let inspection = inspect_manifest_path(Path::new(&report.manifest_path)).unwrap();
+        assert_eq!(
+            inspection.source_revision,
+            "0123456789abcdef0123456789abcdef01234567"
+        );
+        assert_eq!(inspection.source_license_id.as_deref(), Some("Apache-2.0"));
+        assert_eq!(
+            inspection.quality_tier.as_deref(),
+            Some("conversation-proven-full-assistant-pending")
+        );
+        assert_eq!(inspection.known_limitation.as_deref(), Some("strict-json"));
+
+        let catalog = std::fs::read_to_string(&report.catalog_entry_path).unwrap();
+        assert!(
+            catalog.contains("\"quality_tier\": \"conversation-proven-full-assistant-pending\"")
+        );
+        assert!(catalog.contains(
+            "\"quality_claim\": \"coherent-multi-turn-conversation-evidence-not-full-assistant-quality\""
+        ));
+        assert!(catalog
+            .contains("\"trained_quality_claim\": \"converted-trained-conversation-evidence\""));
+        assert!(catalog.contains("\"known_limitation\": \"strict-json\""));
+        assert!(catalog.contains("\"source_license_id\": \"Apache-2.0\""));
+        assert!(!catalog.contains(&root.display().to_string()));
+
+        assert_eq!(
+            std::fs::read_to_string(output.join("tiny-test-model-q8.source-license.txt")).unwrap(),
+            "Apache License 2.0 test fixture\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(output.join("tiny-test-model-q8.modification-notice.md"))
+                .unwrap(),
+            "Converted to .slm q8_0; no training performed.\n"
+        );
+
+        let round_trip_work = root.join("round-trip-work");
+        let round_trip_receipt = output.join("tiny-test-model-q8.local-round-trip.v0");
+        let round_trip = verify_local_peer_round_trip_path(
+            Path::new(&report.manifest_path),
+            &artifact_path,
+            Path::new(&report.piece_dir_path),
+            &round_trip_work,
+            &round_trip_receipt,
+        )
+        .unwrap();
+        assert_eq!(round_trip.model_id, report.model_id);
+        assert_eq!(round_trip.artifact_sha256, report.artifact_sha256);
+        assert_eq!(round_trip.piece_count, report.piece_count);
+        assert!(round_trip.receipt_sha256.starts_with("sha256:"));
+        assert!(round_trip.peer_status_checked);
+        assert!(round_trip.peer_piece_set_checked);
+        assert!(round_trip.peer_companion_state_checked);
+        assert!(round_trip.final_receipt_checked);
+        assert!(!round_trip_work.exists());
+        let round_trip_text = std::fs::read_to_string(round_trip_receipt).unwrap();
+        assert!(round_trip_text.contains("round_trip.status=passed"));
+        assert!(round_trip_text.contains("transport=loopback-http-companion-v0"));
+        assert!(round_trip_text.contains("project_server_serves_model_bytes=false"));
+        assert!(!round_trip_text.contains(&root.display().to_string()));
+    }
+
+    #[test]
+    fn rejects_trained_peer_share_evidence_hash_mismatch_before_output() {
+        let Some(artifact_path) = sibling_q8_fixture() else {
+            eprintln!("skipping trained peer share test; TinyRustLM fixture not present");
+            return;
+        };
+        let root = unique_dir("reject-trained-peer-share-evidence-drift");
+        let _ = std::fs::remove_dir_all(&root);
+        let mut provenance = write_peer_share_provenance_fixture(&root.join("inputs"));
+        provenance.evaluation_evidence_sha256 = format!("sha256:{}", "a".repeat(64));
+        let output = root.join("share");
+
+        let error = prepare_peer_share_with_provenance_path(
+            &artifact_path,
+            &output,
+            "tinyrustlm/prepared-trained-test-model-q8",
+            Some("ExampleOrg/Tiny-Q8-Source"),
+            None,
+            Some(&provenance),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("evaluation evidence SHA-256 mismatch"));
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn rejects_trained_peer_share_without_provenance_before_artifact_read() {
+        let output = unique_dir("reject-trained-peer-share-missing-provenance");
+        let _ = std::fs::remove_dir_all(&output);
+
+        let error = prepare_peer_share_with_provenance_path(
+            Path::new("missing.slm"),
+            &output,
+            "tinyrustlm/prepared-trained-test-model-q8",
+            Some("ExampleOrg/Tiny-Q8-Source"),
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("trained Hugging Face source requires provenance"));
+        assert!(!output.exists());
+    }
+
+    #[test]
     fn rejects_prepare_peer_share_project_server_peer_before_output() {
         let dir = unique_dir("prepare-peer-share-project-host");
         let _ = std::fs::remove_dir_all(&dir);
@@ -10998,11 +14020,41 @@ mod tests {
     fn sibling_q8_fixture() -> Option<PathBuf> {
         let rust_root = Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(3)?;
         let path = rust_root
-            .join("SLMComposer.com")
+            .join("TinyRustLM.com")
             .join("tinyrustlm")
             .join("models")
             .join("tiny-test-model-q8.slm");
         path.exists().then_some(path)
+    }
+
+    fn write_peer_share_provenance_fixture(input_dir: &Path) -> PeerShareProvenance {
+        std::fs::create_dir_all(input_dir).unwrap();
+        let license_path = input_dir.join("LICENSE.txt");
+        let notice_path = input_dir.join("NOTICE.md");
+        let conversation_path = input_dir.join("conversation.evidence");
+        let evaluation_path = input_dir.join("quality.eval");
+        let license = b"Apache License 2.0 test fixture\n";
+        let notice = b"Converted to .slm q8_0; no training performed.\n";
+        let conversation = b"evidence_status=pass\nconversation_turn_count=2\n";
+        let evaluation = b"eval_status=fail\ncases_passed=10\ncases_failed=2\n";
+        std::fs::write(&license_path, license).unwrap();
+        std::fs::write(&notice_path, notice).unwrap();
+        std::fs::write(&conversation_path, conversation).unwrap();
+        std::fs::write(&evaluation_path, evaluation).unwrap();
+        PeerShareProvenance {
+            source_revision: "0123456789abcdef0123456789abcdef01234567".to_string(),
+            source_license_id: "Apache-2.0".to_string(),
+            source_license_path: license_path,
+            source_license_sha256: sha256_prefixed(license),
+            modification_notice_path: notice_path,
+            modification_notice_sha256: sha256_prefixed(notice),
+            conversation_evidence_path: conversation_path,
+            conversation_evidence_sha256: sha256_prefixed(conversation),
+            evaluation_evidence_path: evaluation_path,
+            evaluation_evidence_sha256: sha256_prefixed(evaluation),
+            quality_tier: PeerShareQualityTier::ConversationProvenFullAssistantPending,
+            known_limitation: "strict-json".to_string(),
+        }
     }
 
     fn unique_dir(label: &str) -> PathBuf {

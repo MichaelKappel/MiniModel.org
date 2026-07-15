@@ -724,6 +724,7 @@ fn run() -> Result<(), String> {
                 Path::new(&config_json),
             )?;
             println!("MiniModel external probe receipt inspection: PASS");
+            println!("receipt_version: {}", report.receipt_version);
             println!("receipt_id: {}", report.receipt_id);
             println!("observer_id: {}", report.observer_id);
             println!("fleet_id: {}", report.fleet_id);
@@ -732,6 +733,19 @@ fn run() -> Result<(), String> {
             println!("public_base_url: {}", report.public_base_url);
             println!("checked_utc: {}", report.checked_utc);
             println!("expires_utc: {}", report.expires_utc);
+            println!(
+                "complete_transfer_verified: {}",
+                report.complete_transfer_verified
+            );
+            if let Some(piece_count) = report.downloaded_piece_count {
+                println!("downloaded_piece_count: {piece_count}");
+            }
+            if let Some(byte_count) = report.downloaded_artifact_byte_count {
+                println!("downloaded_artifact_byte_count: {byte_count}");
+            }
+            if let Some(artifact_sha256) = report.downloaded_artifact_sha256 {
+                println!("downloaded_artifact_sha256: {artifact_sha256}");
+            }
             println!("externally_reachable: true");
             println!("announcement_eligible: true");
         }
@@ -756,6 +770,10 @@ fn run() -> Result<(), String> {
             println!("fleet_id: {}", report.fleet_id);
             println!("lane_id: {}", report.lane_id);
             println!("model_id: {}", report.model_id);
+            println!(
+                "complete_transfer_verified: {}",
+                report.complete_transfer_verified
+            );
             println!("externally_reachable: true");
             println!("announcement_eligible: true");
             println!("advertised: false");

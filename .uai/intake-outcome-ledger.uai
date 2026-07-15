@@ -1,5 +1,5 @@
-profile: minimodel.intake-outcome-ledger.v4
-updated_utc: 2026-07-03T23:40:00Z
+profile: minimodel.intake-outcome-ledger.v5
+updated_utc: 2026-07-14T07:58:19Z
 site: MiniModel.org
 latest_scan:
   content_non_placeholder_files: 0
@@ -21,7 +21,7 @@ earlier_implementation_note:
   id: minimodel_add_peer_source_2026_07_02
   disposition: implemented
   source_impact: Added `add-peer-source` to turn proof-ready catalog-entry JSON into P2P-ready metadata after a consenting direct peer URL becomes known.
-  memory_impact: Updated MiniModel.org workspace/short-term memory and SLMComposer long-term pointers to the late peer-source publication command.
+  memory_impact: Updated MiniModel.org workspace/short-term memory and TinyRustLM long-term pointers to the late peer-source publication command.
   active_intake_after: placeholder_only
 older_implementation_note:
   id: minimodel_direct_peer_piece_serve_2026_07_02

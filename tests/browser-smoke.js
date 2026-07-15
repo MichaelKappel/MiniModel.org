@@ -100,13 +100,13 @@ async function waitForPageReady(client, timeoutMs = 15000) {
       expression: `JSON.stringify({
         readyState: document.readyState,
         status: document.getElementById("modelCatalogStatus")?.dataset.state || "",
-        models: document.querySelectorAll("#modelCatalogList .catalog-model").length
+        catalogSettled: Boolean(document.querySelector("#modelCatalogList .catalog-model, #modelCatalogList .catalog-empty"))
       })`,
       returnByValue: true
     });
     lastState = result.result && result.result.value || "";
     const state = JSON.parse(lastState || "{}");
-    if (state.readyState === "complete" && state.models > 0 && (state.status === "ready" || state.status === "warning")) {
+    if (state.readyState === "complete" && state.catalogSettled && (state.status === "ready" || state.status === "warning")) {
       return state;
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -123,6 +123,22 @@ async function inspectViewport(client, width, height, url) {
   });
   await client.send("Page.navigate", { url });
   await waitForPageReady(client);
+  const initialResult = await client.send("Runtime.evaluate", {
+    expression: `JSON.stringify({
+      selectedAvailability: document.getElementById("modelCatalogAvailability")?.value || "",
+      modelCount: document.querySelectorAll("#modelCatalogList .catalog-model").length,
+      emptyText: document.querySelector("#modelCatalogList .catalog-empty")?.textContent.trim() || ""
+    })`,
+    returnByValue: true
+  });
+  const initial = JSON.parse(initialResult.result.value);
+  await client.send("Runtime.evaluate", {
+    expression: `(() => {
+      const select = document.getElementById("modelCatalogAvailability");
+      select.value = "all";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`
+  });
   const evaluated = await client.send("Runtime.evaluate", {
     expression: `(() => {
       window.scrollTo(0, 0);
@@ -135,6 +151,7 @@ async function inspectViewport(client, width, height, url) {
       const model = document.querySelector("#modelCatalogList .catalog-model");
       return JSON.stringify({
         viewport: { width: innerWidth, height: innerHeight },
+        initial: ${JSON.stringify(initial)},
         documentWidth: document.documentElement.scrollWidth,
         bodyWidth: document.body.scrollWidth,
         header: rect(".site-header"),
@@ -148,7 +165,7 @@ async function inspectViewport(client, width, height, url) {
         catalogHeading: rect("#modelCatalogHeading"),
         model: rect("#modelCatalogList .catalog-model"),
         modelCount: document.querySelectorAll("#modelCatalogList .catalog-model").length,
-        modelText: model ? model.textContent.replace(/\\s+/g, " ").trim() : "",
+        modelText: document.getElementById("modelCatalogList")?.textContent.replace(/\\s+/g, " ").trim() || "",
         totals: document.querySelector(".catalog-totals")?.textContent.replace(/\\s+/g, " ").trim() || "",
         status: document.getElementById("modelCatalogStatus")?.textContent || ""
       });
@@ -193,7 +210,10 @@ function stopBrowserTree(profile, browserProcess) {
 }
 
 function assertViewport(result, label) {
-  assert.ok(result.modelCount > 0, `${label}: no model cards rendered`);
+  assert.equal(result.initial.selectedAvailability, "active", `${label}: active peer view was not the default`);
+  assert.equal(result.initial.modelCount, 0, `${label}: unproven models appeared in the active peer view`);
+  assert.match(result.initial.emptyText, /no models currently have unexpired outside-network peer proof/i);
+  assert.equal(result.modelCount, 2, `${label}: all-models view did not render Qwen plus the fixture`);
   assert.ok(result.documentWidth <= result.viewport.width + 1, `${label}: document overflowed horizontally (${result.documentWidth} > ${result.viewport.width})`);
   assert.ok(result.bodyWidth <= result.viewport.width + 1, `${label}: body overflowed horizontally (${result.bodyWidth} > ${result.viewport.width})`);
   assert.ok(result.catalog && result.catalog.top < result.viewport.height, `${label}: catalog was not visible in the initial viewport`);
@@ -204,8 +224,16 @@ function assertViewport(result, label) {
   assert.match(result.modelText, /TinyRustLM Fixture q8_0/);
   assert.match(result.modelText, /not a conversational model/i);
   assert.match(result.modelText, /Source model\s*deterministic-smoke: tinyrustlm fixture/);
-  assert.match(result.modelText, /Share-ready, no active peer/);
+  assert.match(result.modelText, /Runtime fixture; not a conversational model/i);
+  assert.match(result.modelText, /tinyrustlm\/qwen2\.5-1\.5b-instruct-q4/i);
+  assert.match(result.modelText, /Qwen\/Qwen2\.5-1\.5B-Instruct/);
+  assert.match(result.modelText, /989aa7980e4cf806f80c7fef2b1adb7bc71aa306/);
+  assert.match(result.modelText, /Apache-2\.0/);
+  assert.match(result.modelText, /conversation proven full assistant pending/i);
+  assert.match(result.modelText, /strict json/i);
+  assert.match(result.modelText, /Awaiting current outside-network proof/i);
   assert.match(result.totals, /0 active models \/ 0 peers/);
+  assert.match(result.totals, /1 awaiting proof \/ 1 fixture/);
   assert.doesNotMatch(result.modelText, /https?:\/\//i, `${label}: raw peer URL leaked into the public model card`);
 }
 

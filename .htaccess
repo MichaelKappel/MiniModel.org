@@ -3,6 +3,7 @@ DirectoryIndex index.html
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  RewriteRule (^|/).*\.slm$ - [R=404,L,NC]
   RewriteRule ^(\.git|\.uai|agent-file-handoff)(/|$) - [F,L]
 </IfModule>
 

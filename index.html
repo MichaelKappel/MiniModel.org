@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MiniModel.org</title>
   <meta name="description" content="Browse checksum-bound .slm models prepared for verified local use and consent-based P2P sharing with TinyRustLM.">
-  <link rel="stylesheet" href="styles.css?v=20260713-catalog1">
-  <script src="catalog.js?v=20260713-catalog1" defer></script>
+  <link rel="stylesheet" href="styles.css?v=20260713-catalog3">
+  <script src="catalog.js?v=20260713-catalog3" defer></script>
 </head>
 <body>
   <header class="site-header" aria-label="MiniModel navigation">
@@ -56,7 +56,7 @@
           <div>
             <p class="eyebrow">Public model catalog</p>
             <h2 id="modelCatalogHeading">P2P models</h2>
-            <p>Every catalog model is shown. Active peer availability is checksum-verified and reported separately from share readiness.</p>
+            <p>Current P2P models appear only after Rust validates unexpired outside-network proof. Browse the separate catalog view for models awaiting a proven peer and runtime-only fixtures.</p>
           </div>
           <div class="catalog-totals" aria-label="Catalog totals">
             <span id="modelCatalogTotal">Loading catalog</span>
@@ -73,9 +73,10 @@
           <label class="catalog-filter">
             <span>Availability</span>
             <select id="modelCatalogAvailability">
+              <option value="active" selected>Active P2P peers</option>
               <option value="all">All catalog models</option>
-              <option value="active">Active P2P peers</option>
               <option value="share-ready">Awaiting an active peer</option>
+              <option value="fixture">Runtime fixtures</option>
             </select>
           </label>
           <span id="modelCatalogVisibleCount" class="catalog-visible-count">0 models</span>

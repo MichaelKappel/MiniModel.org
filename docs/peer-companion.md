@@ -446,6 +446,32 @@ Advanced details:
 
 Do not hide verification results behind vague success messages. A successful import should show exactly which model id, byte count, artifact SHA-256, manifest, peer URL, output path, and receipt path were accepted.
 
+## Outside-Network Seed Proof
+
+`inspect-external-probe-receipt` accepts only bounded, non-symlink JSON and validates an
+Ed25519-signed observer receipt against the exact two-lane fleet configuration and a local
+observer trust file. The observer key must be unrevoked, scoped to an independent external
+observer, and the receipt must be current for no more than one hour. Loopback, LAN, NAT
+hairpin, and same-host checks are not outside-network evidence.
+
+Receipt versions have deliberately different claim boundaries:
+
+- Version 0 uses key usage `minimodel-external-reachability-v0`. It binds status, companion
+  state, the piece set, and the first piece. It proves signed outside-network reachability and
+  a sampled content check, but not a complete model transfer.
+- Version 1 uses key usage `minimodel-external-complete-transfer-v1` and
+  `transfer_scope=complete-artifact-piece-set`. It must list status, companion state, the
+  piece set, and every fixed-name piece in canonical order. Rust verifies every observed
+  piece byte count and SHA-256 against the local piece-set contract, requires the complete
+  piece count and artifact byte count, and binds the downloaded artifact SHA-256 to the
+  fleet artifact. Only version 1 is complete-transfer evidence.
+
+Both versions remain announcement eligible under the MiniModel metadata contract for
+backward compatibility, but higher-level release campaigns must not count version 0 toward
+a complete-transfer gate. `prepare-seed-announcement` consumes a receipt once before it
+writes metadata, so a crash may conservatively consume proof but cannot create replayable
+publication metadata. Neither command publishes an announcement or serves model bytes.
+
 ## Test Plan
 
 Domain tests first:

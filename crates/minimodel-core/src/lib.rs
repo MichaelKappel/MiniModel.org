@@ -44,7 +44,9 @@ const SEED_FLEET_REPLICA_LANE_COUNT: usize = 2;
 const EXTERNAL_PROBE_RECEIPT_KIND: &str = "minimodel.external_reachability_receipt";
 const EXTERNAL_PROBE_TRUST_KIND: &str = "minimodel.external_probe_trust";
 const EXTERNAL_PROBE_NETWORK_SCOPE: &str = "outside-host-and-local-network";
-const EXTERNAL_PROBE_KEY_USAGE: &str = "minimodel-external-reachability-v0";
+const EXTERNAL_PROBE_KEY_USAGE_V0: &str = "minimodel-external-reachability-v0";
+const EXTERNAL_PROBE_KEY_USAGE_V1: &str = "minimodel-external-complete-transfer-v1";
+const EXTERNAL_PROBE_COMPLETE_TRANSFER_SCOPE: &str = "complete-artifact-piece-set";
 const EXTERNAL_PROBE_OBSERVER_SCOPE: &str = "external-independent-observer";
 const EXTERNAL_PROBE_MAX_VALIDITY_SECONDS: i64 = 60 * 60;
 const EXTERNAL_PROBE_CLOCK_SKEW_SECONDS: i64 = 5 * 60;
@@ -259,6 +261,10 @@ pub struct SeedPeerSourceAnnouncementReport {
     pub external_probe_receipt_id: String,
     pub external_probe_receipt_sha256: String,
     pub external_probe_expires_utc: String,
+    pub complete_transfer_verified: bool,
+    pub downloaded_piece_count: Option<usize>,
+    pub downloaded_artifact_byte_count: Option<u64>,
+    pub downloaded_artifact_sha256: Option<String>,
     pub externally_reachable: bool,
     pub announcement_eligible: bool,
     pub advertised: bool,
@@ -647,6 +653,7 @@ pub struct SeedFleetInspection {
 pub struct ExternalProbeReceiptInspection {
     pub receipt_path: String,
     pub receipt_sha256: String,
+    pub receipt_version: u64,
     pub receipt_id: String,
     pub observer_id: String,
     pub observer_key_id: String,
@@ -663,6 +670,10 @@ pub struct ExternalProbeReceiptInspection {
     pub probe_implementation_version: String,
     pub network_scope: String,
     pub signature_payload_sha256: String,
+    pub complete_transfer_verified: bool,
+    pub downloaded_piece_count: Option<usize>,
+    pub downloaded_artifact_byte_count: Option<u64>,
+    pub downloaded_artifact_sha256: Option<String>,
     pub externally_reachable: bool,
     pub announcement_eligible: bool,
     pub project_server_serves_model_bytes: bool,
@@ -766,6 +777,14 @@ struct ExternalProbeReceiptFile {
     expires_utc: String,
     probe_implementation_version: String,
     network_scope: String,
+    #[serde(default)]
+    transfer_scope: Option<String>,
+    #[serde(default)]
+    downloaded_piece_count: Option<usize>,
+    #[serde(default)]
+    downloaded_artifact_byte_count: Option<u64>,
+    #[serde(default)]
+    downloaded_artifact_sha256: Option<String>,
     checked_routes: Vec<ExternalProbeRouteFile>,
     signature: ExternalProbeSignatureFile,
 }
@@ -2677,6 +2696,7 @@ pub fn inspect_external_probe_receipt_path(
     Ok(ExternalProbeReceiptInspection {
         receipt_path: receipt_path.display().to_string(),
         receipt_sha256: sha256_prefixed(&receipt_bytes),
+        receipt_version: receipt.receipt_version,
         receipt_id: receipt.receipt_id,
         observer_id: receipt.observer_id,
         observer_key_id: receipt.observer_key_id,
@@ -2693,6 +2713,13 @@ pub fn inspect_external_probe_receipt_path(
         probe_implementation_version: receipt.probe_implementation_version,
         network_scope: receipt.network_scope,
         signature_payload_sha256: payload_sha256,
+        complete_transfer_verified: receipt.receipt_version == 1,
+        downloaded_piece_count: receipt.downloaded_piece_count,
+        downloaded_artifact_byte_count: receipt.downloaded_artifact_byte_count,
+        downloaded_artifact_sha256: receipt
+            .downloaded_artifact_sha256
+            .map(|value| normalize_sha256(&value))
+            .transpose()?,
         externally_reachable: true,
         announcement_eligible: true,
         project_server_serves_model_bytes: false,
@@ -2729,8 +2756,8 @@ fn validate_external_probe_receipt_header(
             "external probe receipt_kind must be {EXTERNAL_PROBE_RECEIPT_KIND}"
         ));
     }
-    if receipt.receipt_version != 0 {
-        return Err("external probe receipt_version must be 0".to_string());
+    if receipt.receipt_version > 1 {
+        return Err("external probe receipt_version must be 0 or 1".to_string());
     }
     validate_seed_fleet_id(&receipt.receipt_id, "receipt_id")?;
     validate_seed_fleet_id(&receipt.observer_id, "observer_id")?;
@@ -2757,6 +2784,41 @@ fn validate_external_probe_receipt_header(
     }
     if receipt.signature.kind != "ed25519" {
         return Err("external probe signature.kind must be ed25519".to_string());
+    }
+    if receipt.receipt_version == 0 {
+        if receipt.transfer_scope.is_some()
+            || receipt.downloaded_piece_count.is_some()
+            || receipt.downloaded_artifact_byte_count.is_some()
+            || receipt.downloaded_artifact_sha256.is_some()
+        {
+            return Err(
+                "external probe receipt version 0 must not contain complete-transfer fields"
+                    .to_string(),
+            );
+        }
+    } else {
+        if receipt.transfer_scope.as_deref() != Some(EXTERNAL_PROBE_COMPLETE_TRANSFER_SCOPE) {
+            return Err(format!(
+                "external probe transfer_scope must be {EXTERNAL_PROBE_COMPLETE_TRANSFER_SCOPE}"
+            ));
+        }
+        if receipt.downloaded_piece_count == Some(0)
+            || receipt.downloaded_piece_count.is_none()
+            || receipt.downloaded_artifact_byte_count == Some(0)
+            || receipt.downloaded_artifact_byte_count.is_none()
+            || receipt.downloaded_artifact_sha256.is_none()
+        {
+            return Err(
+                "external probe receipt version 1 requires positive complete-transfer fields"
+                    .to_string(),
+            );
+        }
+        normalize_sha256(
+            receipt
+                .downloaded_artifact_sha256
+                .as_deref()
+                .expect("complete-transfer hash was checked above"),
+        )?;
     }
     Ok(())
 }
@@ -2787,7 +2849,10 @@ fn validate_external_probe_trust<'a>(
             ));
         }
         if key.algorithm != "ed25519"
-            || key.usage != EXTERNAL_PROBE_KEY_USAGE
+            || !matches!(
+                key.usage.as_str(),
+                EXTERNAL_PROBE_KEY_USAGE_V0 | EXTERNAL_PROBE_KEY_USAGE_V1
+            )
             || key.observer_scope != EXTERNAL_PROBE_OBSERVER_SCOPE
         {
             return Err(format!(
@@ -2804,6 +2869,17 @@ fn validate_external_probe_trust<'a>(
         .ok_or_else(|| "external probe receipt observer key is not trusted".to_string())?;
     if key.revoked {
         return Err("external probe receipt observer key is revoked".to_string());
+    }
+    let expected_usage = if receipt.receipt_version == 0 {
+        EXTERNAL_PROBE_KEY_USAGE_V0
+    } else {
+        EXTERNAL_PROBE_KEY_USAGE_V1
+    };
+    if key.usage != expected_usage {
+        return Err(format!(
+            "external probe receipt version {} requires trusted key usage {expected_usage}",
+            receipt.receipt_version
+        ));
     }
     Ok(key)
 }
@@ -2839,18 +2915,31 @@ fn validate_external_probe_routes(
     let piece_set_text = std::str::from_utf8(&piece_set_bytes)
         .map_err(|_| "external probe piece set must be UTF-8".to_string())?;
     let piece_set = Manifest::parse(piece_set_text)?;
-    let first_piece = peer_piece_spec(&piece_set, 0)?;
-    let first_piece_path = endpoint.piece_dir.join(&first_piece.file_name);
-    let first_piece_bytes = fs::read(&first_piece_path)
-        .map_err(|error| format!("failed to read external probe sample piece: {error}"))?;
+    let piece_count = parse_usize(piece_set.require("chunks.count")?, "chunks.count")?;
+    if piece_count == 0 {
+        return Err("external probe piece set must contain at least one piece".to_string());
+    }
+    let pieces = (0..piece_count)
+        .map(|index| peer_piece_spec(&piece_set, index))
+        .collect::<Result<Vec<_>, _>>()?;
     let state_bytes = fs::read(&endpoint.state_path)
         .map_err(|error| format!("failed to read external probe companion state: {error}"))?;
-    let required_routes = [
+    let observed_piece_count = if receipt.receipt_version == 0 {
+        1
+    } else {
+        piece_count
+    };
+    let mut required_routes = vec![
         PEER_STATUS_ROUTE.to_string(),
         endpoint.serve.state_route.clone(),
         PEER_PIECE_SET_ROUTE.to_string(),
-        first_piece.file_name.clone(),
     ];
+    required_routes.extend(
+        pieces
+            .iter()
+            .take(observed_piece_count)
+            .map(|piece| piece.file_name.clone()),
+    );
     if receipt.checked_routes.len() != required_routes.len()
         || !receipt
             .checked_routes
@@ -2863,7 +2952,7 @@ fn validate_external_probe_routes(
             required_routes.join(",")
         ));
     }
-    for route in &receipt.checked_routes {
+    for (route_index, route) in receipt.checked_routes.iter().enumerate() {
         if route.http_status != 200 {
             return Err(format!(
                 "external probe route {} must have HTTP status 200",
@@ -2871,8 +2960,8 @@ fn validate_external_probe_routes(
             ));
         }
         let observed_sha = normalize_sha256(&route.body_sha256)?;
-        match route.route.as_str() {
-            PEER_STATUS_ROUTE => {
+        match route_index {
+            0 => {
                 if route.body_byte_count == 0 || route.body_byte_count > 32 * 1024 {
                     return Err(
                         "external probe peer status body size must be 1 through 32768 bytes"
@@ -2880,24 +2969,79 @@ fn validate_external_probe_routes(
                     );
                 }
             }
-            value if value == endpoint.serve.state_route => {
+            1 => {
                 require_external_probe_body(route, &state_bytes, &observed_sha)?;
             }
-            PEER_PIECE_SET_ROUTE => {
+            2 => {
                 require_external_probe_body(route, &piece_set_bytes, &observed_sha)?;
             }
-            value if value == first_piece.file_name => {
-                require_external_probe_body(route, &first_piece_bytes, &observed_sha)?;
-                if first_piece.byte_count != first_piece_bytes.len()
-                    || first_piece.sha256 != observed_sha
-                {
-                    return Err(
-                        "external probe sample piece does not match the piece-set contract"
-                            .to_string(),
-                    );
+            piece_route_index => {
+                let piece_index = piece_route_index - 3;
+                let piece = pieces.get(piece_index).ok_or_else(|| {
+                    "external probe contains an unexpected checked route".to_string()
+                })?;
+                let piece_bytes =
+                    fs::read(endpoint.piece_dir.join(&piece.file_name)).map_err(|error| {
+                        format!("failed to read external probe piece {piece_index}: {error}")
+                    })?;
+                require_external_probe_body(route, &piece_bytes, &observed_sha)?;
+                if piece.byte_count != piece_bytes.len() || piece.sha256 != observed_sha {
+                    return Err(format!(
+                        "external probe piece {piece_index} does not match the piece-set contract"
+                    ));
                 }
             }
-            _ => return Err("external probe contains an unexpected checked route".to_string()),
+        }
+    }
+    if receipt.receipt_version == 1 {
+        let artifact_byte_count = piece_set
+            .require("artifact.byte_count")?
+            .parse::<u64>()
+            .map_err(|_| {
+                "external probe artifact.byte_count must be a decimal integer".to_string()
+            })?;
+        let artifact_sha256 = normalize_sha256(piece_set.require("artifact.sha256")?)?;
+        if receipt.downloaded_piece_count != Some(piece_count) {
+            return Err(format!(
+                "external probe downloaded_piece_count must be {piece_count}"
+            ));
+        }
+        if receipt.downloaded_artifact_byte_count != Some(artifact_byte_count) {
+            return Err(format!(
+                "external probe downloaded_artifact_byte_count must be {artifact_byte_count}"
+            ));
+        }
+        let downloaded_artifact_sha256 = normalize_sha256(
+            receipt
+                .downloaded_artifact_sha256
+                .as_deref()
+                .ok_or_else(|| {
+                    "external probe downloaded_artifact_sha256 is required".to_string()
+                })?,
+        )?;
+        if downloaded_artifact_sha256 != artifact_sha256
+            || downloaded_artifact_sha256 != normalize_sha256(&receipt.artifact_sha256)?
+        {
+            return Err(
+                "external probe downloaded_artifact_sha256 does not match the piece set"
+                    .to_string(),
+            );
+        }
+        let mut next_offset = 0usize;
+        for (index, piece) in pieces.iter().enumerate() {
+            if piece.offset != next_offset {
+                return Err(format!(
+                    "external probe piece {index} is not contiguous in artifact order"
+                ));
+            }
+            next_offset = next_offset
+                .checked_add(piece.byte_count)
+                .ok_or_else(|| "external probe piece byte count overflowed".to_string())?;
+        }
+        if next_offset as u64 != artifact_byte_count {
+            return Err(
+                "external probe complete piece bytes do not equal artifact.byte_count".to_string(),
+            );
         }
     }
     Ok(())
@@ -2959,6 +3103,37 @@ fn external_probe_signature_payload(receipt: &ExternalProbeReceiptFile) -> Resul
         receipt.probe_implementation_version.clone(),
     );
     fields.insert("network_scope".to_string(), receipt.network_scope.clone());
+    if receipt.receipt_version == 1 {
+        fields.insert(
+            "transfer_scope".to_string(),
+            receipt
+                .transfer_scope
+                .clone()
+                .ok_or_else(|| "external probe transfer_scope is required".to_string())?,
+        );
+        fields.insert(
+            "downloaded_piece_count".to_string(),
+            receipt
+                .downloaded_piece_count
+                .ok_or_else(|| "external probe downloaded_piece_count is required".to_string())?
+                .to_string(),
+        );
+        fields.insert(
+            "downloaded_artifact_byte_count".to_string(),
+            receipt
+                .downloaded_artifact_byte_count
+                .ok_or_else(|| {
+                    "external probe downloaded_artifact_byte_count is required".to_string()
+                })?
+                .to_string(),
+        );
+        fields.insert(
+            "downloaded_artifact_sha256".to_string(),
+            receipt.downloaded_artifact_sha256.clone().ok_or_else(|| {
+                "external probe downloaded_artifact_sha256 is required".to_string()
+            })?,
+        );
+    }
     fields.insert(
         "checked_routes.count".to_string(),
         receipt.checked_routes.len().to_string(),
@@ -4942,6 +5117,10 @@ pub fn prepare_seed_peer_source_announcement_path(
         external_probe_receipt_id: probe.receipt_id,
         external_probe_receipt_sha256: probe.receipt_sha256,
         external_probe_expires_utc: probe.expires_utc,
+        complete_transfer_verified: probe.complete_transfer_verified,
+        downloaded_piece_count: probe.downloaded_piece_count,
+        downloaded_artifact_byte_count: probe.downloaded_artifact_byte_count,
+        downloaded_artifact_sha256: probe.downloaded_artifact_sha256,
         externally_reachable: true,
         announcement_eligible: true,
         advertised: false,
@@ -4952,9 +5131,9 @@ pub fn prepare_seed_peer_source_announcement_path(
 }
 
 fn external_reachability_announcement_value(probe: &ExternalProbeReceiptInspection) -> Value {
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "proof_kind": "minimodel.external_reachability_proof",
-        "proof_version": 0,
+        "proof_version": probe.receipt_version,
         "receipt_id": probe.receipt_id,
         "receipt_sha256": probe.receipt_sha256,
         "observer_id": probe.observer_id,
@@ -4972,12 +5151,50 @@ fn external_reachability_announcement_value(probe: &ExternalProbeReceiptInspecti
         "probe_implementation_version": probe.probe_implementation_version,
         "network_scope": probe.network_scope,
         "signature_payload_sha256": probe.signature_payload_sha256,
+        "complete_transfer_verified": probe.complete_transfer_verified,
         "externally_reachable": true,
         "announcement_eligible": true,
         "project_server_serves_model_bytes": false,
         "project_server_runs_model_bytes": false,
         "project_server_proxies_model_bytes": false
-    })
+    });
+    if probe.complete_transfer_verified {
+        let object = value
+            .as_object_mut()
+            .expect("external reachability announcement is an object");
+        object.insert(
+            "transfer_scope".to_string(),
+            Value::String(EXTERNAL_PROBE_COMPLETE_TRANSFER_SCOPE.to_string()),
+        );
+        object.insert(
+            "downloaded_piece_count".to_string(),
+            Value::Number(
+                (probe
+                    .downloaded_piece_count
+                    .expect("complete transfer has a piece count") as u64)
+                    .into(),
+            ),
+        );
+        object.insert(
+            "downloaded_artifact_byte_count".to_string(),
+            Value::Number(
+                probe
+                    .downloaded_artifact_byte_count
+                    .expect("complete transfer has an artifact byte count")
+                    .into(),
+            ),
+        );
+        object.insert(
+            "downloaded_artifact_sha256".to_string(),
+            Value::String(
+                probe
+                    .downloaded_artifact_sha256
+                    .clone()
+                    .expect("complete transfer has an artifact SHA-256"),
+            ),
+        );
+    }
+    value
 }
 
 fn reserve_external_probe_receipt_once(
@@ -7851,7 +8068,12 @@ fn validate_announcement_external_reachability(
         &proof_label,
         "minimodel.external_reachability_proof",
     )?;
-    require_json_u64_field(proof, "proof_version", &proof_label, 0)?;
+    let proof_version = json_required_usize(proof, "proof_version", &proof_label)?;
+    if proof_version > 1 {
+        return Err(format!(
+            "{proof_label} proof_version must be 0 or 1, got {proof_version}"
+        ));
+    }
     require_json_bool_true(proof, "externally_reachable", &proof_label)?;
     require_json_bool_true(proof, "announcement_eligible", &proof_label)?;
     require_json_bool_false(proof, "project_server_serves_model_bytes", &proof_label)?;
@@ -7931,10 +8153,55 @@ fn validate_announcement_external_reachability(
         &proof_label,
         EXTERNAL_PROBE_NETWORK_SCOPE,
     )?;
+    let expected_route_count = if proof_version == 0 {
+        if let Some(value) = proof.get("complete_transfer_verified") {
+            if value.as_bool() != Some(false) {
+                return Err(format!(
+                    "{proof_label} version 0 complete_transfer_verified must be false"
+                ));
+            }
+        }
+        4
+    } else {
+        require_json_bool_true(proof, "complete_transfer_verified", &proof_label)?;
+        require_json_string_field(
+            proof,
+            "transfer_scope",
+            &proof_label,
+            EXTERNAL_PROBE_COMPLETE_TRANSFER_SCOPE,
+        )?;
+        let downloaded_piece_count =
+            json_required_usize(proof, "downloaded_piece_count", &proof_label)?;
+        if downloaded_piece_count == 0 {
+            return Err(format!(
+                "{proof_label} downloaded_piece_count must be positive"
+            ));
+        }
+        let downloaded_byte_count =
+            json_required_u64(proof, "downloaded_artifact_byte_count", &proof_label)?;
+        if downloaded_byte_count == 0 {
+            return Err(format!(
+                "{proof_label} downloaded_artifact_byte_count must be positive"
+            ));
+        }
+        let downloaded_artifact_sha256 = normalize_sha256(&json_required_string(
+            proof,
+            "downloaded_artifact_sha256",
+            &proof_label,
+        )?)?;
+        if downloaded_artifact_sha256 != artifact_sha256 {
+            return Err(format!(
+                "{proof_label} downloaded_artifact_sha256 does not match announcement artifact_sha256"
+            ));
+        }
+        3usize
+            .checked_add(downloaded_piece_count)
+            .ok_or_else(|| format!("{proof_label} checked route count overflowed"))?
+    };
     let route_count = json_required_usize(proof, "checked_route_count", &proof_label)?;
-    if route_count != 4 {
+    if route_count != expected_route_count {
         return Err(format!(
-            "{proof_label} checked_route_count must be 4, got {route_count}"
+            "{proof_label} checked_route_count must be {expected_route_count}, got {route_count}"
         ));
     }
     let implementation = json_required_string(proof, "probe_implementation_version", &proof_label)?;
@@ -8081,6 +8348,13 @@ fn json_optional_string(value: &Value, key: &str) -> Option<String> {
 
 fn json_required_usize(value: &Value, key: &str, label: &str) -> Result<usize, String> {
     json_optional_usize(value, key, label)?.ok_or_else(|| format!("{label} missing integer {key}"))
+}
+
+fn json_required_u64(value: &Value, key: &str, label: &str) -> Result<u64, String> {
+    value
+        .get(key)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| format!("{label} missing non-negative integer {key}"))
 }
 
 fn json_optional_usize(value: &Value, key: &str, label: &str) -> Result<Option<usize>, String> {

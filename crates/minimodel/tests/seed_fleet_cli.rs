@@ -186,6 +186,7 @@ fn inspect_external_probe_receipt_accepts_only_current_independently_signed_evid
         570,
         "outside-host-and-local-network",
         false,
+        0,
     );
 
     let output = inspect_external_probe(&fixture, &signed.receipt_path, &signed.trust_path);
@@ -308,11 +309,12 @@ fn inspect_external_probe_receipt_accepts_only_current_independently_signed_evid
         -600,
         "outside-host-and-local-network",
         false,
+        0,
     );
     assert_external_probe_rejected(&fixture, &expired, "receipt is expired");
 
     let local_only =
-        write_external_probe_fixture(&fixture, "local-only", -30, 570, "same-host-only", false);
+        write_external_probe_fixture(&fixture, "local-only", -30, 570, "same-host-only", false, 0);
     assert_external_probe_rejected(
         &fixture,
         &local_only,
@@ -326,6 +328,7 @@ fn inspect_external_probe_receipt_accepts_only_current_independently_signed_evid
         570,
         "outside-host-and-local-network",
         true,
+        0,
     );
     assert_external_probe_rejected(&fixture, &revoked, "observer key is revoked");
 
@@ -360,6 +363,94 @@ fn inspect_external_probe_receipt_accepts_only_current_independently_signed_evid
         &unknown_field_path,
         &signed.trust_path,
         "unknown field",
+    );
+}
+
+#[test]
+fn inspect_external_probe_receipt_v1_requires_and_reports_complete_piece_transfer() {
+    let Some(fixture) = build_fleet_fixture("external-receipt") else {
+        return;
+    };
+    let signed = write_external_probe_fixture(
+        &fixture,
+        "complete-transfer",
+        -30,
+        570,
+        "outside-host-and-local-network",
+        false,
+        1,
+    );
+
+    let output = inspect_external_probe(&fixture, &signed.receipt_path, &signed.trust_path);
+    assert!(output.status.success(), "{}", output_text(&output));
+    let text = output_text(&output);
+    assert!(text.contains("receipt_version: 1"), "{text}");
+    assert!(text.contains("complete_transfer_verified: true"), "{text}");
+    let piece_count = signed.receipt["downloaded_piece_count"]
+        .as_u64()
+        .expect("complete-transfer piece count");
+    assert!(
+        text.contains(&format!("downloaded_piece_count: {piece_count}")),
+        "{text}"
+    );
+    assert_eq!(
+        signed.receipt["checked_routes"]
+            .as_array()
+            .expect("checked routes")
+            .len(),
+        3 + piece_count as usize
+    );
+
+    let catalog_entry = fixture
+        .root
+        .join("share/tiny-test-model-q8.catalog-entry.v0.json");
+    let announcement_path = fixture.root.join("seed-a.complete.announcement.v1.json");
+    let prepared = Command::new(minimodel_bin())
+        .args([
+            "prepare-seed-announcement",
+            &catalog_entry.to_string_lossy(),
+            &announcement_path.to_string_lossy(),
+            &signed.receipt_path.to_string_lossy(),
+            &signed.trust_path.to_string_lossy(),
+            &fixture.config.to_string_lossy(),
+        ])
+        .output()
+        .expect("prepare complete-transfer proof-gated announcement");
+    assert!(prepared.status.success(), "{}", output_text(&prepared));
+    let announcement: Value = serde_json::from_slice(
+        &std::fs::read(&announcement_path).expect("read complete-transfer announcement"),
+    )
+    .expect("parse complete-transfer announcement");
+    let proof = &announcement["external_reachability"];
+    assert_eq!(proof["proof_version"], 1);
+    assert_eq!(proof["complete_transfer_verified"], true);
+    assert_eq!(proof["transfer_scope"], "complete-artifact-piece-set");
+    assert_eq!(proof["downloaded_piece_count"], piece_count);
+    let feed_path = fixture
+        .root
+        .join("complete-transfer-announcement-feed.json");
+    let feed = Command::new(minimodel_bin())
+        .args([
+            "write-peer-source-announcement-feed",
+            &feed_path.to_string_lossy(),
+            &announcement_path.to_string_lossy(),
+        ])
+        .output()
+        .expect("validate complete-transfer announcement feed");
+    assert!(feed.status.success(), "{}", output_text(&feed));
+
+    let mut incomplete = signed.receipt;
+    incomplete["checked_routes"]
+        .as_array_mut()
+        .expect("checked routes")
+        .pop();
+    let incomplete_path = fixture.root.join("external-receipt-incomplete-v1.json");
+    write_json(&incomplete_path, &incomplete);
+    assert_external_probe_path_rejected(
+        &fixture,
+        &incomplete_path,
+        &signed.trust_path,
+        "checked_routes must be exactly",
     );
 }
 
@@ -729,17 +820,50 @@ fn write_external_probe_fixture(
     expires_offset_seconds: i64,
     network_scope: &str,
     revoked: bool,
+    receipt_version: u64,
 ) -> SignedExternalProbeFixture {
     let piece_dir = fixture.root.join("share/tiny-test-model-q8.peer-pieces");
     let piece_set_path = piece_dir.join("minimodel.peer_piece_set.v0");
     let piece_set_bytes = std::fs::read(&piece_set_path).expect("read fixture piece set");
     let piece_set_text = std::str::from_utf8(&piece_set_bytes).expect("piece set is UTF-8");
-    let first_piece_name = piece_set_field(piece_set_text, "piece.0.file");
-    let first_piece_bytes =
-        std::fs::read(piece_dir.join(&first_piece_name)).expect("read first fixture piece");
+    let piece_count = piece_set_field(piece_set_text, "chunks.count")
+        .parse::<usize>()
+        .expect("piece count is usize");
     let state_bytes =
         std::fs::read(fixture.root.join("seed-a.state.json")).expect("read lane state");
     let status_bytes = br#"{"status":"fixture-external-observer-reached-peer"}"#;
+    let mut checked_routes = vec![
+        serde_json::json!({
+            "route": "minimodel.peer_status.v0.json",
+            "http_status": 200,
+            "body_byte_count": status_bytes.len(),
+            "body_sha256": sha256_prefixed(status_bytes)
+        }),
+        serde_json::json!({
+            "route": "minimodel.peer_companion_state.v0.json",
+            "http_status": 200,
+            "body_byte_count": state_bytes.len(),
+            "body_sha256": sha256_prefixed(&state_bytes)
+        }),
+        serde_json::json!({
+            "route": "minimodel.peer_piece_set.v0",
+            "http_status": 200,
+            "body_byte_count": piece_set_bytes.len(),
+            "body_sha256": sha256_prefixed(&piece_set_bytes)
+        }),
+    ];
+    let observed_piece_count = if receipt_version == 1 { piece_count } else { 1 };
+    for index in 0..observed_piece_count {
+        let piece_name = piece_set_field(piece_set_text, &format!("piece.{index}.file"));
+        let piece_bytes =
+            std::fs::read(piece_dir.join(&piece_name)).expect("read external probe fixture piece");
+        checked_routes.push(serde_json::json!({
+            "route": piece_name,
+            "http_status": 200,
+            "body_byte_count": piece_bytes.len(),
+            "body_sha256": sha256_prefixed(&piece_bytes)
+        }));
+    }
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("test clock follows Unix epoch")
@@ -749,7 +873,7 @@ fn write_external_probe_fixture(
 
     let mut receipt = serde_json::json!({
         "receipt_kind": "minimodel.external_reachability_receipt",
-        "receipt_version": 0,
+        "receipt_version": receipt_version,
         "receipt_id": format!("fixture-receipt-{label}"),
         "observer_id": "fixture-external-observer",
         "observer_key_id": "fixture-observer-key-v0",
@@ -763,38 +887,25 @@ fn write_external_probe_fixture(
         "expires_utc": format_test_utc(now + expires_offset_seconds),
         "probe_implementation_version": "fixture-observer-v0",
         "network_scope": network_scope,
-        "checked_routes": [
-            {
-                "route": "minimodel.peer_status.v0.json",
-                "http_status": 200,
-                "body_byte_count": status_bytes.len(),
-                "body_sha256": sha256_prefixed(status_bytes)
-            },
-            {
-                "route": "minimodel.peer_companion_state.v0.json",
-                "http_status": 200,
-                "body_byte_count": state_bytes.len(),
-                "body_sha256": sha256_prefixed(&state_bytes)
-            },
-            {
-                "route": "minimodel.peer_piece_set.v0",
-                "http_status": 200,
-                "body_byte_count": piece_set_bytes.len(),
-                "body_sha256": sha256_prefixed(&piece_set_bytes)
-            },
-            {
-                "route": first_piece_name,
-                "http_status": 200,
-                "body_byte_count": first_piece_bytes.len(),
-                "body_sha256": sha256_prefixed(&first_piece_bytes)
-            }
-        ],
+        "checked_routes": checked_routes,
         "signature": {
             "kind": "ed25519",
             "payload_sha256": "",
             "value": ""
         }
     });
+    if receipt_version == 1 {
+        receipt["transfer_scope"] = Value::String("complete-artifact-piece-set".to_string());
+        receipt["downloaded_piece_count"] = Value::Number((piece_count as u64).into());
+        receipt["downloaded_artifact_byte_count"] = Value::Number(
+            piece_set_field(piece_set_text, "artifact.byte_count")
+                .parse::<u64>()
+                .expect("artifact byte count is u64")
+                .into(),
+        );
+        receipt["downloaded_artifact_sha256"] =
+            Value::String(piece_set_field(piece_set_text, "artifact.sha256"));
+    }
     let payload = external_probe_signature_payload(&receipt);
     receipt["signature"]["payload_sha256"] = Value::String(sha256_prefixed(&payload));
     receipt["signature"]["value"] = Value::String(format!(
@@ -809,7 +920,11 @@ fn write_external_probe_fixture(
             "key_id": "fixture-observer-key-v0",
             "observer_id": "fixture-external-observer",
             "algorithm": "ed25519",
-            "usage": "minimodel-external-reachability-v0",
+            "usage": if receipt_version == 0 {
+                "minimodel-external-reachability-v0"
+            } else {
+                "minimodel-external-complete-transfer-v1"
+            },
             "observer_scope": "external-independent-observer",
             "public_key_base64": BASE64_STANDARD.encode(public_key),
             "public_key_sha256": sha256_prefixed(&public_key),
@@ -898,6 +1013,20 @@ fn external_probe_signature_payload(receipt: &Value) -> Vec<u8> {
             .expect("receipt_version is u64")
             .to_string(),
     );
+    if receipt["receipt_version"].as_u64() == Some(1) {
+        for key in ["transfer_scope", "downloaded_artifact_sha256"] {
+            fields.insert(key.to_string(), json_string(receipt, key));
+        }
+        for key in ["downloaded_piece_count", "downloaded_artifact_byte_count"] {
+            fields.insert(
+                key.to_string(),
+                receipt[key]
+                    .as_u64()
+                    .unwrap_or_else(|| panic!("{key} is u64"))
+                    .to_string(),
+            );
+        }
+    }
     let routes = receipt["checked_routes"]
         .as_array()
         .expect("checked_routes is an array");

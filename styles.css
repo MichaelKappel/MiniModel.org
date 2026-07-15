@@ -352,6 +352,11 @@ h3 {
   border-color: rgba(79, 198, 179, 0.5);
 }
 
+.catalog-model[data-availability="fixture"] {
+  border-style: dashed;
+  box-shadow: none;
+}
+
 .catalog-model-header {
   display: flex;
   align-items: flex-start;
@@ -392,6 +397,12 @@ h3 {
   color: var(--teal);
   background: rgba(79, 198, 179, 0.08);
   border-color: rgba(79, 198, 179, 0.42);
+}
+
+.availability-badge.fixture {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .catalog-model-description {

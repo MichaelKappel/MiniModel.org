@@ -1,5 +1,5 @@
 profile: minimodel.workspace.v32
-updated_utc: 2026-07-07T21:28:00Z
+updated_utc: 2026-08-09T22:06:41Z
 site: MiniModel.org
 workspace_root: E:\Source\Rust\MiniModel.org
 coordinator: E:\Source\Rust\workspace.uai
@@ -53,3 +53,34 @@ current_state:
   - `docs/peer-companion.md` now includes July 3 report triage: accepted engineering guidance includes multi-crate Rust boundaries, strict Tauri IPC/capabilities, actor/message-passing network workers, OS secure storage, local metadata stores, signed/checksummed releases, and domain-first tests; deferred lanes include WebTransport, WebRTC, mDNS, DHT/bootstrap, UPnP/NAT-PMP, Iroh/QUIC, Rust-libp2p, BitTorrent-style chunking, Pear, Bare, and Hypercore; rejected current-product lanes include project-operated STUN/TURN, relay, rendezvous, signaling, bootstrap, or DHT infrastructure as a default dependency and any project-server model-byte proxy/cache/serve/run path.
   - The live public-safe export is verified.
   - Direct public .uai and agent-file-handoff access is denied.
+
+credit_window_handoff_2026_08_09:
+  authority: Current private restart account. It supersedes incompatible present-tense status in older dated memory while preserving historical evidence.
+  reason: The user ended the available work window after the release and exact publisher were validated but before publication began.
+  repository:
+    clean_release_clone: E:\Source\Worktrees\rust-site-release-20260809\MiniModel.org
+    branch: master
+    upstream: origin/master
+    head_before_handoff_commit: f9ad446ca4c637bb06c380502985ec4fcf972a09
+  repaired_gate:
+    implementation_commit: 072d9b3a7b045be55574a4482c458b5853c4147a
+    result: Node 12 of 12, cargo fmt, denied-warning Clippy, and the complete Rust workspace passed, including 97 minimodel-core tests.
+    correction: Older memory describing 21 Rust failures and one Node failure is historical and no longer current for this clean release clone.
+  frozen_release:
+    version: 1.0.0
+    release_content_commit: 83eb39cffcb54e032138dba3aecf77ceb35f6ad7
+    file_count: 34
+    total_bytes: 546253
+    manifest_sha256: 4052e62970b1968b2849a14954d6420d9a3e063c4e6e6257d5b3523ca4c8dc83
+    model_byte_count: 0
+  publication:
+    status: not_started_not_published
+    publisher_status: Exact closure publisher and authenticated-prefix resume are source-controlled.
+    start_command: '& .\tools\deploy-site.ps1 -Publish'
+    truth_boundary: MiniModel.org remains catalog and direct-P2P discovery metadata authority; the project site does not proxy or host model bytes. A green source gate is not live publication or outside-network P2P proof.
+  next_actions:
+    - Confirm the clean clone is exactly synchronized with origin/master.
+    - Start the exact publisher without changing frozen release bytes.
+    - Preserve all failed or interrupted receipts and resume only after authenticating any staged prefix.
+    - Require authoritative transport and public HTTPS readback before a success receipt or publication claim.
+    - Keep campaign counters at 0/20 models, 0/50 browser rounds, 0/25 live memory rounds, 0/40 outside-proven lanes, and 0/20 announcements until objective receipts exist.

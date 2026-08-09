@@ -1,0 +1,4 @@
+profile: minimodel.next-recursive-prompt.v1
+updated_utc: 2026-08-09T22:06:41Z
+prompt: >-
+  Continue MiniModel.org from the frozen 1.0.0 release closure in E:\Source\Worktrees\rust-site-release-20260809\MiniModel.org. Read workspace.uai and the private handoff memory first. Verify the repository is clean and synchronized with origin/master, retain the passing Node 12/12 and complete Rust gate from implementation commit 072d9b3a7b045be55574a4482c458b5853c4147a, and confirm the exact 34-file, 546253-byte, zero-model-byte closure hashes to 4052e62970b1968b2849a14954d6420d9a3e063c4e6e6257d5b3523ca4c8dc83. Start publication with `& .\tools\deploy-site.ps1 -Publish`, preserve append-only attempt receipts, and require authoritative transport plus public HTTPS readback before claiming success. Keep model and campaign claims at their receipt-backed values; do not add hosted model bytes, legacy support, or compatibility shims.

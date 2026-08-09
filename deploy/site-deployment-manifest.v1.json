@@ -1,0 +1,238 @@
+{
+  "schema": "uaix.static_site_deployment_manifest.v1",
+  "site": "minimodel.org",
+  "origin": "https://minimodel.org",
+  "version": "1.0.0",
+  "release_date": "2026-08-09",
+  "source_commit": "83eb39cffcb54e032138dba3aecf77ceb35f6ad7",
+  "source_tree": "78b4213c4202ea7e12c711ae377c1958b5515d16",
+  "transport_profile": "MiniModel.org",
+  "files": [
+    {
+      "path": ".htaccess",
+      "bytes": 283,
+      "sha256": "920c9fbc195fe9a8cf39dd8f586a969c9fa19c1a0e676b5bb42de52f4e13a296",
+      "https_readback_path": null
+    },
+    {
+      "path": ".well-known/site-release-history.json",
+      "bytes": 993,
+      "sha256": "e55add3368bf5dc1c2e02f711354be5b0f43be6e264469ae30660fc03aa8cab8",
+      "https_readback_path": "/.well-known/site-release-history.json"
+    },
+    {
+      "path": ".well-known/uaix-talisman.txt",
+      "bytes": 1277,
+      "sha256": "088f97bbb5a7b760baf2ff226d17cb9faf18a3fa7128e021259aebade3ae0b8d",
+      "https_readback_path": "/.well-known/uaix-talisman.txt"
+    },
+    {
+      "path": "catalog.js",
+      "bytes": 33140,
+      "sha256": "7870691f12f764f4fa5ae88cdf789b772b65c623ae3eb30cfe4826ad255a705b",
+      "https_readback_path": "/catalog.js"
+    },
+    {
+      "path": "catalog/.htaccess",
+      "bytes": 291,
+      "sha256": "1e4e40d6c0a6af76e591617b16fc4d2b6b1b32f1218f68157a42d65053a42751",
+      "https_readback_path": null
+    },
+    {
+      "path": "catalog/models.v0.json",
+      "bytes": 6810,
+      "sha256": "3e8d69229cdfa3d33db3e0269bb0c53fd9e039a8d7c88a72ae4d6334543865c5",
+      "https_readback_path": "/catalog/models.v0.json"
+    },
+    {
+      "path": "catalog/peer-source-announcements.v0.json",
+      "bytes": 408,
+      "sha256": "bf403331e481759980dfcec9af73a14cd36a8e48e8b261441560e51178ef228f",
+      "https_readback_path": "/catalog/peer-source-announcements.v0.json"
+    },
+    {
+      "path": "catalog/qwen2.5-1.5b-instruct-q4.catalog-entry.v0.json",
+      "bytes": 3332,
+      "sha256": "69b78a1844da26b3a2e90a523053db40dabca2b41a7866582a4849faa7e759c1",
+      "https_readback_path": "/catalog/qwen2.5-1.5b-instruct-q4.catalog-entry.v0.json"
+    },
+    {
+      "path": "catalog/qwen2.5-1.5b-instruct-q4.conversation-evidence.v1",
+      "bytes": 2337,
+      "sha256": "2f6003390c9abf2759cd0ba29578b5b48521ba05d5b514785d593563de77893b",
+      "https_readback_path": "/catalog/qwen2.5-1.5b-instruct-q4.conversation-evidence.v1"
+    },
+    {
+      "path": "catalog/qwen2.5-1.5b-instruct-q4.minimodel-peer-offer",
+      "bytes": 134634,
+      "sha256": "77af679872c5b032682bf1af59eefced63f90948115bb182c018a5b34c63fffb",
+      "https_readback_path": "/catalog/qwen2.5-1.5b-instruct-q4.minimodel-peer-offer"
+    },
+    {
+      "path": "catalog/qwen2.5-1.5b-instruct-q4.minimodel.manifest.v0",
+      "bytes": 136737,
+      "sha256": "9c18522fd6165ca1d8f8b18fc75f04c7414ee5a9d9e8266f11ff807c76140b06",
+      "https_readback_path": "/catalog/qwen2.5-1.5b-instruct-q4.minimodel.manifest.v0"
+    },
+    {
+      "path": "catalog/qwen2.5-1.5b-instruct-q4.modification-notice.md",
+      "bytes": 1638,
+      "sha256": "935987071984a1a25eeb3be69656e716d85d336deb53c7015824cf5354444980",
+      "https_readback_path": "/catalog/qwen2.5-1.5b-instruct-q4.modification-notice.md"
+    },
+    {
+      "path": "catalog/qwen2.5-1.5b-instruct-q4.quality-evaluation.v1",
+      "bytes": 1086,
+      "sha256": "0ccd579bd83b154bd24f7d66aca339246f08de74ba0d49a333a0f8112b1289e8",
+      "https_readback_path": "/catalog/qwen2.5-1.5b-instruct-q4.quality-evaluation.v1"
+    },
+    {
+      "path": "catalog/qwen2.5-1.5b-instruct-q4.source-license.txt",
+      "bytes": 11343,
+      "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+      "https_readback_path": "/catalog/qwen2.5-1.5b-instruct-q4.source-license.txt"
+    },
+    {
+      "path": "docs/catalog-boundary.md",
+      "bytes": 32599,
+      "sha256": "38a9a1a8e8201d898ba5e638e5d5cb900044550f5fab16373b5bc772495c2c07",
+      "https_readback_path": "/docs/catalog-boundary.md"
+    },
+    {
+      "path": "docs/manifest-v0.md",
+      "bytes": 28698,
+      "sha256": "9b2501f9866498015bba5a741330b7b9f48edca39730d79df825f1be5a7e1ea8",
+      "https_readback_path": "/docs/manifest-v0.md"
+    },
+    {
+      "path": "docs/peer-companion.md",
+      "bytes": 34895,
+      "sha256": "4f42bb81b00b6c9e2dc9e12820cb7c100387f3d4288baef1daaa29479b3d422e",
+      "https_readback_path": "/docs/peer-companion.md"
+    },
+    {
+      "path": "docs/verifier-mvp.md",
+      "bytes": 42405,
+      "sha256": "daa6142b51123ace3465d97fbe86c6b3fd943309eeb8fa236346be1853fdd72b",
+      "https_readback_path": "/docs/verifier-mvp.md"
+    },
+    {
+      "path": "examples/catalog-entry.v0.json",
+      "bytes": 2360,
+      "sha256": "d177d0a925c14a79f4cdcc84feba3c768952f813ce5e7a239eba330c0469dda3",
+      "https_readback_path": "/examples/catalog-entry.v0.json"
+    },
+    {
+      "path": "examples/minimodel.manifest.v0.example",
+      "bytes": 1427,
+      "sha256": "5eebf916973e1595df3163c65d86d4959aad46009203f7b5fd17b251a8678686",
+      "https_readback_path": "/examples/minimodel.manifest.v0.example"
+    },
+    {
+      "path": "examples/share-metadata.v0.json",
+      "bytes": 3247,
+      "sha256": "2fa604932eefb8f6ba2652c9bf9e72f56860a4ba7917628663f95f00588859b0",
+      "https_readback_path": "/examples/share-metadata.v0.json"
+    },
+    {
+      "path": "examples/tiny-test-model-q8.minimodel-peer-import-request.json",
+      "bytes": 1301,
+      "sha256": "0da0ab649e6789aa51ca9460d6e3c93211ef92c3a22062c2725b5b3782d2206f",
+      "https_readback_path": "/examples/tiny-test-model-q8.minimodel-peer-import-request.json"
+    },
+    {
+      "path": "examples/tiny-test-model-q8.minimodel-peer-offer",
+      "bytes": 1052,
+      "sha256": "9da5ada1eb8dd9bb77b8e46cea624f380808aee82568f555b6420fd59fa8d642",
+      "https_readback_path": "/examples/tiny-test-model-q8.minimodel-peer-offer"
+    },
+    {
+      "path": "examples/tiny-test-model-q8.minimodel.manifest.v0",
+      "bytes": 2019,
+      "sha256": "d26a7e3a445f30f2c7ff3493e50f95bb7798d07546d357dae7f930ba861f5eab",
+      "https_readback_path": "/examples/tiny-test-model-q8.minimodel.manifest.v0"
+    },
+    {
+      "path": "index.html",
+      "bytes": 14125,
+      "sha256": "4a41fd327c452d422083e54cd13e2c1f744bc935fbcdc0f5c0891f3b4a66007f",
+      "https_readback_path": "/index.html"
+    },
+    {
+      "path": "LICENSE.txt",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "https_readback_path": "/LICENSE.txt"
+    },
+    {
+      "path": "llms-full.txt",
+      "bytes": 1707,
+      "sha256": "32e0b5c5982e6abf91b52a16632b66e32fe959dfe7ce0a1b2cff1ddc120863b4",
+      "https_readback_path": "/llms-full.txt"
+    },
+    {
+      "path": "llms.txt",
+      "bytes": 674,
+      "sha256": "cb179d2dcf3ab627fecb542a1be33f2276d6973241fca8a0fbcd0d2461490bcc",
+      "https_readback_path": "/llms.txt"
+    },
+    {
+      "path": "ROADMAP.md",
+      "bytes": 17635,
+      "sha256": "864ca719389346124b03d356930cb4615c56edd48b449ed757b9dd6fd11b302d",
+      "https_readback_path": "/ROADMAP.md"
+    },
+    {
+      "path": "robots.txt",
+      "bytes": 154,
+      "sha256": "be2018ab31e0fe270d66ce1770ff12dad7529db405a535ab9569449447e72589",
+      "https_readback_path": "/robots.txt"
+    },
+    {
+      "path": "sitemap.xml",
+      "bytes": 901,
+      "sha256": "77b6d652cebcbab6e4dc885a3865301d113aa3005008a066791e1094d3ad4aa2",
+      "https_readback_path": "/sitemap.xml"
+    },
+    {
+      "path": "styles.css",
+      "bytes": 12888,
+      "sha256": "3d262ee6f3a565a15f2f7708a50dc0977ec17b013a9d2f42bf70ba38b3a5f369",
+      "https_readback_path": "/styles.css"
+    },
+    {
+      "path": "updates/index.html",
+      "bytes": 2208,
+      "sha256": "6b9ddf364e607580371e7c96986d64e5d8f27e180ff3fa3e8c77750f61df2bac",
+      "https_readback_path": "/updates/index.html"
+    },
+    {
+      "path": ".well-known/site-release.json",
+      "bytes": 292,
+      "sha256": "f2b669c3b921a9e4638062b4d52597b16983bf2e24fde429f0f19eba9327a07a",
+      "https_readback_path": "/.well-known/site-release.json"
+    }
+  ],
+  "route_smokes": [
+    {
+      "path": "/",
+      "contains": "Version 1.0.0"
+    },
+    {
+      "path": "/updates/",
+      "contains": "1.0.0 - 2026-08-09"
+    },
+    {
+      "path": "/catalog/models.v0.json",
+      "contains": "minimodel.catalog"
+    },
+    {
+      "path": "/docs/catalog-boundary.md",
+      "contains": "Catalog Boundary"
+    },
+    {
+      "path": "/.well-known/site-release.json",
+      "contains": "minimodel.org@1.0.0"
+    }
+  ]
+}

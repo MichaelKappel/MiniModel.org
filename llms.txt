@@ -1,0 +1,20 @@
+# MiniModel.org
+
+MiniModel.org is the metadata-only public catalog and direct P2P discovery
+authority for TinyRustLM `.slm` artifacts. It does not host or proxy model
+bytes. Local Rust verification remains authoritative before import.
+
+Primary routes:
+
+- /catalog/models.v0.json
+- /catalog/peer-source-announcements.v0.json
+- /docs/catalog-boundary.md
+- /docs/peer-companion.md
+- /updates/
+- /.well-known/site-release.json
+- /.well-known/site-release-history.json
+
+Current site release: 1.0.0, released and last published 2026-08-09.
+
+Do not infer active peers, model quality, public reachability, campaign
+completion, or hosted model availability from a catalog row alone.

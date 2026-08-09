@@ -1,0 +1,21 @@
+{
+  "schema": "uaix.site_release_history.v1",
+  "site_id": "minimodel.org",
+  "origin": "https://minimodel.org",
+  "current_release_id": "minimodel.org@1.0.0",
+  "releases": [
+    {
+      "release_id": "minimodel.org@1.0.0",
+      "version": "1.0.0",
+      "release_date": "2026-08-09",
+      "last_publish_date": "2026-08-09",
+      "summary": "Establishes the first evidence-oriented catalog release after cross-platform hash-bound catalog verification passed.",
+      "changes": [
+        "Published the current metadata-only catalog, documentation, examples, and checksum-bound availability feed.",
+        "Made catalog hashes stable across Windows and Unix checkouts for deterministic Rust and browser verification.",
+        "Added visible version, release date, last-published date, and permanent human- and machine-readable release histories.",
+        "Kept model artifacts outside the public deployment closure; the catalog remains metadata and discovery only."
+      ]
+    }
+  ]
+}

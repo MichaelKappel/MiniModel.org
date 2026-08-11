@@ -1,7 +1,7 @@
-profile: minimodel.short-term-memory.v15
-updated_utc: 2026-08-09T22:06:41Z
+profile: minimodel.short-term-memory.v16
+updated_utc: 2026-08-11T15:04:23Z
 current_state:
-  - 2026-07-13 CURRENT production catalog truth: MiniModel.org deploys 25 metadata/site files and no model bytes. The home-page catalog contains Qwen2.5-1.5B-Instruct q4 as conversation-proven/full-assistant-pending plus an explicitly non-conversational runtime fixture. The active view has zero models and zero peers because neither row has current outside-network proof. Retired default-demo JSON and fixture `.slm` routes return 404, and every `.slm` route is denied. TinyRustLM consumes catalog metadata and obtains model bytes only from local files or its paired companion. Authority: `E:/Source/Rust/TinyRustLM.com/wiki/runtime-mirust/reports/tinyrustlm-web-companion-production-memory-2026-07-13.md`, SHA256 `ea8c1633e92e9b119840615ee25e0448f356c69f0d8c3def8172a262576bff3b`.
+  - 2026-08-11 CURRENT production catalog truth: MiniModel.org 1.0.0 deploys 34 metadata/site files and no model bytes. The home-page catalog contains Qwen2.5-1.5B-Instruct q4 as conversation-proven/full-assistant-pending plus an explicitly non-conversational runtime fixture. The active view has zero models and zero peers because neither row has current outside-network proof. Retired default-demo JSON and fixture `.slm` routes return 404, and every `.slm` route is denied. TinyRustLM consumes catalog metadata and obtains model bytes only from local files or its paired companion. Authority: `deploy/receipts/site-deployment-20260811T145917Z.json`, SHA256 `1e402f83dbeaa301ef3de46ee2094239b9e5cadcdf4e5f8ecc7c03fd38f28e53`.
   - 2026-07-03 MiniModel peer-import preflight is implemented: `preflight-peer-import-request <request-json> <manifest> <output.preflight>` validates the TinyRustLM peer-import request and manifest, rejects project-server peer hosts, fetches only the peer's `minimodel.peer_piece_set.v0` metadata, writes `minimodel.peer_import_preflight`, records `peer_piece_bytes_fetched=false` and `artifact_bytes_fetched=false`, and leaves full chunk transfer to `import-peer-request`.
   - MiniModel.org is a Rust-first metadata, verifier, and direct peer-to-peer tiny model package exchange workspace.
   - Source options are user-owned local files/lists, user-triggered Hugging Face metadata discovery/conversion handoff, one-command `prepare-peer-share` sender packaging, drift-checked catalog-entry writing from manifest plus peer-offer proof, late `add-peer-source` peer availability metadata, portable `write-peer-source-announcement` availability metadata, maintainer-side `apply-peer-source-announcements` drift checks, batch `write-catalog-snapshot-with-announcements` publication, metadata-only `write-catalog-snapshot` reuse, optional catalog-listed consenting peer sources, direct known-peer HTTP piece serve/fetch, one-command TinyRustLM peer-import request execution, and future broader P2P discovery/relay.
@@ -15,9 +15,12 @@ current_state:
   - File Handoff setup is initialized with placeholder-only active intake.
   - Public boundary remains no hosted model weights and no server-side inference.
 
-credit_window_handoff_2026_08_09:
-  current_truth: MiniModel.org release 1.0.0 is locally validated and ready for exact publication, but publication has not started. The project site closure contains 34 files, 546253 bytes, and zero model artifacts.
-  repaired_gate: Commit 072d9b3a7b045be55574a4482c458b5853c4147a passes Node 12/12, cargo fmt, denied-warning Clippy, and the complete Rust workspace including 97 minimodel-core tests.
+publication_1_0_0_2026_08_11:
+  current_truth: MiniModel.org 1.0.0 is published and exact public readback is verified. The project site closure contains 34 files, 546253 bytes, and zero model artifacts.
+  fresh_gate: Publisher commit b5a0248d76ce543eb3ce02fc016ff611b7e41c19 passes Node 12/12, real Chromium desktop/mobile smoke, cargo fmt, denied-warning Clippy, and the complete locked Rust workspace including 97 minimodel-core tests.
   release_identity: Content commit 83eb39cffcb54e032138dba3aecf77ceb35f6ad7; manifest SHA256 4052e62970b1968b2849a14954d6420d9a3e063c4e6e6257d5b3523ca4c8dc83.
-  start_command: '& .\tools\deploy-site.ps1 -Publish'
-  prohibition: Do not call source readiness publication, do not host model bytes, do not count local probes as outside P2P proof, and do not advance campaign counters without current bound receipts.
+  success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json; SHA256 1e402f83dbeaa301ef3de46ee2094239b9e5cadcdf4e5f8ecc7c03fd38f28e53; pushed in commit 854c09b7ef52a02fd7901b6e32ac1e800db63e50.
+  proof: All 34 transport identities, 32 exact public HTTPS readbacks, five route smokes, the release marker, and an independent second 32-file readback passed.
+  availability_truth: The public active view remains zero models and zero peers; one trained model awaits current outside-network proof and one fixture is runtime-smoke-only.
+  next_action: Do not replay this terminal release. Reconcile the seven public origins and handoffs.
+  prohibition: Do not host model bytes, count local probes as outside P2P proof, or advance campaign counters without current bound receipts.

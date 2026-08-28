@@ -76,8 +76,8 @@ provenance-labeled, and noncontradictory.
 
 ## Publication
 
-- Last published: no new publication is claimed by this documentation update.
-- Release date: not assigned for this clean-slate update.
+- Last published: `1.1.0` on 2026-08-28.
+- Release date: 2026-08-28.
 - Update: current direct-P2P, SLM2, cryptographic verification, privacy, and
   two-lane MemoryEndpoints boundaries documented.
 

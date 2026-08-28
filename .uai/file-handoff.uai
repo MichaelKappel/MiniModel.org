@@ -1,5 +1,5 @@
-profile: minimodel.file-handoff.v2
-updated_utc: 2026-08-11T15:04:23Z
+profile: minimodel.file-handoff.v3
+updated_utc: 2026-08-28T00:00:00Z
 site: MiniModel.org
 setup_route: https://uaix.org/en-us/tools/ai-memory-package-wizard/#setup-file-handoff
 active_buckets:
@@ -7,21 +7,26 @@ active_buckets:
   improvement: agent-file-handoff/Improvement/
 rules:
   - Scan Content and Improvement before broad work.
-  - Use accepted intake as site content, roadmap input, manifest design input, or implementation evidence.
-  - Record disposition, proof of use, and final active-intake state in .uai/intake-outcome-ledger.uai.
-  - Remove processed source-site copies unless a human keeps them active.
+  - Record accepted intake, disposition, proof of use, and final active-intake state in .uai/intake-outcome-ledger.uai.
+  - Keep private data, secrets, model bytes, and invitation URLs out of public handoffs.
+  - Remove processed source-site copies unless a human explicitly keeps them active.
 completion_gate: Active buckets must be empty or placeholder-only after processing.
 
-publication_handoff_2026_08_11:
-  status: published_and_readback_verified
+current_handoff:
+  status: release_candidate_not_yet_published
+  version: 1.1.0
+  public_contract: Empty current SLM2 composition catalog and peer-announcement feed; exact-peer import or explicit pinned-source local conversion only.
+  retired_contract: All public .slm-era catalog, manifest-v0, example, and request/script handoff routes are removed and require 404 or 410 readback.
+  next: Complete gates, commit source, generate and commit deployment evidence, push and prove remote equality, publish once, verify HTTPS bytes and retired routes, then commit and push the immutable receipt.
+
+memory_endpoints:
+  direct_agent_lane: Ecosystem agents use MemoryEndpoints.com directly for long-term memory, meetings, handoffs, and coordination across all maintained sites.
+  user_plugin_lane: A TinyRustLM.com Connect user signs in to MemoryEndpoints.com and explicitly selects its plugin for TinyRustLM.com Connect long-term memory.
+  duplicate_memory: Additional prelaunch memory copies are allowed for resilience only while synchronized, secret-safe, provenance-labeled, and noncontradictory.
+  evidence: Configuration or reachability is not a live-round receipt.
+
+historical_reference:
   version: 1.0.0
-  publisher_commit: b5a0248d76ce543eb3ce02fc016ff611b7e41c19
-  release_content_commit: 83eb39cffcb54e032138dba3aecf77ceb35f6ad7
-  manifest_sha256: 4052e62970b1968b2849a14954d6420d9a3e063c4e6e6257d5b3523ca4c8dc83
-  closure: 34 files, 546253 bytes, zero model bytes
+  status: superseded_historical_evidence_only
   success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json
-  success_receipt_sha256: 1e402f83dbeaa301ef3de46ee2094239b9e5cadcdf4e5f8ecc7c03fd38f28e53
-  success_receipt_commit: 854c09b7ef52a02fd7901b6e32ac1e800db63e50
-  proof: Node 12/12, real desktop/mobile browser smoke, complete locked Rust gates, authenticated transport, exact public HTTPS readback, route smokes, release marker, and independent second readback passed.
-  restart: Treat 1.0.0 as terminally published. Reconcile all seven origins; use a new complete versioned closure for any future MiniModel.org byte change.
-  warning: This site publication does not prove model quality, active peer reachability, MemoryEndpoints continuity, or campaign completion.
+  warning: Preserve the receipt as history; do not preserve its obsolete hosted acquisition semantics in the current path.

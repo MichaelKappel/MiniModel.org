@@ -4,6 +4,9 @@ DirectoryIndex index.html
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteRule (^|/).*\.slm$ - [R=404,L,NC]
+  RewriteRule ^catalog/(models\.v0\.json|peer-source-announcements\.v0\.json|qwen2\.5-1\.5b-instruct-q4\..*)$ - [R=410,L,NC]
+  RewriteRule ^docs/(manifest-v0|verifier-mvp)\.md$ - [R=410,L,NC]
+  RewriteRule ^examples/.*$ - [R=410,L,NC]
   RewriteRule ^(\.git|\.uai|agent-file-handoff)(/|$) - [F,L]
 </IfModule>
 

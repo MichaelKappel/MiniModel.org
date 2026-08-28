@@ -1,305 +1,249 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
+const repositoryRoot = path.resolve(__dirname, "..");
 const catalogApi = require("../catalog.js");
 
-const repositoryRoot = path.resolve(__dirname, "..");
-const siteOrigin = "https://minimodel.org";
+function read(relativePath) {
+  return fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
+}
 
 function readJson(relativePath) {
-  return JSON.parse(fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8"));
+  return JSON.parse(read(relativePath));
 }
 
-function currentCatalog() {
-  return readJson("catalog/models.v0.json");
+function sha(character) {
+  return `sha256:${character.repeat(64)}`;
 }
 
-function announcementFor(entry, peerBaseUrl, overrides = {}) {
-  const normalizedPeerUrl = peerBaseUrl.endsWith("/") ? peerBaseUrl : `${peerBaseUrl}/`;
-  const checkedUtc = overrides.checkedUtc || "2026-07-13T00:00:00Z";
-  const expiresUtc = overrides.expiresUtc || "2026-07-13T00:30:00Z";
-  const laneId = overrides.laneId || "seed-a";
+function validEntry() {
   return {
-    announcement_kind: "minimodel.peer_source_announcement",
-    announcement_version: 1,
-    created_utc: checkedUtc,
-    announcement_status: "peer-source-externally-verified-metadata-only",
-    model_id: entry.model_id,
-    artifact_kind: "slm",
-    artifact_byte_count: entry.artifact_byte_count,
-    artifact_sha256: entry.artifact_sha256,
-    peer_offer_route: entry.peer_offer_route,
-    peer_offer_sha256: entry.peer_offer_sha256,
-    peer_offer_merkle_root_sha256: entry.peer_offer_merkle_root_sha256,
-    peer_offer_chunk_count: entry.peer_offer_chunk_count,
-    catalog_entry_sha256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    project_server_serves_model_bytes: false,
-    project_server_runs_model_bytes: false,
-    project_server_proxies_model_bytes: false,
-    peer_source: {
-      source_kind: "known-direct-http-peer-v0",
-      transport: "direct-http-piece-server-v0",
-      peer_base_url: peerBaseUrl,
-      consent_status: "publisher-declared-consenting-peer",
-      project_server_serves_model_bytes: false,
-      project_server_runs_model_bytes: false
+    entry_id: "qwen/qwen3-0.6b",
+    display_name: "Qwen3 0.6B",
+    description: "One exact qualified six-member SLM2 composition.",
+    source: {
+      repository: "Qwen/Qwen3-0.6B",
+      revision: "a".repeat(40),
+      source_lock_sha256: sha("b"),
     },
-    external_reachability: {
-      proof_kind: "minimodel.external_reachability_proof",
-      proof_version: 0,
-      receipt_id: `receipt-${laneId}`,
-      receipt_sha256: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      observer_id: "outside-observer",
-      observer_key_id: "outside-observer-key",
-      observer_public_key_sha256: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      fleet_id: "fixture-seed-fleet",
-      lane_id: laneId,
-      model_id: entry.model_id,
-      public_base_url: normalizedPeerUrl,
-      artifact_sha256: entry.artifact_sha256,
-      piece_set_sha256: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      checked_utc: checkedUtc,
-      expires_utc: expiresUtc,
-      checked_route_count: 4,
-      probe_implementation_version: "fixture-observer-v1",
-      network_scope: "outside-host-and-local-network",
-      signature_payload_sha256: "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-      externally_reachable: true,
-      announcement_eligible: true,
-      project_server_serves_model_bytes: false,
-      project_server_runs_model_bytes: false,
-      project_server_proxies_model_bytes: false
-    }
+    license: {
+      route: "/licenses/qwen3.txt",
+      review_status: "reviewed",
+    },
+    composition: {
+      composition_id: sha("c"),
+      member_count: 6,
+      members: catalogApi.MEMBER_NAMES.map((name, index) => ({
+        name,
+        bytes: index + 1,
+        sha256: sha(String(index + 1)),
+        schema: `tinyrustlm.member.${index + 1}.v1`,
+      })),
+    },
+    profiles: {
+      conversion: "tinyrustlm.converter.v1",
+      quantization: "tinyrustlm.mixed-q8.v1",
+      runtime: "tinyrustlm.browser.v1",
+    },
+    qualification: {
+      status: "qualified",
+      receipt_id: "qualification/qwen3-0.6b",
+      receipt_sha256: sha("d"),
+      numerical_status: "passed",
+      browser_status: "passed",
+      quality_status: "qualified",
+    },
+    peer_announcement_ids: [],
   };
 }
 
-function feedFor(announcements) {
+function validCatalog(entries = []) {
   return {
-    announcement_catalog_version: 0,
-    announcement_catalog_kind: "minimodel.peer_source_announcement_catalog",
-    generated_at: "2026-07-13T00:00:00Z",
-    publisher_id: "minimodel.org",
-    publisher_key_id: "minimodel-development-key-v0",
+    schema: catalogApi.CATALOG_SCHEMA,
+    catalog_id: "minimodel.org/prelaunch",
+    generated_at_utc: "2026-08-28T00:00:00Z",
     project_server_serves_model_bytes: false,
-    project_server_runs_model_bytes: false,
     project_server_proxies_model_bytes: false,
-    announcements
+    project_server_runs_inference: false,
+    qualification_policy: "exact-current-evidence-required",
+    entries,
   };
 }
 
-test("current catalog renders every entry with description, source, and honest availability", () => {
-  const catalog = currentCatalog();
-  const views = catalogApi.buildCatalogView(catalog, [], { siteOrigin });
-  const fixture = views.find((view) => view.modelId === "tinyrustlm/tiny-test-model-q8");
-  const qwen = views.find((view) => view.modelId === "tinyrustlm/qwen2.5-1.5b-instruct-q4");
+function validPeerFeed(announcements = []) {
+  return {
+    schema: catalogApi.PEER_SCHEMA,
+    feed_id: "minimodel.org/prelaunch-peers",
+    generated_at_utc: "2026-08-28T00:00:00Z",
+    project_server_serves_model_bytes: false,
+    project_server_proxies_model_bytes: false,
+    announcements,
+  };
+}
 
-  assert.equal(views.length, catalog.entries.length);
-  assert.equal(views.length, 2);
-  assert.equal(views[0].modelId, "tinyrustlm/qwen2.5-1.5b-instruct-q4");
-  assert.equal(views[1].modelId, "tinyrustlm/tiny-test-model-q8");
+function validAnnouncement() {
+  return {
+    announcement_id: "peer/qwen3/lane-1",
+    composition_id: sha("c"),
+    piece_set_sha256: sha("e"),
+    peer_base_url: "https://peer.example.net/models/qwen3/",
+    protocol_profile: "minimodel.direct-piece.v1",
+    consent_status: "explicit",
+    outside_proof_status: "current-passed",
+    expires_utc: "2099-01-01T00:00:00Z",
+  };
+}
 
-  assert.ok(fixture);
-  assert.match(fixture.description, /not a conversational model/i);
-  assert.equal(fixture.sourceModel, "tinyrustlm fixture");
-  assert.equal(fixture.catalogRole, "runtime-fixture");
-  assert.equal(fixture.availability, "fixture");
-  assert.equal(fixture.activePeerCount, 0);
-  assert.match(fixture.availabilityLabel, /runtime fixture/i);
-  assert.match(fixture.qualityBoundary, /runtime smoke only/i);
-
-  assert.ok(qwen);
-  assert.equal(qwen.catalogRole, "p2p-model");
-  assert.equal(qwen.sourceModel, "Qwen/Qwen2.5-1.5B-Instruct");
-  assert.equal(qwen.sourceRevision, "989aa7980e4cf806f80c7fef2b1adb7bc71aa306");
-  assert.equal(qwen.artifactByteCount, 969648576);
-  assert.equal(qwen.qualityTier, "conversation proven full assistant pending");
-  assert.equal(qwen.limitations, "strict json");
-  assert.equal(qwen.activePeerCount, 0);
-  assert.equal(qwen.availability, "share-ready");
-  assert.match(qwen.availabilityLabel, /awaiting current outside-network proof/i);
+test("publishes a truthful empty current SLM2 catalog and peer feed", () => {
+  const catalog = readJson("catalog/compositions.v1.json");
+  const peers = readJson("catalog/peer-announcements.v1.json");
+  assert.equal(catalogApi.validateCatalog(catalog), catalog);
+  assert.deepEqual(catalogApi.validatePeerFeed(peers, catalog), []);
+  assert.deepEqual(catalogApi.buildCatalogView(catalog, peers), []);
+  assert.equal(catalog.entries.length, 0);
+  assert.equal(peers.announcements.length, 0);
 });
 
-test("current Rust proof-gated announcements create active availability and deduplicate peer URLs", () => {
-  const catalog = currentCatalog();
-  const entry = catalog.entries.find((candidate) => candidate.model_id === "tinyrustlm/qwen2.5-1.5b-instruct-q4");
-  assert.ok(entry);
-  const feed = feedFor([
-    announcementFor(entry, "https://peer-one.example/pieces", { laneId: "seed-a" }),
-    announcementFor(entry, "https://peer-one.example/pieces/", { laneId: "seed-a" }),
-    announcementFor(entry, "https://peer-two.example/pieces", { laneId: "seed-b" })
-  ]);
-  const announcements = catalogApi.validateAnnouncementFeed(feed, catalog, {
-    siteOrigin,
-    now: new Date("2026-07-13T00:10:00Z")
-  });
-  const views = catalogApi.buildCatalogView(catalog, announcements, { siteOrigin });
-
-  assert.equal(views[0].availability, "active");
-  assert.equal(views[0].activePeerCount, 2);
-  assert.equal(views[0].provenLaneCount, 2);
-  assert.equal(views[0].availabilityLabel, "2 active peers");
-  assert.equal(views[0].oldestProofCheckedUtc, "2026-07-13T00:00:00Z");
-  assert.equal(views[0].nextProofExpiryUtc, "2026-07-13T00:30:00Z");
-  assert.equal(Object.prototype.hasOwnProperty.call(views[0], "peerUrls"), false);
+test("projects a qualified composition to explicit pinned local conversion", () => {
+  const [view] = catalogApi.buildCatalogView(validCatalog([validEntry()]), validPeerFeed());
+  assert.equal(view.availability, "local-conversion");
+  assert.equal(view.availabilityLabel, "Pinned local conversion");
+  assert.equal(view.peerCount, 0);
 });
 
-test("legacy metadata-only announcements cannot create active availability", () => {
-  const catalog = currentCatalog();
-  const announcement = announcementFor(catalog.entries[0], "https://peer.example/pieces");
-  announcement.announcement_version = 0;
-  announcement.announcement_status = "peer-source-available-metadata-only";
-  delete announcement.external_reachability;
+test("projects only a current explicitly consenting direct peer", () => {
+  const entry = validEntry();
+  entry.peer_announcement_ids.push("peer/qwen3/lane-1");
+  const [view] = catalogApi.buildCatalogView(
+    validCatalog([entry]),
+    validPeerFeed([validAnnouncement()]),
+    { now: new Date("2026-08-28T00:00:00Z") },
+  );
+  assert.equal(view.availability, "peer");
+  assert.equal(view.peerCount, 1);
+});
 
+test("rejects unknown catalog fields and project-server model behavior", () => {
   assert.throws(
-    () => catalogApi.validateAnnouncementFeed(feedFor([announcement]), catalog, {
-      siteOrigin,
-      now: new Date("2026-07-13T00:10:00Z")
-    }),
-    /version 1 external proof/i
+    () => catalogApi.validateCatalog({ ...validCatalog(), legacy_alias: true }),
+    /unknown or missing/,
+  );
+  assert.throws(
+    () => catalogApi.validateCatalog({ ...validCatalog(), project_server_serves_model_bytes: true }),
+    /off project servers/,
   );
 });
 
-test("expired or overlong external proof fails closed", () => {
-  const catalog = currentCatalog();
-  const entry = catalog.entries[0];
-  const expired = announcementFor(entry, "https://peer.example/pieces", {
-    expiresUtc: "2026-07-13T00:09:59Z"
-  });
-  const overlong = announcementFor(entry, "https://peer.example/pieces", {
-    expiresUtc: "2026-07-13T01:00:01Z"
-  });
-  for (const announcement of [expired, overlong]) {
-    assert.throws(
-      () => catalogApi.validateAnnouncementFeed(feedFor([announcement]), catalog, {
-        siteOrigin,
-        now: new Date("2026-07-13T00:10:00Z")
-      }),
-      /stale, expired, or outside the one-hour validity boundary/i
-    );
+test("rejects incomplete or drifted six-member composition closure", () => {
+  const entry = validEntry();
+  entry.composition.members.pop();
+  entry.composition.member_count = 5;
+  assert.throws(
+    () => catalogApi.validateCatalog(validCatalog([entry])),
+    /exactly six members/,
+  );
+
+  const duplicate = validEntry();
+  duplicate.composition.members[5].name = duplicate.composition.members[0].name;
+  assert.throws(
+    () => catalogApi.validateCatalog(validCatalog([duplicate])),
+    /member set is not closed/,
+  );
+});
+
+test("rejects an unqualified catalog entry", () => {
+  const entry = validEntry();
+  entry.qualification.browser_status = "untested";
+  assert.throws(
+    () => catalogApi.validateCatalog(validCatalog([entry])),
+    /qualification is incomplete/,
+  );
+});
+
+test("rejects expired and project-hosted peer announcements", () => {
+  const catalog = validCatalog([validEntry()]);
+  const expired = validAnnouncement();
+  expired.expires_utc = "2026-08-27T00:00:00Z";
+  assert.throws(
+    () => catalogApi.validatePeerFeed(validPeerFeed([expired]), catalog, {
+      now: new Date("2026-08-28T00:00:00Z"),
+    }),
+    /expired/,
+  );
+
+  const hosted = validAnnouncement();
+  hosted.peer_base_url = "https://minimodel.org/models/";
+  assert.throws(
+    () => catalogApi.validatePeerFeed(validPeerFeed([hosted]), catalog, {
+      now: new Date("2026-08-28T00:00:00Z"),
+    }),
+    /non-project peer/,
+  );
+});
+
+test("publishes only current catalog routes and explicitly retires former routes", () => {
+  const html = read("index.html");
+  const sitemap = read("sitemap.xml");
+  const apache = read(".htaccess");
+  for (const current of [
+    "/catalog/compositions.v1.json",
+    "/catalog/peer-announcements.v1.json",
+    "/docs/slm2-composition.md",
+    "/docs/acquisition-contract.md",
+  ]) {
+    assert.match(html + sitemap, new RegExp(current.replaceAll(".", "\\.")));
+  }
+  assert.doesNotMatch(html + sitemap, /models\.v0|manifest\.v0|minimodel-peer-offer/i);
+  assert.match(apache, /R=410/);
+  assert.match(apache, /models\\\.v0/);
+});
+
+test("keeps the two MemoryEndpoints uses separate from model transport", () => {
+  const memory = read("docs/memory-endpoints.md");
+  const talisman = read(".well-known/uaix-talisman.txt");
+  for (const required of [
+    "agent-to-agent long-term memory",
+    "meetings",
+    "handoffs",
+    "coordination",
+    "TinyRustLM.com Connect",
+    "credentials",
+    "consent",
+    "provenance",
+    "receipts",
+    "not MiniModel",
+  ]) {
+    assert.match(memory + talisman, new RegExp(required.replaceAll(".", "\\."), "i"));
   }
 });
 
-test("external proof identity drift fails closed", () => {
-  const catalog = currentCatalog();
-  const announcement = announcementFor(catalog.entries[0], "https://peer.example/pieces");
-  announcement.external_reachability.public_base_url = "https://different.example/pieces/";
-
-  assert.throws(
-    () => catalogApi.validateAnnouncementFeed(feedFor([announcement]), catalog, {
-      siteOrigin,
-      now: new Date("2026-07-13T00:10:00Z")
-    }),
-    /public_base_url does not match/i
-  );
+test("binds visible and machine-readable release identity", () => {
+  const release = readJson(".well-known/site-release.json");
+  const history = readJson(".well-known/site-release-history.json");
+  const html = read("index.html");
+  const updates = read("updates/index.html");
+  assert.equal(release.release_id, "minimodel.org@1.1.0");
+  assert.equal(release.release_date, "2026-08-28");
+  assert.equal(history.current_release_id, release.release_id);
+  assert.match(html, /Version 1\.1\.0/);
+  assert.match(updates, /1\.1\.0 - 2026-08-28/);
 });
 
-test("source-backed entries get a useful fallback description", () => {
-  const catalog = currentCatalog();
-  const entry = catalog.entries[0];
-  catalog.entries = [entry];
-  delete entry.description;
-  entry.source_huggingface_model_id = "ExampleOrg/Tiny-Source";
-
-  const [view] = catalogApi.buildCatalogView(catalog, [], { siteOrigin });
-
-  assert.equal(view.sourceKind, "Hugging Face");
-  assert.equal(view.sourceModel, "ExampleOrg/Tiny-Source");
-  assert.match(view.description, /converted from Hugging Face source ExampleOrg\/Tiny-Source/);
-});
-
-test("catalog validation rejects project-hosted model bytes", () => {
-  const catalog = currentCatalog();
-  catalog.entries[0].project_server_serves_model_bytes = true;
-
-  assert.throws(
-    () => catalogApi.validateCatalog(catalog, { siteOrigin }),
-    /project_server_serves_model_bytes=false/
-  );
-});
-
-test("announcement binding drift fails closed before availability is applied", () => {
-  const catalog = currentCatalog();
-  const entry = catalog.entries[0];
-  const announcement = announcementFor(entry, "https://peer.example/pieces");
-  announcement.artifact_sha256 = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-
-  assert.throws(
-    () => catalogApi.validateAnnouncementFeed(feedFor([announcement]), catalog, {
-      siteOrigin,
-      now: new Date("2026-07-13T00:10:00Z")
-    }),
-    /artifact_sha256 does not match/
-  );
-  const [view] = catalogApi.buildCatalogView(catalog, [], { siteOrigin });
-  assert.equal(view.activePeerCount, 0);
-});
-
-test("filters search descriptions and separate active models from share-ready models", () => {
-  const views = [
-    {
-      modelId: "org/active",
-      displayName: "Active Model",
-      description: "Conversational model",
-      sourceModel: "org/source-a",
-      quantization: "q8_0",
-      availability: "active"
-    },
-    {
-      modelId: "org/ready",
-      displayName: "Ready Model",
-      description: "Code completion model",
-      sourceModel: "org/source-b",
-      quantization: "q4_0",
-      availability: "share-ready"
-    },
-    {
-      modelId: "org/fixture",
-      displayName: "Runtime Fixture",
-      description: "Structural smoke fixture",
-      sourceModel: "deterministic fixture",
-      quantization: "q8_0",
-      availability: "fixture"
-    }
-  ];
-
-  assert.deepEqual(catalogApi.filterCatalogViews(views, "code", "all").map((view) => view.modelId), ["org/ready"]);
-  assert.deepEqual(catalogApi.filterCatalogViews(views, "", "active").map((view) => view.modelId), ["org/active"]);
-  assert.deepEqual(catalogApi.filterCatalogViews(views, "source-b", "share-ready").map((view) => view.modelId), ["org/ready"]);
-  assert.deepEqual(catalogApi.filterCatalogViews(views, "", "fixture").map((view) => view.modelId), ["org/fixture"]);
-});
-
-test("published Qwen catalog metadata routes exist without publishing model bytes", () => {
-  const catalog = currentCatalog();
-  const entry = catalog.entries.find((candidate) => candidate.model_id === "tinyrustlm/qwen2.5-1.5b-instruct-q4");
-
-  assert.ok(entry);
-  assert.equal(entry.project_server_serves_model_bytes, false);
-  assert.equal(entry.project_server_runs_model_bytes, false);
-  assert.equal(entry.artifact_project_server_url, null);
-  for (const routeName of ["model_card_route", "manifest_route", "peer_offer_route", "license_route"]) {
-    const route = entry[routeName];
-    const resolved = new URL(route, "https://minimodel.org/catalog/models.v0.json");
-    assert.equal(resolved.origin, siteOrigin);
-    assert.equal(fs.existsSync(path.join(repositoryRoot, resolved.pathname)), true, `${routeName} must exist`);
-  }
-  assert.equal(fs.existsSync(path.join(repositoryRoot, "models", "qwen2.5-1.5b-instruct-q4.slm")), false);
-});
-
-test("published announcement feed hash matches the catalog binding", async () => {
-  const catalog = currentCatalog();
-  const feedText = fs.readFileSync(path.join(repositoryRoot, "catalog/peer-source-announcements.v0.json"), "utf8");
-  const actual = await catalogApi.sha256Prefixed(feedText, crypto.webcrypto);
-
-  assert.equal(actual, catalog.peer_source_announcement_routes[0].sha256);
-});
-
-test("public site configuration retires hosted demo bytes and denies every slm route", () => {
-  assert.equal(fs.existsSync(path.join(repositoryRoot, "catalog/default-demo.v0.json")), false);
-  const apacheRules = fs.readFileSync(path.join(repositoryRoot, ".htaccess"), "utf8");
-  assert.match(apacheRules, /RewriteRule \(\^\|\/\)\.\*\\\.slm\$ - \[R=404,L,NC\]/);
+test("contains no current instruction-file acquisition or remote inference fallback", () => {
+  const current = [
+    read("index.html"),
+    read("ROADMAP.md"),
+    read("llms.txt"),
+    read("llms-full.txt"),
+    read("docs/acquisition-contract.md"),
+    read("docs/peer-companion.md"),
+  ].join("\n");
+  assert.match(current, /no invisible peer rotation|There is no invisible peer rotation/i);
+  assert.match(current, /no instruction-file|instruction-file download/i);
+  assert.match(current, /remote inference/i);
+  assert.doesNotMatch(current, /download (?:a )?(?:json|txt|script|powershell) handoff/i);
 });

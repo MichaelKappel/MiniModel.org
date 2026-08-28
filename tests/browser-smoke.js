@@ -127,7 +127,8 @@ async function inspectViewport(client, width, height, url) {
     expression: `JSON.stringify({
       selectedAvailability: document.getElementById("modelCatalogAvailability")?.value || "",
       modelCount: document.querySelectorAll("#modelCatalogList .catalog-model").length,
-      emptyText: document.querySelector("#modelCatalogList .catalog-empty")?.textContent.trim() || ""
+      emptyText: document.querySelector("#modelCatalogList .catalog-empty")?.textContent.trim() || "",
+      actionCount: document.querySelectorAll("#modelCatalogList a, #modelCatalogList button").length
     })`,
     returnByValue: true
   });
@@ -167,7 +168,11 @@ async function inspectViewport(client, width, height, url) {
         modelCount: document.querySelectorAll("#modelCatalogList .catalog-model").length,
         modelText: document.getElementById("modelCatalogList")?.textContent.replace(/\\s+/g, " ").trim() || "",
         totals: document.querySelector(".catalog-totals")?.textContent.replace(/\\s+/g, " ").trim() || "",
-        status: document.getElementById("modelCatalogStatus")?.textContent || ""
+        status: document.getElementById("modelCatalogStatus")?.textContent || "",
+        memoryHeading: Array.from(document.querySelectorAll("h2")).find((node) => node.textContent.includes("MemoryEndpoints"))?.textContent.trim() || "",
+        memoryText: Array.from(document.querySelectorAll("section")).find((node) => node.querySelector("h2")?.textContent.includes("MemoryEndpoints"))?.textContent.replace(/\\s+/g, " ").trim() || "",
+        releaseText: document.querySelector("footer")?.textContent.replace(/\\s+/g, " ").trim() || "",
+        pageText: document.body.textContent.replace(/\\s+/g, " ").trim()
       });
     })()`,
     returnByValue: true
@@ -210,10 +215,11 @@ function stopBrowserTree(profile, browserProcess) {
 }
 
 function assertViewport(result, label) {
-  assert.equal(result.initial.selectedAvailability, "active", `${label}: active peer view was not the default`);
-  assert.equal(result.initial.modelCount, 0, `${label}: unproven models appeared in the active peer view`);
-  assert.match(result.initial.emptyText, /no models currently have unexpired outside-network peer proof/i);
-  assert.equal(result.modelCount, 2, `${label}: all-models view did not render Qwen plus the fixture`);
+  assert.equal(result.initial.selectedAvailability, "all", `${label}: all qualified compositions was not the default`);
+  assert.equal(result.initial.modelCount, 0, `${label}: an unqualified composition appeared in the catalog`);
+  assert.equal(result.initial.actionCount, 0, `${label}: an acquisition action appeared without a qualified composition`);
+  assert.match(result.initial.emptyText, /no SLM2 composition is qualified yet/i);
+  assert.equal(result.modelCount, 0, `${label}: the all-qualified view was not empty`);
   assert.ok(result.documentWidth <= result.viewport.width + 1, `${label}: document overflowed horizontally (${result.documentWidth} > ${result.viewport.width})`);
   assert.ok(result.bodyWidth <= result.viewport.width + 1, `${label}: body overflowed horizontally (${result.bodyWidth} > ${result.viewport.width})`);
   assert.ok(result.catalog && result.catalog.top < result.viewport.height, `${label}: catalog was not visible in the initial viewport`);
@@ -221,20 +227,16 @@ function assertViewport(result, label) {
   for (const action of result.heroActions) {
     assert.ok(action.left >= 0 && action.right <= result.viewport.width + 1, `${label}: ${action.text} action was off-canvas`);
   }
-  assert.match(result.modelText, /TinyRustLM Fixture q8_0/);
-  assert.match(result.modelText, /not a conversational model/i);
-  assert.match(result.modelText, /Source model\s*deterministic-smoke: tinyrustlm fixture/);
-  assert.match(result.modelText, /Runtime fixture; not a conversational model/i);
-  assert.match(result.modelText, /tinyrustlm\/qwen2\.5-1\.5b-instruct-q4/i);
-  assert.match(result.modelText, /Qwen\/Qwen2\.5-1\.5B-Instruct/);
-  assert.match(result.modelText, /989aa7980e4cf806f80c7fef2b1adb7bc71aa306/);
-  assert.match(result.modelText, /Apache-2\.0/);
-  assert.match(result.modelText, /conversation proven full assistant pending/i);
-  assert.match(result.modelText, /strict json/i);
-  assert.match(result.modelText, /Awaiting current outside-network proof/i);
-  assert.match(result.totals, /0 active models \/ 0 peers/);
-  assert.match(result.totals, /1 awaiting proof \/ 1 fixture/);
-  assert.doesNotMatch(result.modelText, /https?:\/\//i, `${label}: raw peer URL leaked into the public model card`);
+  assert.match(result.modelText, /no SLM2 composition is qualified yet/i);
+  assert.match(result.totals, /0 qualified compositions/);
+  assert.match(result.totals, /0 with current direct peers/);
+  assert.match(result.totals, /0 pinned conversion routes/);
+  assert.match(result.status, /zero compositions are qualified/i);
+  assert.equal(result.memoryHeading, "MemoryEndpoints has two separate uses");
+  assert.match(result.memoryText, /ecosystem agents use MemoryEndpoints\.com directly/i);
+  assert.match(result.memoryText, /TinyRustLM\.com Connect user can sign in through its plugin/i);
+  assert.match(result.releaseText, /Version 1\.1\.0/);
+  assert.doesNotMatch(result.pageText, /Qwen2\.5|manifest-v0|models\.v0|download (?:a )?(?:request|script)/i);
 }
 
 async function main() {

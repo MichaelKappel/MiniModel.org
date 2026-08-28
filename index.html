@@ -3,29 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MiniModel.org</title>
-  <meta name="description" content="Browse checksum-bound .slm models prepared for verified local use and consent-based P2P sharing with TinyRustLM.">
-  <meta name="application-version" content="1.0.0">
-  <link rel="stylesheet" href="styles.css?v=20260713-catalog3">
-  <script src="catalog.js?v=20260713-catalog3" defer></script>
+  <title>MiniModel.org | Qualified SLM2 Catalog</title>
+  <meta name="description" content="Browse exact qualified SLM2 compositions and current direct-peer availability without proxying model bytes through project servers.">
+  <meta name="application-version" content="1.1.0">
+  <link rel="canonical" href="https://minimodel.org/">
+  <link rel="stylesheet" href="/styles.css?v=20260828-slm2">
+  <script src="/catalog.js?v=20260828-slm2" defer></script>
 </head>
 <body>
   <header class="site-header" aria-label="MiniModel navigation">
-    <a class="brand" href="/">
-      <span class="mark" aria-hidden="true"></span>
-      <span>MiniModel.org</span>
-    </a>
+    <a class="brand" href="/"><span class="mark" aria-hidden="true"></span><span>MiniModel.org</span></a>
     <nav>
-      <a href="#models">Models</a>
-      <a href="#roadmap">Roadmap</a>
+      <a href="#models">Catalog</a>
+      <a href="#flow">Acquisition</a>
       <a href="#docs">Docs</a>
-      <a href="#rules">Rules</a>
       <a href="/updates/">Updates</a>
     </nav>
   </header>
 
   <main>
-    <section class="hero">
+    <section class="hero" aria-labelledby="page-title">
       <div class="network-visual" aria-hidden="true">
         <span class="node node-a"></span>
         <span class="node node-b"></span>
@@ -38,16 +35,13 @@
         <span class="line line-d"></span>
       </div>
       <div class="hero-content">
-        <p class="eyebrow">Rust P2P model directory</p>
-        <h1>MiniModel.org</h1>
-        <p class="lede">
-          Find every checksum-bound <code>.slm</code> model in the public catalog, see where it came from,
-          and verify whether a consenting peer is currently available before importing it into TinyRustLM.
-        </p>
+        <p class="eyebrow">Qualified composition discovery</p>
+        <h1 id="page-title">MiniModel.org</h1>
+        <p class="lede">Find exact qualified six-member SLM2 compositions, inspect current direct-peer availability, or continue through an explicit pinned-source local conversion.</p>
         <div class="actions" aria-label="Primary links">
-          <a class="button primary" href="#models">Browse P2P models</a>
-          <a class="button secondary" href="https://TinyRustLM.com/">Open TinyRustLM</a>
-          <a class="button secondary" href="catalog/models.v0.json">Catalog JSON</a>
+          <a class="button primary" href="#models">Browse catalog</a>
+          <a class="button secondary" href="https://minimodel.mirust.com/">Developer protocol</a>
+          <a class="button secondary" href="/catalog/compositions.v1.json">Catalog JSON</a>
         </div>
       </div>
     </section>
@@ -56,210 +50,103 @@
       <div class="catalog-inner">
         <header class="catalog-heading">
           <div>
-            <p class="eyebrow">Public model catalog</p>
-            <h2 id="modelCatalogHeading">P2P models</h2>
-            <p>Current P2P models appear only after Rust validates unexpired outside-network proof. Browse the separate catalog view for models awaiting a proven peer and runtime-only fixtures.</p>
+            <p class="eyebrow">Current public catalog</p>
+            <h2 id="modelCatalogHeading">Qualified SLM2 compositions</h2>
+            <p>Only exact compositions with current structure, numerical, browser, and quality evidence can appear here. An empty catalog is the truthful state until one qualifies.</p>
           </div>
           <div class="catalog-totals" aria-label="Catalog totals">
             <span id="modelCatalogTotal">Loading catalog</span>
-            <span id="modelCatalogActive">Checking peers</span>
-            <span id="modelCatalogReady">Checking share readiness</span>
+            <span id="modelCatalogActive">Checking direct peers</span>
+            <span id="modelCatalogReady">Checking conversion routes</span>
           </div>
         </header>
 
         <div class="catalog-toolbar" role="search">
           <label class="catalog-search">
-            <span>Search models</span>
-            <input id="modelCatalogSearch" type="search" autocomplete="off" placeholder="Name, description, source, or quantization">
+            <span>Search compositions</span>
+            <input id="modelCatalogSearch" type="search" autocomplete="off" placeholder="Name, source, profile, or identity">
           </label>
           <label class="catalog-filter">
-            <span>Availability</span>
+            <span>Acquisition route</span>
             <select id="modelCatalogAvailability">
-              <option value="active" selected>Active P2P peers</option>
-              <option value="all">All catalog models</option>
-              <option value="share-ready">Awaiting an active peer</option>
-              <option value="fixture">Runtime fixtures</option>
+              <option value="all" selected>All qualified</option>
+              <option value="peer">Current direct peer</option>
+              <option value="local-conversion">Pinned local conversion</option>
             </select>
           </label>
-          <span id="modelCatalogVisibleCount" class="catalog-visible-count">0 models</span>
+          <span id="modelCatalogVisibleCount" class="catalog-visible-count">0 compositions</span>
         </div>
 
-        <p id="modelCatalogStatus" class="catalog-status" role="status" aria-live="polite">Loading checksum-bound catalog metadata.</p>
-        <ol id="modelCatalogList" class="catalog-model-list" aria-label="MiniModel catalog models">
-          <li class="catalog-empty">Loading models.</li>
+        <p id="modelCatalogStatus" class="catalog-status" role="status" aria-live="polite">Loading bounded catalog metadata.</p>
+        <ol id="modelCatalogList" class="catalog-model-list" aria-label="Qualified SLM2 compositions">
+          <li class="catalog-empty">Loading current catalog.</li>
         </ol>
       </div>
     </section>
 
     <section class="statement" id="rules">
       <div>
-        <h2>Boundary</h2>
-        <p>
-          MiniModel.org is not a model hosting service and not an inference service. The goal is
-          discovery, external source routing, peer transfer, checksum verification, license routing, and local import.
-        </p>
+        <p class="eyebrow">Boundary</p>
+        <h2>Metadata here, model bytes elsewhere</h2>
+        <p>MiniModel.org publishes bounded catalog and expiring peer-announcement metadata. It does not host or proxy model members, run inference, perform conversion, or turn a catalog row into qualification evidence.</p>
       </div>
-      <ul class="rule-list" aria-label="Project rules">
-        <li>No server-side model execution.</li>
-        <li>No hosted runnable model weights from MiniModel.org.</li>
-        <li>Every package is identified by checksums and provenance.</li>
-        <li>Users choose, obtain, verify, share metadata for, and run models locally.</li>
+      <ul class="rule-list">
+        <li>Six exact members form one composition identity.</li>
+        <li>Peer bytes move directly between consenting endpoints.</li>
+        <li>Local conversion uses one immutable public source revision.</li>
+        <li>Every imported member is independently verified before activation.</li>
       </ul>
     </section>
 
-    <section class="grid-section" id="roadmap">
+    <section class="grid-section" id="flow" aria-labelledby="flow-title">
       <div class="section-heading">
-        <p class="eyebrow">Build plan</p>
-        <h2>Roadmap</h2>
+        <p class="eyebrow">One visible route</p>
+        <h2 id="flow-title">Peer first, otherwise explicit local conversion</h2>
+        <p>The selected operation stays visible. A failed route does not silently choose another peer, start conversion, invoke remote inference, or download an instruction file.</p>
       </div>
       <ol class="roadmap">
-        <li>
-          <span class="step">01</span>
-          <h3>Manifest</h3>
-          <p>Define a MiniModel manifest for `.slm` packages, source identity, license route, tokenizer/config checksums, eval evidence, final artifact checksum, and an externally signed payload-hash envelope.</p>
-        </li>
-        <li>
-          <span class="step">02</span>
-          <h3>Verifier</h3>
-          <p>Use the first Rust CLI to verify package bytes, manifest fields, evidence routes, chunk/Merkle data, drift cases, and TinyRustLM import readiness before a user trusts a file.</p>
-        </li>
-        <li>
-          <span class="step">03</span>
-          <h3>Catalog</h3>
-          <p>Publish static catalog metadata and signed index snapshots. `write-catalog-entry` validates manifest plus peer-offer proof, and announcement-feed snapshots can bind same-origin peer availability metadata by SHA-256 without hosting model bytes. Inspectors report exact metadata byte counts and SHA-256 values, and reject catalog/feed JSON above 4 MiB before parsing.</p>
-        </li>
-        <li>
-          <span class="step">04</span>
-          <h3>Share Metadata</h3>
-          <p>Export a local `minimodel.local_slm_share_metadata.v0` bundle from verified `.slm` imports with artifact SHA256, chunk hashes, chunk-list SHA256, Merkle root, and disabled live-transfer flags.</p>
-        </li>
-        <li>
-          <span class="step">05</span>
-          <h3>Peer App</h3>
-          <p>Use the first direct peer-piece fetch prototype for known consenting HTTP peers, then build toward an optional user-run MiniModel Peer Companion for local identity, piece stores, consent prompts, cache quotas, receipts, receipt ledgers, and TinyRustLM handoff.</p>
-        </li>
-        <li>
-          <span class="step">06</span>
-          <h3>Browser Handoff</h3>
-          <p>Let verified local `.slm` files open in TinyRustLM for browser-local Rust/WASM loading and generation.</p>
-        </li>
+        <li><strong>Resolve</strong><span>Bind the exact catalog, source, composition, profile, qualification, and runtime identities.</span></li>
+        <li><strong>Select</strong><span>Use one current exact peer announcement or one user-approved pinned-source conversion.</span></li>
+        <li><strong>Transfer</strong><span>Move fixed verified pieces with bounded concurrency, cancellation, and durable progress.</span></li>
+        <li><strong>Verify</strong><span>Recompute every member digest, member-set closure, evidence binding, and installation identity.</span></li>
+        <li><strong>Activate</strong><span>Publish one immutable local activation only after the complete transaction passes.</span></li>
       </ol>
-      <p class="section-note">
-        The full working roadmap is tracked in <a href="ROADMAP.md">ROADMAP.md</a>.
-      </p>
     </section>
 
-    <section class="grid-section" id="sources">
+    <section class="grid-section" id="docs" aria-labelledby="docs-title">
       <div class="section-heading">
-        <p class="eyebrow">Source lanes</p>
-        <h2>Model options</h2>
+        <p class="eyebrow">Current contracts</p>
+        <h2 id="docs-title">Catalog and acquisition references</h2>
       </div>
       <div class="doc-grid">
-        <a href="docs/catalog-boundary.md">
-          <h3>Local</h3>
-          <p>User-owned `.slm` files and local JSON lists stay first-class, with browser file-picker import and Rust/WASM validation in TinyRustLM.</p>
-        </a>
-        <a href="docs/catalog-boundary.md">
-          <h3>Hugging Face</h3>
-          <p>User-triggered external discovery can route model cards, API metadata, file hints, source revisions, endpoint context, conversion-request JSON, and local Rust conversion-script handoffs without project-server proxying, downloads, or inference. The script can produce both a converted `.slm` and a `.minimodel-peer-offer` proof.</p>
-        </a>
-        <a href="docs/verifier-mvp.md">
-          <h3>P2P</h3>
-          <p>Today Rust can export, serve to a known direct HTTP peer, fetch, reassemble, execute TinyRustLM peer-import request JSON from a verified `.slm`, and write metadata-only receipt ledgers; broader peer discovery comes later, with consent and re-verification still required.</p>
-        </a>
+        <a href="/docs/catalog-boundary.md"><strong>Catalog boundary</strong><span>Claims, identities, and evidence limits.</span></a>
+        <a href="/docs/slm2-composition.md"><strong>SLM2 composition</strong><span>Exact six-member identity and closure.</span></a>
+        <a href="/docs/acquisition-contract.md"><strong>Acquisition contract</strong><span>Direct peer or explicit local conversion.</span></a>
+        <a href="/docs/peer-companion.md"><strong>Companion boundary</strong><span>Local ownership, cancellation, and activation.</span></a>
+        <a href="/docs/memory-endpoints.md"><strong>MemoryEndpoints</strong><span>Two distinct memory uses, neither a model transport.</span></a>
+        <a href="https://minimodel.mirust.com/"><strong>Developer portal</strong><span>Implementation-oriented protocol documentation.</span></a>
       </div>
     </section>
 
-    <section class="grid-section" id="docs">
-      <div class="section-heading">
-        <p class="eyebrow">Implementation docs</p>
-        <h2>First build layer</h2>
+    <section class="statement">
+      <div>
+        <p class="eyebrow">Memory boundary</p>
+        <h2>MemoryEndpoints has two separate uses</h2>
+        <p>Ecosystem agents use MemoryEndpoints.com directly for long-term memory, meetings, handoffs, and coordination. Separately, a TinyRustLM.com Connect user can sign in through its plugin and select MemoryEndpoints.com as long-term memory.</p>
       </div>
-      <div class="doc-grid">
-        <a href="docs/manifest-v0.md">
-          <h3>Manifest v0</h3>
-          <p>Line-oriented schema for local `.slm` verification, metadata routes, evidence checksums, chunk metadata, and signature fields.</p>
-        </a>
-        <a href="docs/verifier-mvp.md">
-          <h3>Rust verifier</h3>
-          <p>Implemented local verifier commands for manifest parsing, byte-count drift, checksum drift, chunk/Merkle checks, generated catalog entries, companion-readable peer-share state, direct peer-piece serve/fetch, peer-piece export/reassembly, one-command peer import requests, TinyRustLM compatibility, import receipts, and metadata-only receipt ledgers.</p>
-        </a>
-        <a href="examples/tiny-test-model-q8.minimodel.manifest.v0">
-          <h3>Fixture manifest</h3>
-          <p>Real q8 fixture manifest binding artifact SHA-256, `.slm` checksum, tokenizer checksum, tensor-layout checksum, peer-offer route, chunk-list SHA-256, and Merkle root.</p>
-        </a>
-        <a href="docs/catalog-boundary.md">
-          <h3>Catalog boundary</h3>
-          <p>Metadata-only catalog rules, checksum-bound announcement feeds, consent gates, legal posture, takedown routes, and ecosystem tradeoff staging.</p>
-        </a>
-        <a href="docs/peer-companion.md">
-          <h3>Peer Companion spec</h3>
-          <p>Roadmap design for a future user-run local companion: source lanes, Rust command contracts, local receipt ledgers, accepted/deferred/rejected intake findings, local state, piece-store rules, consent gates, UI requirements, tests, and completion criteria.</p>
-        </a>
-        <a href="catalog/models.v0.json">
-          <h3>Catalog endpoint</h3>
-          <p>Static metadata entries for local `.slm` imports, checksum verification, and TinyRustLM browser handoff without hosted model bytes.</p>
-        </a>
-        <a href="catalog/peer-source-announcements.v0.json">
-          <h3>Availability feed</h3>
-          <p>Checksum-bound peer-source metadata feed. The current public feed is empty, so it checks availability without making any model P2P-ready.</p>
-        </a>
-        <a href="examples/share-metadata.v0.json">
-          <h3>Share metadata example</h3>
-          <p>Example local bundle and peer-offer proof for a verified `.slm` with catalog-entry candidate, chunk hashes, and live transfer explicitly disabled.</p>
-        </a>
-        <a href="examples/catalog-entry.v0.json">
-          <h3>Generated catalog entry</h3>
-          <p>Real fixture catalog metadata written by `write-catalog-entry` from an admitted manifest plus peer-offer proof, with no hosted model bytes.</p>
-        </a>
-        <a href="examples/tiny-test-model-q8.minimodel-peer-offer">
-          <h3>Peer offer example</h3>
-          <p>Rust-generated text proof binding an admitted `.slm` to artifact SHA-256, chunk SHA-256 rows, and a Merkle root while transfer remains disabled.</p>
-        </a>
-        <a href="examples/tiny-test-model-q8.minimodel-peer-import-request.json">
-          <h3>Peer import request</h3>
-          <p>Example TinyRustLM request JSON consumed by `minimodel import-peer-request` after a user supplies a consenting known peer URL.</p>
-        </a>
-        <a href="docs/peer-companion.md">
-          <h3>Companion state</h3>
-          <p>`write-peer-companion-state`, `write-peer-companion-inventory`, and `write-peer-contact-book` validate prepared-share state, receipt-ledger evidence, quota metadata, and reviewed peer contacts for future peer companion UI without embedding model bytes; duplicate contact endpoints are rejected before display.</p>
-        </a>
-      </div>
-    </section>
-
-    <section class="grid-section" id="research">
-      <div class="section-heading">
-        <p class="eyebrow">Research prompts</p>
-        <h2>Start here</h2>
-      </div>
-      <div class="research-grid">
-        <article>
-          <h3>P2P Architecture</h3>
-          <p>Compare Rust P2P approaches for a model package exchange: direct known-peer HTTP now, protected TinyRustLM NuGet local piece verification for ecosystem apps, optional user-run MiniModel Peer Companion later, then libp2p, Iroh, BitTorrent-style chunking, DHT discovery, static bootstrap registries, NAT traversal, and signed catalogs.</p>
-        </article>
-        <article>
-          <h3>Hugging Face Source</h3>
-          <p>Use Hub API metadata, OpenAPI docs, model-card discovery, endpoint awareness, and local conversion-script handoffs as an external source lane while keeping `/resolve/` downloads, tokens, and remote inference outside project servers.</p>
-        </article>
-        <article>
-          <h3>Trust Model</h3>
-          <p>Design checksum-bound manifests for `.slm` files with source SHA, config/tokenizer checksums, license route, eval evidence, quantization, byte count, and final artifact checksum.</p>
-        </article>
-        <article>
-          <h3>Legal Boundary</h3>
-          <p>Recommend UX language, model-card fields, consent flows, takedown handling, and a clear separation between catalog metadata, peer transfer, and local execution.</p>
-        </article>
-      </div>
+      <ul class="rule-list">
+        <li>Agent and user identities, credentials, consent, scopes, provenance, and receipts stay separate.</li>
+        <li>MemoryEndpoints is not a catalog, peer relay, model-byte transport, or inference service.</li>
+        <li>Prelaunch memory may be duplicated elsewhere only while every maintained copy stays current and noncontradictory.</li>
+      </ul>
     </section>
   </main>
 
   <footer>
     <span>MiniModel.org</span>
-    <span>Peer-to-peer model packages</span>
-    <a href="https://TinyRustLM.com/">TinyRustLM.com</a>
-    <a href="https://TinyRustLM.MiRust.com/developer-portal/">TinyRustLM developer portal</a>
-    <a href="/updates/">Updates</a>
-    <span>Version 1.0.0 | Released 2026-08-09 | Last published 2026-08-09</span>
+    <span>Version 1.1.0 | Released 2026-08-28 | Last published 2026-08-28</span>
+    <a href="/updates/">Publication history</a>
+    <a href="/.well-known/site-release.json">Release JSON</a>
   </footer>
 </body>
 </html>

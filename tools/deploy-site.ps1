@@ -475,6 +475,16 @@ foreach ($file in @($manifest.files)) {
         throw "Local file identity does not match the deployment manifest: $relative"
     }
 }
+$retiredSeen = @{}
+$retiredPaths = @($manifest.retired_paths)
+if ($retiredPaths.Count -gt 64) { throw "Deployment manifest contains too many retired paths." }
+foreach ($retiredPathValue in $retiredPaths) {
+    $retiredPath = Assert-RelativePath -Path ([string]$retiredPathValue)
+    if ($seen.ContainsKey($retiredPath) -or $retiredSeen.ContainsKey($retiredPath)) {
+        throw "Deployment manifest contains an active or duplicate retired path."
+    }
+    $retiredSeen[$retiredPath] = $true
+}
 if ($totalBytes -gt 67108864) { throw "Deployment closure exceeds the total byte budget." }
 
 $gitStatus = @(git -C $repositoryRoot status --porcelain --untracked-files=all)
@@ -498,6 +508,7 @@ else {
     $ResumeNonce
 }
 $results = @()
+$retiredResults = @()
 $currentPath = $null
 $profile = Get-CredentialProfile -Path $FileZillaProfilePath -ProfileName ([string]$manifest.transport_profile)
 try {
@@ -510,6 +521,15 @@ try {
         $currentPath = [string]$file.path
         $status = Publish-File -File $file -Nonce $nonce
         $results += [ordered]@{ path = [string]$file.path; status = $status; bytes = [int64]$file.bytes; sha256 = [string]$file.sha256 }
+    }
+
+    foreach ($retiredPath in $retiredPaths) {
+        $currentPath = [string]$retiredPath
+        $wasPresent = (Get-RemoteSize -RemotePath ([string]$retiredPath)) -ge 0
+        Remove-RemoteFileIfPresent -RemotePath ([string]$retiredPath)
+        $status = if ($wasPresent) { "retired" } else { "already-absent" }
+        $retiredResults += [ordered]@{ path = [string]$retiredPath; status = $status }
+        Write-Host ("RETIRE {0} ({1})" -f $retiredPath, $status)
     }
 
     $handler = [Net.Http.HttpClientHandler]::new()
@@ -545,6 +565,18 @@ try {
             finally { $response.Dispose() }
             Write-Host "SMOKE $($route.path)"
         }
+
+        foreach ($retiredPath in $retiredPaths) {
+            $url = "{0}/{1}?release_retired={2}" -f $manifest.origin, [string]$retiredPath, $nonce
+            $response = $client.GetAsync($url).GetAwaiter().GetResult()
+            try {
+                if ([int]$response.StatusCode -notin @(404, 410)) {
+                    throw "Retired HTTPS route remained available: $retiredPath"
+                }
+            }
+            finally { $response.Dispose() }
+            Write-Host "RETIRED-READBACK $retiredPath"
+        }
     }
     finally { $client.Dispose(); $handler.Dispose() }
 
@@ -566,6 +598,8 @@ try {
         published_count = @($results | Where-Object { $_.status -eq "published" }).Count
         already_current_count = @($results | Where-Object { $_.status -eq "already-current" }).Count
         files = $results
+        retired_count = $retiredResults.Count
+        retired_paths = $retiredResults
     }
     Write-Receipt -Receipt $receipt -Path $ReportPath
     Write-Host "RECEIPT $ReportPath"
@@ -588,6 +622,8 @@ catch {
         current_path = $currentPath
         completed_file_count = $results.Count
         files = $results
+        completed_retired_count = $retiredResults.Count
+        retired_paths = $retiredResults
     }
     Write-Receipt -Receipt $failure -Path $ReportPath
     Write-Host "FAILURE_RECEIPT $ReportPath"

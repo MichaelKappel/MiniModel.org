@@ -33,14 +33,14 @@ pub fn output_text(output: &std::process::Output) -> String {
 pub fn q8_manifest_text() -> &'static str {
     include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/tiny-test-model-q8.minimodel.manifest.v0"
+        "/../../tests/fixtures/native-v0/tiny-test-model-q8.minimodel.manifest.v0"
     ))
 }
 
 pub fn q8_peer_import_request_text(peer_url: &str) -> String {
     include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/tiny-test-model-q8.minimodel-peer-import-request.json"
+        "/../../tests/fixtures/native-v0/tiny-test-model-q8.minimodel-peer-import-request.json"
     ))
     .replace("http://127.0.0.1:8123/", peer_url)
 }

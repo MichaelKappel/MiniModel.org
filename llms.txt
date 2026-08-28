@@ -1,20 +1,29 @@
 # MiniModel.org
 
-MiniModel.org is the metadata-only public catalog and direct P2P discovery
-authority for TinyRustLM `.slm` artifacts. It does not host or proxy model
-bytes. Local Rust verification remains authoritative before import.
+MiniModel.org publishes bounded discovery metadata for exact qualified
+six-member SLM2 compositions. It does not host or proxy model bytes, run
+inference, or perform server-side conversion.
 
-Primary routes:
+Current routes:
 
-- /catalog/models.v0.json
-- /catalog/peer-source-announcements.v0.json
+- /catalog/compositions.v1.json
+- /catalog/peer-announcements.v1.json
 - /docs/catalog-boundary.md
+- /docs/slm2-composition.md
+- /docs/acquisition-contract.md
 - /docs/peer-companion.md
+- /docs/memory-endpoints.md
 - /updates/
 - /.well-known/site-release.json
-- /.well-known/site-release-history.json
 
-Current site release: 1.0.0, released and last published 2026-08-09.
+The catalog and peer feed are truthfully empty until exact current evidence
+exists. One visible acquisition route may use an exact qualified consenting
+peer or explicit pinned-source local conversion through the installed
+companion. A catalog row never proves availability, quality, transfer,
+activation, or browser execution by itself.
 
-Do not infer active peers, model quality, public reachability, campaign
-completion, or hosted model availability from a catalog row alone.
+MemoryEndpoints.com has two separate authorized uses: direct ecosystem-agent
+coordination, and the TinyRustLM.com Connect user plugin. It is not MiniModel
+catalog, peer, model-byte, conversion, or inference infrastructure.
+
+Current release: 1.1.0, dated 2026-08-28.

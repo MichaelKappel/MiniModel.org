@@ -1,26 +1,49 @@
-profile: minimodel.short-term-memory.v16
-updated_utc: 2026-08-11T15:04:23Z
-current_state:
-  - 2026-08-11 CURRENT production catalog truth: MiniModel.org 1.0.0 deploys 34 metadata/site files and no model bytes. The home-page catalog contains Qwen2.5-1.5B-Instruct q4 as conversation-proven/full-assistant-pending plus an explicitly non-conversational runtime fixture. The active view has zero models and zero peers because neither row has current outside-network proof. Retired default-demo JSON and fixture `.slm` routes return 404, and every `.slm` route is denied. TinyRustLM consumes catalog metadata and obtains model bytes only from local files or its paired companion. Authority: `deploy/receipts/site-deployment-20260811T145917Z.json`, SHA256 `1e402f83dbeaa301ef3de46ee2094239b9e5cadcdf4e5f8ecc7c03fd38f28e53`.
-  - 2026-07-03 MiniModel peer-import preflight is implemented: `preflight-peer-import-request <request-json> <manifest> <output.preflight>` validates the TinyRustLM peer-import request and manifest, rejects project-server peer hosts, fetches only the peer's `minimodel.peer_piece_set.v0` metadata, writes `minimodel.peer_import_preflight`, records `peer_piece_bytes_fetched=false` and `artifact_bytes_fetched=false`, and leaves full chunk transfer to `import-peer-request`.
-  - MiniModel.org is a Rust-first metadata, verifier, and direct peer-to-peer tiny model package exchange workspace.
-  - Source options are user-owned local files/lists, user-triggered Hugging Face metadata discovery/conversion handoff, one-command `prepare-peer-share` sender packaging, drift-checked catalog-entry writing from manifest plus peer-offer proof, late `add-peer-source` peer availability metadata, portable `write-peer-source-announcement` availability metadata, maintainer-side `apply-peer-source-announcements` drift checks, batch `write-catalog-snapshot-with-announcements` publication, metadata-only `write-catalog-snapshot` reuse, optional catalog-listed consenting peer sources, direct known-peer HTTP piece serve/fetch, one-command TinyRustLM peer-import request execution, and future broader P2P discovery/relay.
-  - First local verifier implementation exists in `crates/minimodel-core` and `crates/minimodel`: manifest parse, boundary rejection, local artifact byte/SHA256 checks, TinyRustLM `.slm` validation, chunk/Merkle verification, `prepare-peer-share` generation of manifest plus `.minimodel-peer-offer` plus local peer pieces plus catalog entry, `write-catalog-entry` proof validation, `add-peer-source` proof-ready entry validation plus one consenting direct peer URL row, `write-peer-source-announcement` availability metadata binding, `apply-peer-source-announcements` model/artifact/proof drift rejection plus peer URL deduplication, `write-catalog-snapshot-with-announcements` batch entry/announcement validation plus unmatched-model rejection, `write-catalog-snapshot` metadata-only catalog validation/output, optional `peer_source_count`/`peer_sources` metadata after known-peer URL validation, peer-piece export, direct HTTP peer-piece serving/fetch, peer-piece reassembly, `preflight-peer-import-request` metadata-only receiver preflight, `import-peer-request` receiver execution from TinyRustLM request JSON, and import receipt writing.
-  - Local peer pieces are the first transfer bridge: `prepare-peer-share` writes `minimodel.peer_piece_set.v0` plus local chunk files as part of the sender package, `export-peer-pieces` remains available for manual workflows, `serve-peer-pieces` validates and serves only declared sidecar/piece files from a user-started direct HTTP listener, `preflight-peer-import-request` checks the peer's piece-set metadata without fetching piece bytes, `fetch-peer-pieces` retrieves a piece set and chunks from a consenting direct `http://` peer while rejecting project-server hosts and checksum drift, `assemble-peer-pieces` reassembles only after piece SHA256 checks plus full artifact verification, and `import-peer-request` wraps the receiver sequence for TinyRustLM handoff JSON.
-  - Catalog entries now distinguish proof-ready metadata with no known source from proof-ready metadata with a validated `known-direct-http-peer-v0` source: `peer_source_count=0` keeps the TinyRustLM manual known-peer URL gate, while `peer_source_count>0` plus `peer_sources` lets TinyRustLM save a Rust reverify import request immediately without serving bytes from project servers; `add-peer-source` can attach a direct row later without rerunning conversion, peer-source announcements let a catalog maintainer merge one or more converter availability claims after drift checks, and `write-catalog-snapshot-with-announcements` batch-publishes many checked announcements into `models.v0.json`.
-  - July 2 intake requires beginner UX to stay honest: Hugging Face search returns model cards and metadata, `Start Conversion` creates a local request/script, `P2P Import` appears only for admitted `.slm` metadata with a peer-offer proof and a known consenting peer source, and every import still ends in local Rust checksum plus `.slm` validation and a receipt.
-  - July 3 desktop/P2P intake triage now lives in `docs/peer-companion.md`: keep the optional companion as user-run local software; accept shared Rust verifier crates, actor/message-passing network workers, strict Tauri IPC/capabilities if used, OS secure stores, local metadata stores, signed/checksummed releases, and domain-first tests; defer WebTransport, WebRTC, mDNS, DHT/bootstrap, UPnP/NAT-PMP, Iroh/QUIC, Rust-libp2p, BitTorrent-style chunking, Pear/Bare/Hypercore; reject project-operated STUN/TURN, relay, rendezvous, signaling, bootstrap, or DHT infrastructure as a current default dependency.
-  - Real non-hosted q8 fixture metadata lives at `examples/tiny-test-model-q8.minimodel.manifest.v0`, `examples/tiny-test-model-q8.minimodel-peer-offer`, and generated `examples/catalog-entry.v0.json`; the `.slm` artifact remains outside MiniModel.org.
-  - It references MiRust.com as a one-way talisman source.
-  - File Handoff setup is initialized with placeholder-only active intake.
-  - Public boundary remains no hosted model weights and no server-side inference.
+profile: minimodel.short-term-memory.v3
+updated_utc: 2026-08-28T00:00:00Z
+site: MiniModel.org
+status: release_candidate_not_yet_published
 
-publication_1_0_0_2026_08_11:
-  current_truth: MiniModel.org 1.0.0 is published and exact public readback is verified. The project site closure contains 34 files, 546253 bytes, and zero model artifacts.
-  fresh_gate: Publisher commit b5a0248d76ce543eb3ce02fc016ff611b7e41c19 passes Node 12/12, real Chromium desktop/mobile smoke, cargo fmt, denied-warning Clippy, and the complete locked Rust workspace including 97 minimodel-core tests.
-  release_identity: Content commit 83eb39cffcb54e032138dba3aecf77ceb35f6ad7; manifest SHA256 4052e62970b1968b2849a14954d6420d9a3e063c4e6e6257d5b3523ca4c8dc83.
-  success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json; SHA256 1e402f83dbeaa301ef3de46ee2094239b9e5cadcdf4e5f8ecc7c03fd38f28e53; pushed in commit 854c09b7ef52a02fd7901b6e32ac1e800db63e50.
-  proof: All 34 transport identities, 32 exact public HTTPS readbacks, five route smokes, the release marker, and an independent second 32-file readback passed.
-  availability_truth: The public active view remains zero models and zero peers; one trained model awaits current outside-network proof and one fixture is runtime-smoke-only.
-  next_action: Do not replay this terminal release. Reconcile the seven public origins and handoffs.
-  prohibition: Do not host model bytes, count local probes as outside P2P proof, or advance campaign counters without current bound receipts.
+current_release_candidate:
+  version: 1.1.0
+  release_date: 2026-08-28
+  catalog: catalog/compositions.v1.json
+  peer_announcements: catalog/peer-announcements.v1.json
+  active_compositions: 0
+  active_peer_announcements: 0
+  model_bytes_hosted_by_project_sites: false
+  truth: MiniModel.org publishes discovery and qualification metadata only. It neither proxies model bytes nor performs remote inference.
+  acquisition: A user action may obtain one exact qualified SLM2 composition from a consenting verified peer or explicitly acquire a pinned public source and convert it locally through an authenticated companion.
+  retired_public_contract: The manifest-v0, models.v0, request/script handoff, hosted qwen2.5 catalog row, and example .slm-era routes are removed from the sole current hosted contract and must return 404 or 410 after publication.
+  native_cli_gap: The Rust CLI still predates the sole SLM2 acquisition contract. This is an implementation gap, not a compatibility promise or a hidden fallback.
+
+memory_endpoints_authority:
+  uses: 2
+  direct_agent_lane: Agents working across every maintained ecosystem site use MemoryEndpoints.com directly for agent-to-agent long-term memory, meetings, handoffs, and coordination.
+  user_plugin_lane: A TinyRustLM.com Connect user signs in to MemoryEndpoints.com and explicitly selects the MemoryEndpoints.com plugin as TinyRustLM.com Connect long-term memory.
+  separation: Lane identity, credentials, consent, scopes, provenance, idempotency, and receipts remain separate. Neither lane silently acts for the other.
+  resilient_prelaunch_duplication: During prelaunch, long-term memory may also be duplicated in .uai files, wikis, public-safe notes, and approved private stores for resilience. Every maintained copy must remain current, secret-safe, provenance-labeled, and noncontradictory.
+  evidence_boundary: Authorization, source, configuration, or reachability alone is not proof of a live MemoryEndpoints meeting, user round, or continuity receipt.
+
+clean_slate_rules:
+  - One current SLM2 catalog and acquisition contract only.
+  - No legacy reader, compatibility alias, migration, repair, remote inference fallback, hidden retry, best-of-N, or accepted debt.
+  - A failed or obsolete receipt remains historical evidence and never becomes current acceptance logic.
+
+historical_release:
+  version: 1.0.0
+  status: superseded_historical_evidence_only
+  success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json
+  note: Its exact readback remains historical fact, but its catalog and acquisition semantics are not current product authority.
+
+remaining_release_work:
+  - Finish deterministic source gates, real Chromium desktop/mobile smoke, and the Rust suite with the unavailable external model fixture explicitly reported as skipped.
+  - Commit the coherent 1.1.0 source, generate and commit its content-addressed deployment manifest, push, and prove local/tracking/FETCH_HEAD/direct-remote equality.
+  - Run a dry deployment, publish once with the exact MiniModel.org profile, require exact HTTPS readback, and require every retired route to return 404 or 410.
+  - Commit and push the immutable deployment receipt, then replace this candidate pointer with the exact published result.
+
+campaign_counters:
+  qualified_models: 0/20
+  clean_browser_rounds: 0/50
+  live_memory_rounds: 0/25
+  externally_proven_p2p_lanes: 0/40
+  catalog_announcements: 0/20

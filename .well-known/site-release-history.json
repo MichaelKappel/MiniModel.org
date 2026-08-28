@@ -2,19 +2,31 @@
   "schema": "uaix.site_release_history.v1",
   "site_id": "minimodel.org",
   "origin": "https://minimodel.org",
-  "current_release_id": "minimodel.org@1.0.0",
+  "current_release_id": "minimodel.org@1.1.0",
   "releases": [
+    {
+      "release_id": "minimodel.org@1.1.0",
+      "version": "1.1.0",
+      "release_date": "2026-08-28",
+      "last_publish_date": "2026-08-28",
+      "summary": "Replaces obsolete single-file catalog routes with the sole clean-slate six-member SLM2 catalog and explicit acquisition contract.",
+      "changes": [
+        "Published strict SLM2 composition and peer-announcement metadata schemas with truthful empty current feeds.",
+        "Published one visible exact-peer-or-pinned-local-conversion acquisition flow without instruction-file or remote-inference fallback.",
+        "Documented the two separate authorized MemoryEndpoints uses and their identity, credential, consent, scope, provenance, and receipt separation.",
+        "Retired former manifest-v0, peer-offer, fixture, and single-file model catalog routes."
+      ]
+    },
     {
       "release_id": "minimodel.org@1.0.0",
       "version": "1.0.0",
       "release_date": "2026-08-09",
       "last_publish_date": "2026-08-09",
-      "summary": "Establishes the first evidence-oriented catalog release after cross-platform hash-bound catalog verification passed.",
+      "summary": "Historical first metadata-only catalog release; superseded by the clean-slate SLM2 release.",
       "changes": [
-        "Published the current metadata-only catalog, documentation, examples, and checksum-bound availability feed.",
-        "Made catalog hashes stable across Windows and Unix checkouts for deterministic Rust and browser verification.",
-        "Added visible version, release date, last-published date, and permanent human- and machine-readable release histories.",
-        "Kept model artifacts outside the public deployment closure; the catalog remains metadata and discovery only."
+        "Published the former metadata-only catalog and deterministic release history.",
+        "Excluded model bytes from the hosted closure.",
+        "Retained here only as immutable publication history, not current format or compatibility authority."
       ]
     }
   ]

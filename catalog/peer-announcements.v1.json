@@ -1,0 +1,8 @@
+{
+  "schema": "minimodel.slm2_peer_announcements.v1",
+  "feed_id": "minimodel.org/prelaunch-peers",
+  "generated_at_utc": "2026-08-28T00:00:00Z",
+  "project_server_serves_model_bytes": false,
+  "project_server_proxies_model_bytes": false,
+  "announcements": []
+}

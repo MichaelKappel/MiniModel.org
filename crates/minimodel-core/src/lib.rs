@@ -11400,11 +11400,12 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     const REAL_Q8_MANIFEST: &str =
-        include_str!("../../../examples/tiny-test-model-q8.minimodel.manifest.v0");
+        include_str!("../../../tests/fixtures/native-v0/tiny-test-model-q8.minimodel.manifest.v0");
     const REAL_Q8_PEER_OFFER: &str =
-        include_str!("../../../examples/tiny-test-model-q8.minimodel-peer-offer");
-    const REAL_Q8_PEER_IMPORT_REQUEST: &str =
-        include_str!("../../../examples/tiny-test-model-q8.minimodel-peer-import-request.json");
+        include_str!("../../../tests/fixtures/native-v0/tiny-test-model-q8.minimodel-peer-offer");
+    const REAL_Q8_PEER_IMPORT_REQUEST: &str = include_str!(
+        "../../../tests/fixtures/native-v0/tiny-test-model-q8.minimodel-peer-import-request.json"
+    );
 
     fn http_raw_peer_request(url: &HttpUrl, method: &str) -> String {
         let mut stream = TcpStream::connect((url.host.as_str(), url.port)).unwrap();

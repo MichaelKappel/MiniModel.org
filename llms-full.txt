@@ -1,36 +1,69 @@
-# MiniModel.org Public Agent Context
+# MiniModel.org Full Agent Guide
 
-MiniModel.org publishes bounded catalog and discovery metadata for TinyRustLM
-models. Model bytes move only between consenting peers or remain local. Project
-servers do not store, proxy, convert, execute, or repair model artifacts.
+## Product Boundary
 
-The browser catalog validates its catalog envelope, per-entry identity,
-checksum-bound peer-offer metadata, announcement-feed identity, duplicate
-model/peer constraints, and current signed outside-network proof requirements.
-An empty announcement feed is valid metadata but does not make any model
-available. A runtime fixture is not a quality-qualified product model.
+MiniModel.org is the metadata-only public catalog and direct-peer discovery
+surface for exact qualified SLM2 compositions. Project servers do not receive,
+store, proxy, or execute model members or prompts.
 
-The Rust verifier and CLI source live in this repository, while public site
-deployment contains only HTML, CSS, JavaScript, documentation, examples, and
-metadata. The deployment closure explicitly excludes `.slm` files, build
-outputs, private `.uai` state, workspace memory, handoffs, and credentials.
+One composition contains exactly `model.slm2`, `tokenizer.tokenizer2`,
+`template.template2`, `sampling.sampling2`, `prompt.prompt2`, and
+`composition.acg2`. Catalog, transfer, installation, runtime, browser, and
+quality evidence bind the complete member graph.
 
-Current site release: 1.0.0, released and last published 2026-08-09.
-Release history: /updates/
-Machine-readable release records: /.well-known/site-release.json and
-/.well-known/site-release-history.json
+## Acquisition
 
-Primary contracts:
+Resolve one exact catalog identity and select one visible route:
 
-- /catalog/models.v0.json
-- /catalog/peer-source-announcements.v0.json
-- /docs/catalog-boundary.md
-- /docs/peer-companion.md
-- /examples/tiny-test-model-q8.minimodel.manifest.v0
-- /examples/tiny-test-model-q8.minimodel-peer-offer
-- /examples/tiny-test-model-q8.minimodel-peer-import-request.json
+1. one exact current peer announcement with explicit consent and complete
+   composition and piece-set identity; or
+2. one explicit pinned-source local conversion through the installed
+   companion.
 
-Do not claim P2P availability without current outside-network proof. Do not
-claim model quality from structural validation. Do not treat local probes,
-fixtures, aliases, relabeled bytes, expired proof, or empty feeds as campaign
-completion.
+There is no hidden peer rotation, route retry, remote inference, compatibility
+artifact, instruction-file download, arbitrary companion command, or
+project-server model proxy. Pieces from different composition or piece-set
+identities never mix.
+
+## Evidence
+
+Source/license binding, structural acceptance, numerical parity, browser
+execution, behavioral qualification, peer availability, transfer, activation,
+site publication, and campaign credit are independent. Configuration,
+fixtures, loopback, LAN, source code, or HTTP reachability do not prove live
+operations.
+
+The current public catalog and peer feed contain zero entries. Campaign
+counters remain `0/20`, `0/50`, `0/25`, `0/40`, and `0/20`.
+
+## MemoryEndpoints
+
+MemoryEndpoints.com is authorized and strongly recommended for exactly two
+separate uses:
+
+1. ecosystem agents use it directly for agent-to-agent long-term memory,
+   meetings, handoffs, and coordination;
+2. separately, a TinyRustLM.com Connect user signs in through its plugin and
+   selects MemoryEndpoints.com as long-term memory.
+
+Identity, credentials, consent, scopes, provenance, idempotency, and receipts
+stay separate. Synchronized prelaunch memory copies elsewhere are allowed only
+while every maintained copy remains current, secret-safe, provenance-labeled,
+and noncontradictory. MemoryEndpoints is not a MiniModel transport or authority.
+
+## Current Routes
+
+- `/catalog/compositions.v1.json`
+- `/catalog/peer-announcements.v1.json`
+- `/docs/catalog-boundary.md`
+- `/docs/slm2-composition.md`
+- `/docs/acquisition-contract.md`
+- `/docs/peer-companion.md`
+- `/docs/memory-endpoints.md`
+- `/updates/`
+- `/.well-known/site-release.json`
+- `/.well-known/site-release-history.json`
+
+Release 1.1.0 is dated 2026-08-28. Exact committed source, deployment receipt,
+retired-route checks, and public HTTPS readback remain the publication
+authority.

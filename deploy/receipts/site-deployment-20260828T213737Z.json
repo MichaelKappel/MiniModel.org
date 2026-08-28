@@ -1,0 +1,223 @@
+{
+    "schema":  "uaix.site_deployment_receipt.v1",
+    "site":  "minimodel.org",
+    "origin":  "https://minimodel.org",
+    "version":  "1.1.0",
+    "source_commit":  "e100515128e11f14908942077957ecab216df693",
+    "source_tree":  "614b024a778c5a100680653624a3ec2e39129441",
+    "publisher_commit":  "2902e98aa0c1f38bf7f16236651d13f830da45e6",
+    "manifest_sha256":  "c6f4ec7227288fc940d57c9e8e08fbe45963b4e1c4b258fb7c36b62da7bf0c3e",
+    "operation_nonce":  "ab6702d0358e",
+    "started_utc":  "2026-08-28T21:37:37.7212252Z",
+    "completed_utc":  "2026-08-28T21:45:13.4377126Z",
+    "status":  "published-and-readback-verified",
+    "file_count":  22,
+    "total_bytes":  74965,
+    "published_count":  18,
+    "already_current_count":  4,
+    "files":  [
+                  {
+                      "path":  ".htaccess",
+                      "status":  "published",
+                      "bytes":  518,
+                      "sha256":  "32f2da8f9a1aaf52091d4979bc301cb2abe9adbbe496d73c19f8abbb8f132495"
+                  },
+                  {
+                      "path":  ".well-known/site-release-history.json",
+                      "status":  "published",
+                      "bytes":  1585,
+                      "sha256":  "528ec107d9d70c7e8b7931eecdbf989db69bdb64402dc4d08d99cfb5756540f0"
+                  },
+                  {
+                      "path":  ".well-known/uaix-talisman.txt",
+                      "status":  "published",
+                      "bytes":  1107,
+                      "sha256":  "4a028e38c388efebf4c0104581ec36424d59bcc432d79507c77dba90ac265577"
+                  },
+                  {
+                      "path":  "catalog.js",
+                      "status":  "published",
+                      "bytes":  19452,
+                      "sha256":  "20600bf6257f33fe82f697bc07fdb00586eaf0b99a9ac8de351d03fc228ebca8"
+                  },
+                  {
+                      "path":  "catalog/.htaccess",
+                      "status":  "already-current",
+                      "bytes":  291,
+                      "sha256":  "1e4e40d6c0a6af76e591617b16fc4d2b6b1b32f1218f68157a42d65053a42751"
+                  },
+                  {
+                      "path":  "catalog/compositions.v1.json",
+                      "status":  "published",
+                      "bytes":  346,
+                      "sha256":  "da2223d09c40469b694d11583775e1d2aa3b01fd29e7a61b5dc9c1fd4026c5a5"
+                  },
+                  {
+                      "path":  "catalog/peer-announcements.v1.json",
+                      "status":  "published",
+                      "bytes":  263,
+                      "sha256":  "10bea93b9613f9bbc7ffff0d03d22dbdeeb28abd276dcf6609dd929fdd2643a4"
+                  },
+                  {
+                      "path":  "docs/acquisition-contract.md",
+                      "status":  "published",
+                      "bytes":  1481,
+                      "sha256":  "7b33f69515195aa193f8d3ed943796b3331226b9df03167bd4e7e5fdfb0d11f5"
+                  },
+                  {
+                      "path":  "docs/catalog-boundary.md",
+                      "status":  "published",
+                      "bytes":  3690,
+                      "sha256":  "5c4207350dfc175001b86fb3f9d953101165ee85cd4733c00b4a5cd000bdc17d"
+                  },
+                  {
+                      "path":  "docs/memory-endpoints.md",
+                      "status":  "published",
+                      "bytes":  1162,
+                      "sha256":  "be7e8de15cc18ff49f74414f7d9e0b4d64f126d540055c6a10650c7b59bfdc3d"
+                  },
+                  {
+                      "path":  "docs/peer-companion.md",
+                      "status":  "published",
+                      "bytes":  1792,
+                      "sha256":  "9cb32e44da8fc065f6eda396848cfd683ffa6b39de10e4fe0bb65ce448907696"
+                  },
+                  {
+                      "path":  "docs/slm2-composition.md",
+                      "status":  "published",
+                      "bytes":  794,
+                      "sha256":  "a521e156bc6b7b4c5b3135354bb68e48cde13cd475493483818d0d8dc5cbbf62"
+                  },
+                  {
+                      "path":  "index.html",
+                      "status":  "published",
+                      "bytes":  8284,
+                      "sha256":  "a0e8ad0f7764f8a31291e81d396533dcfc36cb4797fb94a9ed0ef1ef7acf3213"
+                  },
+                  {
+                      "path":  "LICENSE.txt",
+                      "status":  "already-current",
+                      "bytes":  11357,
+                      "sha256":  "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+                  },
+                  {
+                      "path":  "llms-full.txt",
+                      "status":  "published",
+                      "bytes":  2680,
+                      "sha256":  "bc019ebc6c487ebf48e71cef62050cf3c7a48609dd12908a77099cbc205ccc68"
+                  },
+                  {
+                      "path":  "llms.txt",
+                      "status":  "published",
+                      "bytes":  1087,
+                      "sha256":  "a109a1bab411ab017d3ee0b66c3e477ebdca0813d4429f8b2e49576b9742ba3c"
+                  },
+                  {
+                      "path":  "ROADMAP.md",
+                      "status":  "published",
+                      "bytes":  2044,
+                      "sha256":  "5c7ac585a8db5feefb32cffc685f184dea93d5bee0c5d08b50587cd428417b9d"
+                  },
+                  {
+                      "path":  "robots.txt",
+                      "status":  "already-current",
+                      "bytes":  154,
+                      "sha256":  "be2018ab31e0fe270d66ce1770ff12dad7529db405a535ab9569449447e72589"
+                  },
+                  {
+                      "path":  "sitemap.xml",
+                      "status":  "published",
+                      "bytes":  1204,
+                      "sha256":  "22205552c9a60de6816c9e0362913bd6371c1f16fdae1e4b21f53f8a87caa098"
+                  },
+                  {
+                      "path":  "styles.css",
+                      "status":  "already-current",
+                      "bytes":  12888,
+                      "sha256":  "3d262ee6f3a565a15f2f7708a50dc0977ec17b013a9d2f42bf70ba38b3a5f369"
+                  },
+                  {
+                      "path":  "updates/index.html",
+                      "status":  "published",
+                      "bytes":  2494,
+                      "sha256":  "cf2a8fa38ebb0e40d6e838efbbe4ded7a80b1b0cdad1f8d52dee8fa0d797e753"
+                  },
+                  {
+                      "path":  ".well-known/site-release.json",
+                      "status":  "published",
+                      "bytes":  292,
+                      "sha256":  "54d0910d30c81155945e10aa3767c8bdf365852f4e5bb68bc5e2db613916bac5"
+                  }
+              ],
+    "retired_count":  17,
+    "retired_paths":  [
+                          {
+                              "path":  "catalog/models.v0.json",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "catalog/peer-source-announcements.v0.json",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "catalog/qwen2.5-1.5b-instruct-q4.catalog-entry.v0.json",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "catalog/qwen2.5-1.5b-instruct-q4.conversation-evidence.v1",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "catalog/qwen2.5-1.5b-instruct-q4.minimodel.manifest.v0",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "catalog/qwen2.5-1.5b-instruct-q4.minimodel-peer-offer",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "catalog/qwen2.5-1.5b-instruct-q4.modification-notice.md",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "catalog/qwen2.5-1.5b-instruct-q4.quality-evaluation.v1",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "catalog/qwen2.5-1.5b-instruct-q4.source-license.txt",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "docs/manifest-v0.md",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "docs/verifier-mvp.md",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "examples/catalog-entry.v0.json",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "examples/minimodel.manifest.v0.example",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "examples/share-metadata.v0.json",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "examples/tiny-test-model-q8.minimodel.manifest.v0",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "examples/tiny-test-model-q8.minimodel-peer-import-request.json",
+                              "status":  "retired"
+                          },
+                          {
+                              "path":  "examples/tiny-test-model-q8.minimodel-peer-offer",
+                              "status":  "retired"
+                          }
+                      ]
+}

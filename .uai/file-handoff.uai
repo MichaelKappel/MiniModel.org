@@ -1,5 +1,5 @@
 profile: minimodel.file-handoff.v3
-updated_utc: 2026-08-28T00:00:00Z
+updated_utc: 2026-08-28T21:45:13Z
 site: MiniModel.org
 setup_route: https://uaix.org/en-us/tools/ai-memory-package-wizard/#setup-file-handoff
 active_buckets:
@@ -12,12 +12,17 @@ rules:
   - Remove processed source-site copies unless a human explicitly keeps them active.
 completion_gate: Active buckets must be empty or placeholder-only after processing.
 
-current_handoff:
-  status: release_candidate_not_yet_published
+publication_handoff_2026_08_28:
+  status: published_and_readback_verified
   version: 1.1.0
-  public_contract: Empty current SLM2 composition catalog and peer-announcement feed; exact-peer import or explicit pinned-source local conversion only.
-  retired_contract: All public .slm-era catalog, manifest-v0, example, and request/script handoff routes are removed and require 404 or 410 readback.
-  next: Complete gates, commit source, generate and commit deployment evidence, push and prove remote equality, publish once, verify HTTPS bytes and retired routes, then commit and push the immutable receipt.
+  publisher_commit: 2902e98aa0c1f38bf7f16236651d13f830da45e6
+  source_commit: e100515128e11f14908942077957ecab216df693
+  manifest_sha256: c6f4ec7227288fc940d57c9e8e08fbe45963b4e1c4b258fb7c36b62da7bf0c3e
+  closure: 22 files, 74965 bytes, zero hosted model artifacts
+  success_receipt: deploy/receipts/site-deployment-20260828T213737Z.json
+  success_receipt_sha256: 9be5f3b8d1bf144b79d2f8a305e27e0cc922c6df032be67ddd19a0043b90952f
+  proof: Exact file readback, six current route smokes, and 17 retired-route 404/410 checks passed.
+  restart: Treat 1.1.0 as terminally published. A future public-byte change requires a new complete versioned closure and receipt.
 
 memory_endpoints:
   direct_agent_lane: Ecosystem agents use MemoryEndpoints.com directly for long-term memory, meetings, handoffs, and coordination across all maintained sites.
@@ -29,4 +34,3 @@ historical_reference:
   version: 1.0.0
   status: superseded_historical_evidence_only
   success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json
-  warning: Preserve the receipt as history; do not preserve its obsolete hosted acquisition semantics in the current path.

@@ -1,20 +1,28 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-08-28T00:00:00Z
+updated_utc: 2026-08-28T21:45:13Z
 site: MiniModel.org
-status: release_candidate_not_yet_published
+status: published_and_readback_verified
 
-current_release_candidate:
+current_release:
   version: 1.1.0
   release_date: 2026-08-28
+  publisher_commit: 2902e98aa0c1f38bf7f16236651d13f830da45e6
+  source_commit: e100515128e11f14908942077957ecab216df693
+  source_tree: 614b024a778c5a100680653624a3ec2e39129441
+  manifest_sha256: c6f4ec7227288fc940d57c9e8e08fbe45963b4e1c4b258fb7c36b62da7bf0c3e
+  success_receipt: deploy/receipts/site-deployment-20260828T213737Z.json
+  success_receipt_sha256: 9be5f3b8d1bf144b79d2f8a305e27e0cc922c6df032be67ddd19a0043b90952f
+  closure: 22 files, 74965 bytes, zero hosted model artifacts
+  transport: 18 published, 4 already current
+  retired_routes: 17 exact former routes deleted and verified as 404 or 410
+  route_smokes: 6 passed
   catalog: catalog/compositions.v1.json
   peer_announcements: catalog/peer-announcements.v1.json
   active_compositions: 0
   active_peer_announcements: 0
-  model_bytes_hosted_by_project_sites: false
   truth: MiniModel.org publishes discovery and qualification metadata only. It neither proxies model bytes nor performs remote inference.
   acquisition: A user action may obtain one exact qualified SLM2 composition from a consenting verified peer or explicitly acquire a pinned public source and convert it locally through an authenticated companion.
-  retired_public_contract: The manifest-v0, models.v0, request/script handoff, hosted qwen2.5 catalog row, and example .slm-era routes are removed from the sole current hosted contract and must return 404 or 410 after publication.
-  native_cli_gap: The Rust CLI still predates the sole SLM2 acquisition contract. This is an implementation gap, not a compatibility promise or a hidden fallback.
+  native_cli_gap: The Rust CLI still predates the sole SLM2 acquisition contract. Its v0 fixtures are internal regression input outside the hosted closure, not compatibility authority or a fallback.
 
 memory_endpoints_authority:
   uses: 2
@@ -27,19 +35,18 @@ memory_endpoints_authority:
 clean_slate_rules:
   - One current SLM2 catalog and acquisition contract only.
   - No legacy reader, compatibility alias, migration, repair, remote inference fallback, hidden retry, best-of-N, or accepted debt.
-  - A failed or obsolete receipt remains historical evidence and never becomes current acceptance logic.
+  - Failed and obsolete receipts remain historical evidence and never become current acceptance logic.
 
 historical_release:
   version: 1.0.0
   status: superseded_historical_evidence_only
   success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json
-  note: Its exact readback remains historical fact, but its catalog and acquisition semantics are not current product authority.
 
-remaining_release_work:
-  - Finish deterministic source gates, real Chromium desktop/mobile smoke, and the Rust suite with the unavailable external model fixture explicitly reported as skipped.
-  - Commit the coherent 1.1.0 source, generate and commit its content-addressed deployment manifest, push, and prove local/tracking/FETCH_HEAD/direct-remote equality.
-  - Run a dry deployment, publish once with the exact MiniModel.org profile, require exact HTTPS readback, and require every retired route to return 404 or 410.
-  - Commit and push the immutable deployment receipt, then replace this candidate pointer with the exact published result.
+verification:
+  node_catalog_tests: 11 passed, 0 failed
+  chromium: desktop and mobile current empty-catalog smoke passed
+  rust: 149 passed, 0 failed, 1 unavailable external-model test explicitly filtered
+  public: all manifest bytes, route smokes, and retired routes verified by the success receipt
 
 campaign_counters:
   qualified_models: 0/20

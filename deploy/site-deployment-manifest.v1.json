@@ -2,10 +2,10 @@
   "schema": "uaix.static_site_deployment_manifest.v1",
   "site": "minimodel.org",
   "origin": "https://minimodel.org",
-  "version": "1.1.0",
-  "release_date": "2026-08-28",
-  "source_commit": "e100515128e11f14908942077957ecab216df693",
-  "source_tree": "614b024a778c5a100680653624a3ec2e39129441",
+  "version": "1.1.1",
+  "release_date": "2026-08-29",
+  "source_commit": "64f36910f6b4cccb92af815aea2fdd7b9599cd96",
+  "source_tree": "7205bcb1a9ac8d62b2c744879ad038abfdfb8f24",
   "transport_profile": "MiniModel.org",
   "files": [
     {
@@ -16,14 +16,14 @@
     },
     {
       "path": ".well-known/site-release-history.json",
-      "bytes": 1585,
-      "sha256": "528ec107d9d70c7e8b7931eecdbf989db69bdb64402dc4d08d99cfb5756540f0",
+      "bytes": 2453,
+      "sha256": "963d43ae96e78f59bdf31b2172ec01b5d1b676818ed6dc383a089964921755d8",
       "https_readback_path": "/.well-known/site-release-history.json"
     },
     {
       "path": ".well-known/uaix-talisman.txt",
       "bytes": 1107,
-      "sha256": "4a028e38c388efebf4c0104581ec36424d59bcc432d79507c77dba90ac265577",
+      "sha256": "bf7c7dbec38fbcce5925df72263bbdfdfcfabd86795bb0508e580f28bfaa0bb4",
       "https_readback_path": "/.well-known/uaix-talisman.txt"
     },
     {
@@ -58,8 +58,8 @@
     },
     {
       "path": "docs/catalog-boundary.md",
-      "bytes": 3690,
-      "sha256": "5c4207350dfc175001b86fb3f9d953101165ee85cd4733c00b4a5cd000bdc17d",
+      "bytes": 3744,
+      "sha256": "23714e8f96a5bf212c6403e32fb982dd54524fb0ba0dee9460f0a3d3e8db5d05",
       "https_readback_path": "/docs/catalog-boundary.md"
     },
     {
@@ -83,7 +83,7 @@
     {
       "path": "index.html",
       "bytes": 8284,
-      "sha256": "a0e8ad0f7764f8a31291e81d396533dcfc36cb4797fb94a9ed0ef1ef7acf3213",
+      "sha256": "cfeb89175271f321e981fcc3c441c1d6cdfe18e9f78076aca7f10946fc0cb89f",
       "https_readback_path": "/index.html"
     },
     {
@@ -95,19 +95,19 @@
     {
       "path": "llms-full.txt",
       "bytes": 2680,
-      "sha256": "bc019ebc6c487ebf48e71cef62050cf3c7a48609dd12908a77099cbc205ccc68",
+      "sha256": "8476b3bd8af0303999e47ba7d84433863af072401e891f194efd8a632fd6f56b",
       "https_readback_path": "/llms-full.txt"
     },
     {
       "path": "llms.txt",
       "bytes": 1087,
-      "sha256": "a109a1bab411ab017d3ee0b66c3e477ebdca0813d4429f8b2e49576b9742ba3c",
+      "sha256": "9ccf62be5fe54899d8c22528cf6bb3abc57413346144c1ccb169d922ed333353",
       "https_readback_path": "/llms.txt"
     },
     {
       "path": "ROADMAP.md",
-      "bytes": 2044,
-      "sha256": "5c7ac585a8db5feefb32cffc685f184dea93d5bee0c5d08b50587cd428417b9d",
+      "bytes": 2400,
+      "sha256": "f41c07feb8cdffd996ca5515e977e504ab7befcfdbab9e67d8d1dd27ff71e013",
       "https_readback_path": "/ROADMAP.md"
     },
     {
@@ -119,7 +119,7 @@
     {
       "path": "sitemap.xml",
       "bytes": 1204,
-      "sha256": "22205552c9a60de6816c9e0362913bd6371c1f16fdae1e4b21f53f8a87caa098",
+      "sha256": "400abbcd7a4dee68ba90ba237db7e987014e44f441fd566540714515955c13e9",
       "https_readback_path": "/sitemap.xml"
     },
     {
@@ -130,14 +130,14 @@
     },
     {
       "path": "updates/index.html",
-      "bytes": 2494,
-      "sha256": "cf2a8fa38ebb0e40d6e838efbbe4ded7a80b1b0cdad1f8d52dee8fa0d797e753",
+      "bytes": 3265,
+      "sha256": "2d7f1e498a9f414f0ef95a02b852eff052124b3830017fbee13bbed73c6339ba",
       "https_readback_path": "/updates/index.html"
     },
     {
       "path": ".well-known/site-release.json",
       "bytes": 292,
-      "sha256": "54d0910d30c81155945e10aa3767c8bdf365852f4e5bb68bc5e2db613916bac5",
+      "sha256": "5496360cd0decaae25b65547813c128693ce0dbfa55e168dd1f6693539112aef",
       "https_readback_path": "/.well-known/site-release.json"
     }
   ],
@@ -163,11 +163,11 @@
   "route_smokes": [
     {
       "path": "/",
-      "contains": "Version 1.1.0"
+      "contains": "Version 1.1.1"
     },
     {
       "path": "/updates/",
-      "contains": "1.1.0 - 2026-08-28"
+      "contains": "1.1.1 - 2026-08-29"
     },
     {
       "path": "/catalog/compositions.v1.json",
@@ -183,7 +183,7 @@
     },
     {
       "path": "/.well-known/site-release.json",
-      "contains": "minimodel.org@1.1.0"
+      "contains": "minimodel.org@1.1.1"
     }
   ]
 }

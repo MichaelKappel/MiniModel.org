@@ -1,5 +1,5 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-08-28T21:45:13Z
+updated_utc: 2026-08-29T23:13:17Z
 site: MiniModel.org
 status: published_and_readback_verified
 
@@ -22,7 +22,13 @@ current_release:
   active_peer_announcements: 0
   truth: MiniModel.org publishes discovery and qualification metadata only. It neither proxies model bytes nor performs remote inference.
   acquisition: A user action may obtain one exact qualified SLM2 composition from a consenting verified peer or explicitly acquire a pinned public source and convert it locally through an authenticated companion.
-  native_cli_gap: The Rust CLI still predates the sole SLM2 acquisition contract. Its v0 fixtures are internal regression input outside the hosted closure, not compatibility authority or a fallback.
+
+source_cleanup:
+  status: completed_pending_1.1.1_publication
+  removed: Obsolete pre-SLM2 Rust CLI, v0 fixtures, tracked single-file model demo, and stale duplicate-checkout path dependency.
+  authority: Deleted material remains only in Git history and has no executable, compatibility, fallback, or test authority.
+  current_implementation: Strict metadata-only SLM2 catalog, peer-feed validator, and browser surface.
+  native_companion: Not currently claimed or shipped; any implementation must begin from current six-member SLM2 vectors and contracts.
 
 memory_endpoints_authority:
   uses: 2
@@ -43,9 +49,10 @@ historical_release:
   success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json
 
 verification:
-  node_catalog_tests: 11 passed, 0 failed
+  node_catalog_tests: 12 passed, 0 failed
   chromium: desktop and mobile current empty-catalog smoke passed
-  rust: 149 passed, 0 failed, 1 unavailable external-model test explicitly filtered
+  clean_source_gate: Retired Cargo, crates, v0 fixture, demo model, and duplicate-authority surfaces are absent.
+  rust: not_applicable; the obsolete pre-SLM2 workspace is deleted rather than retained as debt
   public: all manifest bytes, route smokes, and retired routes verified by the success receipt
 
 campaign_counters:

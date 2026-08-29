@@ -76,10 +76,11 @@ provenance-labeled, and noncontradictory.
 
 ## Publication
 
-- Last published: `1.1.0` on 2026-08-28.
-- Release date: 2026-08-28.
-- Update: current direct-P2P, SLM2, cryptographic verification, privacy, and
-  two-lane MemoryEndpoints boundaries documented.
+- Last published: `1.1.1` on 2026-08-29.
+- Release date: 2026-08-29.
+- Update: obsolete pre-SLM2 executable source removed; current direct-P2P,
+  SLM2, cryptographic verification, privacy, and two-lane MemoryEndpoints
+  boundaries remain documented.
 
 Publication requires a clean committed revision, complete site gates,
 deployment from that revision, and exact public HTTPS readback. Source control

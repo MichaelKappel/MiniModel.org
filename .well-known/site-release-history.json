@@ -2,8 +2,21 @@
   "schema": "uaix.site_release_history.v1",
   "site_id": "minimodel.org",
   "origin": "https://minimodel.org",
-  "current_release_id": "minimodel.org@1.1.0",
+  "current_release_id": "minimodel.org@1.1.1",
   "releases": [
+    {
+      "release_id": "minimodel.org@1.1.1",
+      "version": "1.1.1",
+      "release_date": "2026-08-29",
+      "last_publish_date": "2026-08-29",
+      "summary": "Deletes the obsolete pre-SLM2 native implementation and enforces one clean-slate catalog and source authority.",
+      "changes": [
+        "Deleted the former Rust CLI, v0 fixtures, tracked single-file model demo, and stale cross-checkout runtime dependency from current source.",
+        "Added a repository gate that rejects reintroduction of retired native surfaces and verifies the fail-closed single-source-authority policy.",
+        "Kept the current SLM2 composition catalog and peer feed truthfully empty with no hosted model artifacts.",
+        "Documented that a future native companion must start from the six-member SLM2 contract without a legacy reader or fallback."
+      ]
+    },
     {
       "release_id": "minimodel.org@1.1.0",
       "version": "1.1.0",

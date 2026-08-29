@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MiniModel.org Updates</title>
   <meta name="description" content="Versioned public release history for MiniModel.org.">
-  <meta name="application-version" content="1.1.0">
+  <meta name="application-version" content="1.1.1">
   <link rel="canonical" href="https://minimodel.org/updates/">
   <link rel="stylesheet" href="/styles.css?v=20260828-slm2">
 </head>
@@ -24,6 +24,17 @@
       <div class="research-grid">
         <article>
           <p class="eyebrow">Current release</p>
+          <h2>1.1.1 - 2026-08-29</h2>
+          <p>Removes the obsolete pre-SLM2 native implementation from current source and makes the single-authority rule executable.</p>
+          <ul>
+            <li>Deleted the former Rust CLI, v0 fixtures, tracked single-file model demo, and stale cross-checkout dependency.</li>
+            <li>Added a gate that rejects those retired surfaces and verifies the fail-closed canonical-source policy.</li>
+            <li>Kept the public SLM2 catalog and peer feed truthfully empty with no hosted model bytes.</li>
+            <li>Required any future native companion to start from the six-member SLM2 contract without fallback.</li>
+          </ul>
+        </article>
+        <article>
+          <p class="eyebrow">Historical</p>
           <h2>1.1.0 - 2026-08-28</h2>
           <p>Replaces obsolete single-file catalog authority with the clean-slate six-member SLM2 catalog and explicit acquisition contract.</p>
           <ul>
@@ -43,7 +54,7 @@
   </main>
   <footer>
     <span>MiniModel.org</span>
-    <span>Version 1.1.0 | Released 2026-08-28 | Last published 2026-08-28</span>
+    <span>Version 1.1.1 | Released 2026-08-29 | Last published 2026-08-29</span>
     <a href="/.well-known/site-release.json">Current release JSON</a>
     <a href="/.well-known/site-release-history.json">Release history JSON</a>
   </footer>

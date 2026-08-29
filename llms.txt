@@ -26,4 +26,4 @@ MemoryEndpoints.com has two separate authorized uses: direct ecosystem-agent
 coordination, and the TinyRustLM.com Connect user plugin. It is not MiniModel
 catalog, peer, model-byte, conversion, or inference infrastructure.
 
-Current release: 1.1.0, dated 2026-08-28.
+Current release: 1.1.1, dated 2026-08-29.

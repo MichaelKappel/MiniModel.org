@@ -235,7 +235,7 @@ function assertViewport(result, label) {
   assert.equal(result.memoryHeading, "MemoryEndpoints has two separate uses");
   assert.match(result.memoryText, /ecosystem agents use MemoryEndpoints\.com directly/i);
   assert.match(result.memoryText, /TinyRustLM\.com Connect user can sign in through its plugin/i);
-  assert.match(result.releaseText, /Version 1\.1\.0/);
+  assert.match(result.releaseText, /Version 1\.1\.1/);
   assert.doesNotMatch(result.pageText, /Qwen2\.5|manifest-v0|models\.v0|download (?:a )?(?:request|script)/i);
 }
 

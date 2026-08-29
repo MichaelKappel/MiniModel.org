@@ -10,5 +10,4 @@ Thumbs.db
 .vs/
 node_modules/
 vendor/
-/target/
 deploy/staging/

@@ -226,11 +226,45 @@ test("binds visible and machine-readable release identity", () => {
   const history = readJson(".well-known/site-release-history.json");
   const html = read("index.html");
   const updates = read("updates/index.html");
-  assert.equal(release.release_id, "minimodel.org@1.1.0");
-  assert.equal(release.release_date, "2026-08-28");
+  assert.equal(release.release_id, "minimodel.org@1.1.1");
+  assert.equal(release.release_date, "2026-08-29");
   assert.equal(history.current_release_id, release.release_id);
-  assert.match(html, /Version 1\.1\.0/);
-  assert.match(updates, /1\.1\.0 - 2026-08-28/);
+  assert.match(html, /Version 1\.1\.1/);
+  assert.match(updates, /1\.1\.1 - 2026-08-29/);
+});
+
+test("keeps retired native code and duplicate TinyRustLM authority out of current source", () => {
+  for (const retiredPath of ["Cargo.toml", "Cargo.lock"]) {
+    assert.equal(
+      fs.existsSync(path.join(repositoryRoot, retiredPath)),
+      false,
+      `${retiredPath} must remain available only through Git history`,
+    );
+  }
+
+  for (const retiredRoot of ["crates", "artifacts/demo", "tests/fixtures/native-v0"]) {
+    const absoluteRoot = path.join(repositoryRoot, retiredRoot);
+    const files = fs.existsSync(absoluteRoot)
+      ? fs.readdirSync(absoluteRoot, { recursive: true, withFileTypes: true })
+          .filter((entry) => entry.isFile())
+      : [];
+    assert.deepEqual(files, [], `${retiredRoot} must contain no current files`);
+  }
+
+  const taboo = read(".uai/taboo.uai");
+  for (const required of [
+    "more than one authoritative TinyRustLM.com source checkout",
+    "any second writable TinyRustLM.com checkout",
+    "automated gates must reject pointers to duplicate, retired, quarantined",
+    "Historical source belongs only in Git history",
+  ]) {
+    assert.match(taboo, new RegExp(required.replaceAll(".", "\\."), "i"));
+  }
+
+  const roadmap = read("ROADMAP.md");
+  assert.match(roadmap, /obsolete pre-SLM2 native CLI.*deleted/s);
+  assert.match(roadmap, /only through Git history/);
+  assert.doesNotMatch(roadmap, /current native MiniModel CLI predates/i);
 });
 
 test("contains no current instruction-file acquisition or remote inference fallback", () => {

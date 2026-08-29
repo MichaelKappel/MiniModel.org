@@ -30,12 +30,18 @@ or perform server-side conversion.
    activation, and local multi-turn chat before adding a catalog entry.
 7. Commit, push, deploy, and verify exact public HTTPS bytes and retired routes.
 
-## Current Gaps
+## Current Implementation Boundary
 
-The current native MiniModel CLI predates the SLM2 clean-slate contract and is
-not publication or compatibility authority. Replacing it is separate
-implementation work requiring generated vectors, Rust tests, hostile-input
-coverage, and a clean deletion of obsolete executable paths.
+The obsolete pre-SLM2 native CLI, its v0 fixtures, its single-file model demo,
+and its cross-checkout runtime dependency are deleted from current source.
+They remain available only through Git history and have no executable,
+compatibility, fallback, or test authority.
+
+The current implementation is the strict metadata-only SLM2 catalog, peer-feed
+validator, and browser surface. No native SLM2 acquisition companion is
+claimed or shipped yet. That companion must begin from generated SLM2 vectors
+and current six-member composition contracts, with hostile-input coverage and
+no reuse of the deleted single-file reader.
 
 No composition, peer, browser round, live MemoryEndpoints round, or catalog
 announcement is claimed. Campaign counters remain `0/20`, `0/50`, `0/25`,

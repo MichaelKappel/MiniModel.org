@@ -64,6 +64,6 @@ and noncontradictory. MemoryEndpoints is not a MiniModel transport or authority.
 - `/.well-known/site-release.json`
 - `/.well-known/site-release-history.json`
 
-Release 1.1.0 is dated 2026-08-28. Exact committed source, deployment receipt,
+Release 1.1.1 is dated 2026-08-29. Exact committed source, deployment receipt,
 retired-route checks, and public HTTPS readback remain the publication
 authority.

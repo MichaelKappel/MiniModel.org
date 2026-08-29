@@ -1,7 +1,0 @@
-[workspace]
-members = [
-    "crates/minimodel",
-    "crates/minimodel-core",
-    "crates/minimodel-native",
-]
-resolver = "2"

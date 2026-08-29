@@ -1,19 +1,20 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-08-29T23:13:17Z
+updated_utc: 2026-08-29T23:26:11Z
 site: MiniModel.org
 status: published_and_readback_verified
 
 current_release:
-  version: 1.1.0
-  release_date: 2026-08-28
-  publisher_commit: 2902e98aa0c1f38bf7f16236651d13f830da45e6
-  source_commit: e100515128e11f14908942077957ecab216df693
-  source_tree: 614b024a778c5a100680653624a3ec2e39129441
-  manifest_sha256: c6f4ec7227288fc940d57c9e8e08fbe45963b4e1c4b258fb7c36b62da7bf0c3e
-  success_receipt: deploy/receipts/site-deployment-20260828T213737Z.json
-  success_receipt_sha256: 9be5f3b8d1bf144b79d2f8a305e27e0cc922c6df032be67ddd19a0043b90952f
-  closure: 22 files, 74965 bytes, zero hosted model artifacts
-  transport: 18 published, 4 already current
+  version: 1.1.1
+  release_date: 2026-08-29
+  publisher_commit: 52598ea59332962d43611efb06caf3fe92c9e12e
+  source_commit: 64f36910f6b4cccb92af815aea2fdd7b9599cd96
+  source_tree: 7205bcb1a9ac8d62b2c744879ad038abfdfb8f24
+  manifest_sha256: f623517f4e47d389e0ac781b780218a85e7a34856e324c5c33dc79da5f219993
+  success_receipt: deploy/receipts/site-deployment-20260829T231955Z.json
+  success_receipt_sha256: 52cec5685813c498cec1764bccb046c1ecdc229c11381b0e7019dc7ddc6c5a2d
+  receipt_commit: 15971019a52d06ea560fa090e8cc72cbb9f7140b
+  closure: 22 files, 77014 bytes, zero hosted model artifacts
+  transport: 10 published, 12 already current
   retired_routes: 17 exact former routes deleted and verified as 404 or 410
   route_smokes: 6 passed
   catalog: catalog/compositions.v1.json
@@ -24,7 +25,7 @@ current_release:
   acquisition: A user action may obtain one exact qualified SLM2 composition from a consenting verified peer or explicitly acquire a pinned public source and convert it locally through an authenticated companion.
 
 source_cleanup:
-  status: completed_pending_1.1.1_publication
+  status: completed_and_published_in_1.1.1
   removed: Obsolete pre-SLM2 Rust CLI, v0 fixtures, tracked single-file model demo, and stale duplicate-checkout path dependency.
   authority: Deleted material remains only in Git history and has no executable, compatibility, fallback, or test authority.
   current_implementation: Strict metadata-only SLM2 catalog, peer-feed validator, and browser surface.
@@ -43,17 +44,21 @@ clean_slate_rules:
   - No legacy reader, compatibility alias, migration, repair, remote inference fallback, hidden retry, best-of-N, or accepted debt.
   - Failed and obsolete receipts remain historical evidence and never become current acceptance logic.
 
-historical_release:
-  version: 1.0.0
-  status: superseded_historical_evidence_only
-  success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json
+historical_releases:
+  - version: 1.1.0
+    status: superseded_historical_evidence_only
+    success_receipt: deploy/receipts/site-deployment-20260828T213737Z.json
+  - version: 1.0.0
+    status: superseded_historical_evidence_only
+    success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json
 
 verification:
   node_catalog_tests: 12 passed, 0 failed
   chromium: desktop and mobile current empty-catalog smoke passed
   clean_source_gate: Retired Cargo, crates, v0 fixture, demo model, and duplicate-authority surfaces are absent.
   rust: not_applicable; the obsolete pre-SLM2 workspace is deleted rather than retained as debt
-  public: all manifest bytes, route smokes, and retired routes verified by the success receipt
+  public: all 20 hash-bound HTTPS files, six route smokes, and 17 retired routes verified independently after the success receipt
+  residual: The observed root response omitted HSTS, CSP, X-Content-Type-Options, and Referrer-Policy; these headers were outside the 1.1.1 gate and require a separate versioned change.
 
 campaign_counters:
   qualified_models: 0/20

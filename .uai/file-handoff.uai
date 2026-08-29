@@ -1,5 +1,5 @@
 profile: minimodel.file-handoff.v3
-updated_utc: 2026-08-28T21:45:13Z
+updated_utc: 2026-08-29T23:26:11Z
 site: MiniModel.org
 setup_route: https://uaix.org/en-us/tools/ai-memory-package-wizard/#setup-file-handoff
 active_buckets:
@@ -12,17 +12,20 @@ rules:
   - Remove processed source-site copies unless a human explicitly keeps them active.
 completion_gate: Active buckets must be empty or placeholder-only after processing.
 
-publication_handoff_2026_08_28:
+publication_handoff_2026_08_29:
   status: published_and_readback_verified
-  version: 1.1.0
-  publisher_commit: 2902e98aa0c1f38bf7f16236651d13f830da45e6
-  source_commit: e100515128e11f14908942077957ecab216df693
-  manifest_sha256: c6f4ec7227288fc940d57c9e8e08fbe45963b4e1c4b258fb7c36b62da7bf0c3e
-  closure: 22 files, 74965 bytes, zero hosted model artifacts
-  success_receipt: deploy/receipts/site-deployment-20260828T213737Z.json
-  success_receipt_sha256: 9be5f3b8d1bf144b79d2f8a305e27e0cc922c6df032be67ddd19a0043b90952f
-  proof: Exact file readback, six current route smokes, and 17 retired-route 404/410 checks passed.
-  restart: Treat 1.1.0 as terminally published. A future public-byte change requires a new complete versioned closure and receipt.
+  version: 1.1.1
+  publisher_commit: 52598ea59332962d43611efb06caf3fe92c9e12e
+  source_commit: 64f36910f6b4cccb92af815aea2fdd7b9599cd96
+  source_tree: 7205bcb1a9ac8d62b2c744879ad038abfdfb8f24
+  manifest_sha256: f623517f4e47d389e0ac781b780218a85e7a34856e324c5c33dc79da5f219993
+  closure: 22 files, 77014 bytes, zero hosted model artifacts; 10 published and 12 already current
+  success_receipt: deploy/receipts/site-deployment-20260829T231955Z.json
+  success_receipt_sha256: 52cec5685813c498cec1764bccb046c1ecdc229c11381b0e7019dc7ddc6c5a2d
+  receipt_commit: 15971019a52d06ea560fa090e8cc72cbb9f7140b
+  proof: All 20 hash-bound file readbacks, six current route smokes, and 17 retired-route 404/410 checks passed independently.
+  source_cleanup: Obsolete pre-SLM2 Rust CLI, v0 fixtures, tracked demo model, and stale duplicate-checkout dependency are deleted and remain only in Git history.
+  restart: Treat 1.1.1 as terminally published. A future public-byte change requires a new complete versioned closure and receipt.
 
 memory_endpoints:
   direct_agent_lane: Ecosystem agents use MemoryEndpoints.com directly for long-term memory, meetings, handoffs, and coordination across all maintained sites.
@@ -31,6 +34,9 @@ memory_endpoints:
   evidence: Configuration or reachability is not a live-round receipt.
 
 historical_reference:
-  version: 1.0.0
-  status: superseded_historical_evidence_only
-  success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json
+  - version: 1.1.0
+    status: superseded_historical_evidence_only
+    success_receipt: deploy/receipts/site-deployment-20260828T213737Z.json
+  - version: 1.0.0
+    status: superseded_historical_evidence_only
+    success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json

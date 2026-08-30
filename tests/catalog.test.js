@@ -257,6 +257,7 @@ test("keeps retired native code and duplicate TinyRustLM authority out of curren
     "any second writable TinyRustLM.com checkout",
     "automated gates must reject pointers to duplicate, retired, quarantined",
     "Historical source belongs only in Git history",
+    "Any committed change to a declared public artifact invalidates deployed-current status",
   ]) {
     assert.match(taboo, new RegExp(required.replaceAll(".", "\\."), "i"));
   }

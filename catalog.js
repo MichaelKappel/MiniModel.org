@@ -2,8 +2,11 @@
   "use strict";
 
   const MAX_METADATA_BYTES = 1024 * 1024;
+  const MAX_BROWSER_ADMISSION_BYTES = 64 * 1024;
   const CATALOG_SCHEMA = "minimodel.slm2_catalog.v1";
   const PEER_SCHEMA = "minimodel.slm2_peer_announcements.v1";
+  const BROWSER_ADMISSION_SCHEMA = "tinyrustlm.browser-composition-admission/1";
+  const DIRECT_COMPOSITION_PROTOCOL_PROFILE = "tinyrustlm.direct-composition-http.v1";
   const MEMBER_NAMES = Object.freeze([
     "model.slm2",
     "tokenizer.tokenizer2",
@@ -66,12 +69,28 @@
 
   function requireLocalRoute(value, label) {
     const normalized = requireString(value, label, 256);
-    if (!/^\/[A-Za-z0-9._/-]+$/.test(normalized)
+    if (value !== normalized
+        || !/^\/[A-Za-z0-9._/-]+$/.test(normalized)
         || normalized.includes("//")
         || normalized.split("/").includes("..")) {
       throw new Error(`${label} must be a safe same-origin route`);
     }
     return normalized;
+  }
+
+  function validateBrowserAdmission(value, label) {
+    requireExactKeys(value, ["route", "bytes", "sha256"], label);
+    requireLocalRoute(value.route, `${label}.route`);
+    if (!Number.isSafeInteger(value.bytes)
+        || value.bytes < 1
+        || value.bytes > MAX_BROWSER_ADMISSION_BYTES) {
+      throw new Error(`${label}.bytes must be a positive bounded safe integer`);
+    }
+    const digest = requireString(value.sha256, `${label}.sha256`, 71);
+    if (digest !== value.sha256 || !/^sha256:[a-f0-9]{64}$/.test(digest)) {
+      throw new Error(`${label}.sha256 must be a lower-case prefixed SHA-256 identity`);
+    }
+    return value;
   }
 
   function requireProjectBoundary(value, includeInference, label) {
@@ -104,6 +123,7 @@
       "source",
       "license",
       "composition",
+      "browser_admission",
       "profiles",
       "qualification",
       "peer_announcement_ids",
@@ -139,6 +159,8 @@
     if (memberNames.some((name, index) => name !== [...MEMBER_NAMES].sort()[index])) {
       throw new Error(`${label}.composition member set is not closed`);
     }
+
+    validateBrowserAdmission(value.browser_admission, `${label}.browser_admission`);
 
     requireExactKeys(value.profiles, ["conversion", "quantization", "runtime"], `${label}.profiles`);
     requireId(value.profiles.conversion, `${label}.profiles.conversion`);
@@ -179,11 +201,15 @@
       "project_server_proxies_model_bytes",
       "project_server_runs_inference",
       "qualification_policy",
+      "browser_admission_schema",
       "entries",
     ], "catalog");
     if (value.schema !== CATALOG_SCHEMA
         || value.qualification_policy !== "exact-current-evidence-required") {
       throw new Error("catalog schema or qualification policy is unsupported");
+    }
+    if (value.browser_admission_schema !== BROWSER_ADMISSION_SCHEMA) {
+      throw new Error("catalog browser admission schema is unsupported");
     }
     requireId(value.catalog_id, "catalog.catalog_id");
     requireUtc(value.generated_at_utc, "catalog.generated_at_utc");
@@ -221,7 +247,9 @@
       throw new Error("peer announcement references an unknown composition");
     }
     requireSha256(value.piece_set_sha256, "peer announcement.piece_set_sha256");
-    requireId(value.protocol_profile, "peer announcement.protocol_profile");
+    if (value.protocol_profile !== DIRECT_COMPOSITION_PROTOCOL_PROFILE) {
+      throw new Error("peer announcement protocol profile is unsupported");
+    }
     if (value.consent_status !== "explicit"
         || value.outside_proof_status !== "current-passed") {
       throw new Error("peer announcement lacks explicit consent or current outside proof");
@@ -295,6 +323,12 @@
         sourceRepository: entry.source.repository,
         sourceRevision: entry.source.revision,
         compositionId: entry.composition.composition_id,
+        browserAdmission: Object.freeze({
+          schema: BROWSER_ADMISSION_SCHEMA,
+          route: entry.browser_admission.route,
+          bytes: entry.browser_admission.bytes,
+          sha256: entry.browser_admission.sha256,
+        }),
         quantizationProfile: entry.profiles.quantization,
         licenseRoute: entry.license.route,
         availability: peers.length ? "peer" : "local-conversion",
@@ -439,8 +473,11 @@
   const api = Object.freeze({
     CATALOG_SCHEMA,
     PEER_SCHEMA,
+    BROWSER_ADMISSION_SCHEMA,
+    DIRECT_COMPOSITION_PROTOCOL_PROFILE,
     MEMBER_NAMES,
     MAX_METADATA_BYTES,
+    MAX_BROWSER_ADMISSION_BYTES,
     validateCatalog,
     validatePeerFeed,
     buildCatalogView,

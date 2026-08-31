@@ -44,6 +44,11 @@ function validEntry() {
         schema: `tinyrustlm.member.${index + 1}.v1`,
       })),
     },
+    browser_admission: {
+      route: "/catalog/browser-admissions/qwen3-0.6b.browser-composition-admission.json",
+      bytes: 4096,
+      sha256: sha("f"),
+    },
     profiles: {
       conversion: "tinyrustlm.converter.v1",
       quantization: "tinyrustlm.mixed-q8.v1",
@@ -70,6 +75,7 @@ function validCatalog(entries = []) {
     project_server_proxies_model_bytes: false,
     project_server_runs_inference: false,
     qualification_policy: "exact-current-evidence-required",
+    browser_admission_schema: catalogApi.BROWSER_ADMISSION_SCHEMA,
     entries,
   };
 }
@@ -91,7 +97,7 @@ function validAnnouncement() {
     composition_id: sha("c"),
     piece_set_sha256: sha("e"),
     peer_base_url: "https://peer.example.net/models/qwen3/",
-    protocol_profile: "minimodel.direct-piece.v1",
+    protocol_profile: catalogApi.DIRECT_COMPOSITION_PROTOCOL_PROFILE,
     consent_status: "explicit",
     outside_proof_status: "current-passed",
     expires_utc: "2099-01-01T00:00:00Z",
@@ -104,6 +110,10 @@ test("publishes a truthful empty current SLM2 catalog and peer feed", () => {
   assert.equal(catalogApi.validateCatalog(catalog), catalog);
   assert.deepEqual(catalogApi.validatePeerFeed(peers, catalog), []);
   assert.deepEqual(catalogApi.buildCatalogView(catalog, peers), []);
+  assert.equal(
+    catalog.browser_admission_schema,
+    "tinyrustlm.browser-composition-admission/1",
+  );
   assert.equal(catalog.entries.length, 0);
   assert.equal(peers.announcements.length, 0);
 });
@@ -113,6 +123,13 @@ test("projects a qualified composition to explicit pinned local conversion", () 
   assert.equal(view.availability, "local-conversion");
   assert.equal(view.availabilityLabel, "Pinned local conversion");
   assert.equal(view.peerCount, 0);
+  assert.deepEqual(view.browserAdmission, {
+    schema: catalogApi.BROWSER_ADMISSION_SCHEMA,
+    route: "/catalog/browser-admissions/qwen3-0.6b.browser-composition-admission.json",
+    bytes: 4096,
+    sha256: sha("f"),
+  });
+  assert.ok(Object.isFrozen(view.browserAdmission));
 });
 
 test("projects only a current explicitly consenting direct peer", () => {
@@ -125,6 +142,32 @@ test("projects only a current explicitly consenting direct peer", () => {
   );
   assert.equal(view.availability, "peer");
   assert.equal(view.peerCount, 1);
+});
+
+test("admits only the exact browser-consumable direct composition protocol", () => {
+  const catalog = validCatalog([validEntry()]);
+  assert.equal(
+    catalogApi.DIRECT_COMPOSITION_PROTOCOL_PROFILE,
+    "tinyrustlm.direct-composition-http.v1",
+  );
+
+  for (const protocolProfile of [
+    "minimodel.direct-piece.v1",
+    "tinyrustlm.direct-composition.v1",
+    "tinyrustlm.direct-composition-http.v0",
+    "tinyrustlm.direct-composition-http.v1 ",
+    "tinyrustlm.direct-composition-http.v1/fallback",
+  ]) {
+    const announcement = validAnnouncement();
+    announcement.protocol_profile = protocolProfile;
+    assert.throws(
+      () => catalogApi.validatePeerFeed(validPeerFeed([announcement]), catalog, {
+        now: new Date("2026-08-28T00:00:00Z"),
+      }),
+      /protocol profile is unsupported/,
+      protocolProfile,
+    );
+  }
 });
 
 test("rejects unknown catalog fields and project-server model behavior", () => {
@@ -152,6 +195,56 @@ test("rejects incomplete or drifted six-member composition closure", () => {
   assert.throws(
     () => catalogApi.validateCatalog(validCatalog([duplicate])),
     /member set is not closed/,
+  );
+});
+
+test("rejects missing, unsafe, or drifted browser admission descriptors", () => {
+  const missing = validEntry();
+  delete missing.browser_admission;
+  assert.throws(
+    () => catalogApi.validateCatalog(validCatalog([missing])),
+    /unknown or missing/,
+  );
+
+  for (const route of [
+    "https://minimodel.org/catalog/admission.json",
+    "//other.example/admission.json",
+    "/catalog/../admission.json",
+  ]) {
+    const unsafe = validEntry();
+    unsafe.browser_admission.route = route;
+    assert.throws(
+      () => catalogApi.validateCatalog(validCatalog([unsafe])),
+      /safe same-origin route/,
+    );
+  }
+
+  const oversized = validEntry();
+  oversized.browser_admission.bytes = catalogApi.MAX_BROWSER_ADMISSION_BYTES + 1;
+  assert.throws(
+    () => catalogApi.validateCatalog(validCatalog([oversized])),
+    /positive bounded safe integer/,
+  );
+
+  const unprefixed = validEntry();
+  unprefixed.browser_admission.sha256 = "f".repeat(64);
+  assert.throws(
+    () => catalogApi.validateCatalog(validCatalog([unprefixed])),
+    /prefixed SHA-256/,
+  );
+
+  const unknown = validEntry();
+  unknown.browser_admission.media_type = "application/json";
+  assert.throws(
+    () => catalogApi.validateCatalog(validCatalog([unknown])),
+    /unknown or missing/,
+  );
+
+  const driftedSchema = validCatalog([validEntry()]);
+  driftedSchema.browser_admission_schema = "tinyrustlm.browser-composition-admission/2";
+  assert.throws(
+    () => catalogApi.validateCatalog(driftedSchema),
+    /browser admission schema is unsupported/,
   );
 });
 

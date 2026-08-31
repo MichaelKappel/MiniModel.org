@@ -18,6 +18,17 @@ license and provenance, qualification claims, runtime requirements, and the
 cryptographic piece/manifests needed for verification. An alias must not point
 to different bytes.
 
+Every catalog document fixes `browser_admission_schema` to
+`tinyrustlm.browser-composition-admission/1`. Every qualified entry must carry
+one exact `browser_admission` descriptor containing only a safe same-origin
+metadata route, its positive byte count of at most 64 KiB, and the lowercase
+prefixed SHA-256 digest of its canonical bytes. TinyRustLM fetches that metadata
+separately and must verify the declared length, digest, canonical serialization,
+and schema before browser activation. The admission is metadata, not a seventh
+SLM2 member. Serving it does not permit MiniModel.org to serve or proxy model
+bytes. The empty prelaunch catalog publishes the schema identity but no entry,
+descriptor, claim, or evidence.
+
 ## Catalog Claims
 
 A catalog row is metadata, not proof of availability or quality. The following
@@ -42,6 +53,11 @@ Direct peer import requires exact composition and piece-set agreement before
 mixing pieces, bounded concurrency, per-piece cryptographic verification,
 durable progress, final whole-member verification, and atomic activation. A
 piece match alone does not establish qualification.
+
+Every admitted peer announcement must set `protocol_profile` to exactly
+`tinyrustlm.direct-composition-http.v1`, the browser-consumable direct
+composition HTTP profile. Former names, aliases, version fallbacks, and
+compatibility negotiation are not accepted.
 
 The local-conversion path must pin and verify the public source revision,
 respect source licensing, expose storage and resource requirements, execute a

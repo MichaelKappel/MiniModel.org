@@ -6,5 +6,6 @@
   "project_server_proxies_model_bytes": false,
   "project_server_runs_inference": false,
   "qualification_policy": "exact-current-evidence-required",
+  "browser_admission_schema": "tinyrustlm.browser-composition-admission/1",
   "entries": []
 }

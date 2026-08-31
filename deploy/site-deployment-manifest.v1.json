@@ -2,10 +2,10 @@
   "schema": "uaix.static_site_deployment_manifest.v1",
   "site": "minimodel.org",
   "origin": "https://minimodel.org",
-  "version": "1.1.1",
-  "release_date": "2026-08-29",
-  "source_commit": "77d65bdfab168bdd12d3b0ba90fa9d3cc349e7ab",
-  "source_tree": "9b53acbd8d4143457fcb2c696a3cfcfaba5bd8b7",
+  "version": "1.1.2",
+  "release_date": "2026-08-31",
+  "source_commit": "7e0a6eb6bf292ff69e3030adf1d229c811606ce9",
+  "source_tree": "d2477347378109af4b8eade0a8208b6f0196eadd",
   "transport_profile": "MiniModel.org",
   "files": [
     {
@@ -16,20 +16,20 @@
     },
     {
       "path": ".well-known/site-release-history.json",
-      "bytes": 2453,
-      "sha256": "963d43ae96e78f59bdf31b2172ec01b5d1b676818ed6dc383a089964921755d8",
+      "bytes": 3291,
+      "sha256": "3bd9889cad1c12f015df9e4187cce55e3e109c742a09324c7662fee49cadaccd",
       "https_readback_path": "/.well-known/site-release-history.json"
     },
     {
       "path": ".well-known/uaix-talisman.txt",
-      "bytes": 1107,
-      "sha256": "bf7c7dbec38fbcce5925df72263bbdfdfcfabd86795bb0508e580f28bfaa0bb4",
+      "bytes": 1248,
+      "sha256": "de6535a19dfd593036cd625e62e49aae71f3a03c146980e15e5e06f0bcc8f75d",
       "https_readback_path": "/.well-known/uaix-talisman.txt"
     },
     {
       "path": "catalog.js",
-      "bytes": 21076,
-      "sha256": "6442edc94aa8d5368581b1a1126a3151d3eb36bd163b90c6cfbcf40e5677face",
+      "bytes": 28824,
+      "sha256": "6f2fbd0df6de8490bfad27d5a49f39249adaf25406a8ebc75c589ed7dbb60350",
       "https_readback_path": "/catalog.js"
     },
     {
@@ -58,8 +58,8 @@
     },
     {
       "path": "docs/catalog-boundary.md",
-      "bytes": 4726,
-      "sha256": "d88410ea16aecf18974d28d07184b8441c5996f897756039ede10f47702420c0",
+      "bytes": 5412,
+      "sha256": "1f9a05c568c2e4d04e2b8a434c2d871effce3af5fbcb7821dff52309565b332c",
       "https_readback_path": "/docs/catalog-boundary.md"
     },
     {
@@ -82,8 +82,8 @@
     },
     {
       "path": "index.html",
-      "bytes": 8284,
-      "sha256": "cfeb89175271f321e981fcc3c441c1d6cdfe18e9f78076aca7f10946fc0cb89f",
+      "bytes": 8368,
+      "sha256": "b9c8bd19067805d0e91f18d16a4e1decca5c676555d2101c84b4c34f79c1023d",
       "https_readback_path": "/index.html"
     },
     {
@@ -130,14 +130,14 @@
     },
     {
       "path": "updates/index.html",
-      "bytes": 3265,
-      "sha256": "2d7f1e498a9f414f0ef95a02b852eff052124b3830017fbee13bbed73c6339ba",
+      "bytes": 4150,
+      "sha256": "3e4bf4b73228f5ac93f02158452e637936b5ace053e977a9213256ab3cf89c55",
       "https_readback_path": "/updates/index.html"
     },
     {
       "path": ".well-known/site-release.json",
-      "bytes": 292,
-      "sha256": "5496360cd0decaae25b65547813c128693ce0dbfa55e168dd1f6693539112aef",
+      "bytes": 291,
+      "sha256": "aee4a7183d77e2dd286da8078920aaae5a06f59bb1d488e2d40087ee74fe7eba",
       "https_readback_path": "/.well-known/site-release.json"
     }
   ],
@@ -163,11 +163,11 @@
   "route_smokes": [
     {
       "path": "/",
-      "contains": "Version 1.1.1"
+      "contains": "Version 1.1.2"
     },
     {
       "path": "/updates/",
-      "contains": "1.1.1 - 2026-08-29"
+      "contains": "1.1.2 - 2026-08-31"
     },
     {
       "path": "/catalog/compositions.v1.json",
@@ -175,7 +175,7 @@
     },
     {
       "path": "/docs/catalog-boundary.md",
-      "contains": "MiniModel.org Catalog Boundary"
+      "contains": "Public peer URLs require HTTPS and HTTP is loopback-only."
     },
     {
       "path": "/docs/memory-endpoints.md",
@@ -183,7 +183,7 @@
     },
     {
       "path": "/.well-known/site-release.json",
-      "contains": "minimodel.org@1.1.1"
+      "contains": "minimodel.org@1.1.2"
     }
   ]
 }

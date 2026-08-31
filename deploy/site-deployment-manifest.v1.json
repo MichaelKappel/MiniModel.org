@@ -4,8 +4,8 @@
   "origin": "https://minimodel.org",
   "version": "1.1.1",
   "release_date": "2026-08-29",
-  "source_commit": "64f36910f6b4cccb92af815aea2fdd7b9599cd96",
-  "source_tree": "7205bcb1a9ac8d62b2c744879ad038abfdfb8f24",
+  "source_commit": "77d65bdfab168bdd12d3b0ba90fa9d3cc349e7ab",
+  "source_tree": "9b53acbd8d4143457fcb2c696a3cfcfaba5bd8b7",
   "transport_profile": "MiniModel.org",
   "files": [
     {
@@ -28,8 +28,8 @@
     },
     {
       "path": "catalog.js",
-      "bytes": 19452,
-      "sha256": "20600bf6257f33fe82f697bc07fdb00586eaf0b99a9ac8de351d03fc228ebca8",
+      "bytes": 21076,
+      "sha256": "6442edc94aa8d5368581b1a1126a3151d3eb36bd163b90c6cfbcf40e5677face",
       "https_readback_path": "/catalog.js"
     },
     {
@@ -40,8 +40,8 @@
     },
     {
       "path": "catalog/compositions.v1.json",
-      "bytes": 346,
-      "sha256": "da2223d09c40469b694d11583775e1d2aa3b01fd29e7a61b5dc9c1fd4026c5a5",
+      "bytes": 422,
+      "sha256": "700b510d068934627bb0a308da36d7672c1a4e296c7d984ea33199b903692a42",
       "https_readback_path": "/catalog/compositions.v1.json"
     },
     {
@@ -58,8 +58,8 @@
     },
     {
       "path": "docs/catalog-boundary.md",
-      "bytes": 3744,
-      "sha256": "23714e8f96a5bf212c6403e32fb982dd54524fb0ba0dee9460f0a3d3e8db5d05",
+      "bytes": 4726,
+      "sha256": "d88410ea16aecf18974d28d07184b8441c5996f897756039ede10f47702420c0",
       "https_readback_path": "/docs/catalog-boundary.md"
     },
     {
@@ -76,8 +76,8 @@
     },
     {
       "path": "docs/slm2-composition.md",
-      "bytes": 794,
-      "sha256": "a521e156bc6b7b4c5b3135354bb68e48cde13cd475493483818d0d8dc5cbbf62",
+      "bytes": 1241,
+      "sha256": "175e8d0636228c861bd7bf3a14531f8c0ff60014cc7088474a5e64bffa2355cf",
       "https_readback_path": "/docs/slm2-composition.md"
     },
     {

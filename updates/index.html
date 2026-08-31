@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MiniModel.org Updates</title>
   <meta name="description" content="Versioned public release history for MiniModel.org.">
-  <meta name="application-version" content="1.1.1">
+  <meta name="application-version" content="1.1.2">
   <link rel="canonical" href="https://minimodel.org/updates/">
   <link rel="stylesheet" href="/styles.css?v=20260828-slm2">
 </head>
@@ -19,11 +19,22 @@
       <div class="section-heading">
         <p class="eyebrow">Publication history</p>
         <h1 id="updates-title">MiniModel.org updates</h1>
-        <p>Each release binds committed source, an exact deployment manifest, authenticated publication, retired-route checks, and public HTTPS readback.</p>
+        <p>Published releases bind committed source, an exact deployment manifest, authenticated publication, retired-route checks, and public HTTPS readback. A prepared source record is not publication evidence.</p>
       </div>
       <div class="research-grid">
         <article>
-          <p class="eyebrow">Current release</p>
+          <p class="eyebrow">Prepared release - not published</p>
+          <h2>1.1.2 - 2026-08-31</h2>
+          <p>Prepares stricter direct-peer URL admission without claiming a deployment, live peer, qualified model, or public transfer.</p>
+          <ul>
+            <li>Public peer URLs require HTTPS and HTTP is loopback-only.</li>
+            <li>Requires an exact root origin and rejects credentials, endpoint paths, query strings, fragments, and unsafe authority aliases.</li>
+            <li>Keeps the qualified composition catalog and current peer-announcement feed at exactly zero entries.</li>
+            <li>Records source preparation only; publication still requires a clean release commit, deployment, and exact public HTTPS readback.</li>
+          </ul>
+        </article>
+        <article>
+          <p class="eyebrow">Last published release</p>
           <h2>1.1.1 - 2026-08-29</h2>
           <p>Removes the obsolete pre-SLM2 native implementation from current source and makes the single-authority rule executable.</p>
           <ul>
@@ -54,7 +65,7 @@
   </main>
   <footer>
     <span>MiniModel.org</span>
-    <span>Version 1.1.1 | Released 2026-08-29 | Last published 2026-08-29</span>
+    <span>Version 1.1.2 | Prepared 2026-08-31 | Last published 1.1.1 on 2026-08-29</span>
     <a href="/.well-known/site-release.json">Current release JSON</a>
     <a href="/.well-known/site-release-history.json">Release history JSON</a>
   </footer>

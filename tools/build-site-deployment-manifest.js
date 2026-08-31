@@ -9,7 +9,7 @@ const { execFileSync } = require("node:child_process");
 const repositoryRoot = path.resolve(__dirname, "..");
 const contentCommit = process.argv[2];
 const outputPath = path.resolve(repositoryRoot, process.argv[3] || "deploy/site-deployment-manifest.v1.json");
-const version = "1.1.1";
+const version = "1.1.2";
 const stagingRoot = path.join(repositoryRoot, "deploy", "staging", version);
 const retiredPaths = [
   "catalog/models.v0.json",
@@ -97,19 +97,19 @@ const manifest = {
   site: "minimodel.org",
   origin: "https://minimodel.org",
   version,
-  release_date: "2026-08-29",
+  release_date: "2026-08-31",
   source_commit: contentCommit,
   source_tree: sourceTree,
   transport_profile: "MiniModel.org",
   files,
   retired_paths: retiredPaths,
   route_smokes: [
-    { path: "/", contains: "Version 1.1.1" },
-    { path: "/updates/", contains: "1.1.1 - 2026-08-29" },
+    { path: "/", contains: "Version 1.1.2" },
+    { path: "/updates/", contains: "1.1.2 - 2026-08-31" },
     { path: "/catalog/compositions.v1.json", contains: "minimodel.slm2_catalog.v1" },
-    { path: "/docs/catalog-boundary.md", contains: "MiniModel.org Catalog Boundary" },
+    { path: "/docs/catalog-boundary.md", contains: "Public peer URLs require HTTPS and HTTP is loopback-only." },
     { path: "/docs/memory-endpoints.md", contains: "exactly two" },
-    { path: "/.well-known/site-release.json", contains: "minimodel.org@1.1.1" },
+    { path: "/.well-known/site-release.json", contains: "minimodel.org@1.1.2" },
   ],
 };
 

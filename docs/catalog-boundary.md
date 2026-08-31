@@ -61,11 +61,12 @@ compatibility negotiation are not accepted.
 
 Its `peer_base_url` must be an exact root origin: an optional trailing `/` is
 canonicalized, but credentials, endpoint paths, query strings, and fragments
-are rejected. Public peers require HTTPS and a public, non-reserved DNS name or
-IP literal; project and service hosts cannot serve peer model bytes. HTTP is
-limited to explicit development loopback at canonical `localhost`,
-`127.0.0.1`, or `[::1]` with a port from 1 through 65535. Loopback admission
-does not establish public reachability or outside-network P2P evidence.
+are rejected. Public peer URLs require HTTPS and HTTP is loopback-only. Public
+HTTPS peers require a public, non-reserved DNS name or IP literal; project and
+service hosts cannot serve peer model bytes. Development loopback HTTP is
+limited to canonical `localhost`, `127.0.0.1`, or `[::1]` with a port from 1
+through 65535. Loopback admission does not establish public reachability or
+outside-network P2P evidence.
 
 The local-conversion path must pin and verify the public source revision,
 respect source licensing, expose storage and resource requirements, execute a
@@ -100,11 +101,13 @@ provenance-labeled, and noncontradictory.
 
 ## Publication
 
+- Prepared source release: `1.1.2`, dated 2026-08-31.
+- Prepared status: not published or deployed.
 - Last published: `1.1.1` on 2026-08-29.
-- Release date: 2026-08-29.
-- Update: obsolete pre-SLM2 executable source removed; current direct-P2P,
-  SLM2, cryptographic verification, privacy, and two-lane MemoryEndpoints
-  boundaries remain documented.
+- Update: public peer URLs require HTTPS and HTTP is loopback-only; exact
+  root-origin and authority checks are fail-closed.
+- Inventory remains exactly zero qualified catalog entries and zero current
+  peer announcements.
 
 Publication requires a clean committed revision, complete site gates,
 deployment from that revision, and exact public HTTPS readback. Source control

@@ -1,9 +1,12 @@
 site=MiniModel.org
-release=1.1.1
-updated=2026-08-29
+release=1.1.2
+release_status=prepared
+updated=2026-08-31
+last_published_release=1.1.1 on 2026-08-29
 role=metadata-only qualified SLM2 catalog and direct-peer discovery
 composition=exact six-member SLM2 graph
 acquisition=one exact qualified peer or one explicit pinned-source local conversion
+peer_url_policy=Public peer URLs require HTTPS and HTTP is loopback-only.
 server_boundary=no model bytes, prompt bytes, conversion, or inference
 qualification=source, license, structure, numerical, browser, and quality evidence remain separate
 catalog_state=zero qualified compositions until exact current evidence exists

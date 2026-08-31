@@ -2,8 +2,22 @@
   "schema": "uaix.site_release_history.v1",
   "site_id": "minimodel.org",
   "origin": "https://minimodel.org",
-  "current_release_id": "minimodel.org@1.1.1",
+  "current_release_id": "minimodel.org@1.1.2",
   "releases": [
+    {
+      "release_id": "minimodel.org@1.1.2",
+      "version": "1.1.2",
+      "release_date": "2026-08-31",
+      "last_publish_date": null,
+      "status": "prepared",
+      "summary": "Prepares strict direct-peer root-origin URL admission without claiming publication, live peers, or qualified models.",
+      "changes": [
+        "Public peer URLs require HTTPS and HTTP is loopback-only.",
+        "Requires peer_base_url to be an exact root origin without credentials, endpoint paths, query strings, fragments, or unsafe authority aliases.",
+        "Keeps the qualified composition catalog and current peer-announcement feed at exactly zero entries with no hosted model artifacts.",
+        "Records source preparation only; deployment and public HTTPS readback remain required before publication can be claimed."
+      ]
+    },
     {
       "release_id": "minimodel.org@1.1.1",
       "version": "1.1.1",

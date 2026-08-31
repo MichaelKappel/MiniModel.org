@@ -405,13 +405,43 @@ test("keeps the two MemoryEndpoints uses separate from model transport", () => {
 test("binds visible and machine-readable release identity", () => {
   const release = readJson(".well-known/site-release.json");
   const history = readJson(".well-known/site-release-history.json");
+  const catalog = readJson("catalog/compositions.v1.json");
+  const peerFeed = readJson("catalog/peer-announcements.v1.json");
   const html = read("index.html");
   const updates = read("updates/index.html");
-  assert.equal(release.release_id, "minimodel.org@1.1.1");
-  assert.equal(release.release_date, "2026-08-29");
+  const boundary = read("docs/catalog-boundary.md");
+  const talisman = read(".well-known/uaix-talisman.txt");
+  const manifestBuilder = read("tools/build-site-deployment-manifest.js");
+  const peerUrlRule = "Public peer URLs require HTTPS and HTTP is loopback-only.";
+
+  assert.equal(release.release_id, "minimodel.org@1.1.2");
+  assert.equal(release.version, "1.1.2");
+  assert.equal(release.release_date, "2026-08-31");
+  assert.equal(release.last_publish_date, "2026-08-29");
+  assert.equal(release.status, "prepared");
   assert.equal(history.current_release_id, release.release_id);
-  assert.match(html, /Version 1\.1\.1/);
-  assert.match(updates, /1\.1\.1 - 2026-08-29/);
+  assert.deepEqual(history.releases.map((entry) => entry.release_id), [
+    "minimodel.org@1.1.2",
+    "minimodel.org@1.1.1",
+    "minimodel.org@1.1.0",
+    "minimodel.org@1.0.0",
+  ]);
+  assert.equal(history.releases[0].release_id, release.release_id);
+  assert.equal(history.releases[0].last_publish_date, null);
+  assert.equal(history.releases[0].status, "prepared");
+  assert.equal(history.releases[1].release_id, "minimodel.org@1.1.1");
+  assert.equal(history.releases[1].last_publish_date, "2026-08-29");
+  assert.deepEqual(catalog.entries, []);
+  assert.deepEqual(peerFeed.announcements, []);
+  assert.match(html, /Version 1\.1\.2 \| Prepared 2026-08-31/);
+  assert.match(updates, /Prepared release - not published/);
+  assert.match(updates, /1\.1\.2 - 2026-08-31/);
+  assert.match(talisman, /^release_status=prepared$/m);
+  assert.match(manifestBuilder, /const version = "1\.1\.2";/);
+  assert.match(manifestBuilder, /release_date: "2026-08-31"/);
+  for (const surface of [html, updates, boundary, talisman, JSON.stringify(history)]) {
+    assert.ok(surface.includes(peerUrlRule), peerUrlRule);
+  }
 });
 
 test("keeps retired native code and duplicate TinyRustLM authority out of current source", () => {

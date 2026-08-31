@@ -96,7 +96,7 @@ function validAnnouncement() {
     announcement_id: "peer/qwen3/lane-1",
     composition_id: sha("c"),
     piece_set_sha256: sha("e"),
-    peer_base_url: "https://peer.example.net/models/qwen3/",
+    peer_base_url: "https://peer.direct-model.net/",
     protocol_profile: catalogApi.DIRECT_COMPOSITION_PROTOCOL_PROFILE,
     consent_status: "explicit",
     outside_proof_status: "current-passed",
@@ -166,6 +166,94 @@ test("admits only the exact browser-consumable direct composition protocol", () 
       }),
       /protocol profile is unsupported/,
       protocolProfile,
+    );
+  }
+});
+
+test("accepts only root HTTPS peer origins and explicit loopback HTTP", () => {
+  const catalog = validCatalog([validEntry()]);
+  const accepted = [
+    ["https://peer.direct-model.net", "https://peer.direct-model.net/"],
+    ["https://peer.direct-model.net:8443/", "https://peer.direct-model.net:8443/"],
+    ["http://localhost:8123/", "http://localhost:8123/"],
+    ["http://127.0.0.1:8123/", "http://127.0.0.1:8123/"],
+    ["http://[::1]:8123/", "http://[::1]:8123/"],
+  ];
+
+  for (const [input, expected] of accepted) {
+    const announcement = validAnnouncement();
+    announcement.peer_base_url = input;
+    const [validated] = catalogApi.validatePeerFeed(
+      validPeerFeed([announcement]),
+      catalog,
+      { now: new Date("2026-08-28T00:00:00Z") },
+    );
+    assert.equal(validated.peerUrl, expected, input);
+  }
+});
+
+test("rejects peer URLs with endpoints, query, fragment, or credentials", () => {
+  const catalog = validCatalog([validEntry()]);
+  for (const peerBaseUrl of [
+    "https://peer.direct-model.net/models/qwen3/",
+    "https://peer.direct-model.net//",
+    "https://peer.direct-model.net/?lane=one",
+    "https://peer.direct-model.net/#lane",
+    "https://user:secret@peer.direct-model.net/",
+  ]) {
+    const announcement = validAnnouncement();
+    announcement.peer_base_url = peerBaseUrl;
+    assert.throws(
+      () => catalogApi.validatePeerFeed(validPeerFeed([announcement]), catalog, {
+        now: new Date("2026-08-28T00:00:00Z"),
+      }),
+      /absolute root HTTP\(S\) origin|credentials or an unexpected endpoint path|encoded or unsafe alias/,
+      peerBaseUrl,
+    );
+  }
+});
+
+test("rejects public HTTP and non-explicit loopback HTTP", () => {
+  const catalog = validCatalog([validEntry()]);
+  for (const peerBaseUrl of [
+    "http://peer.direct-model.net:8123/",
+    "http://localhost/",
+    "http://127.0.0.1:0/",
+    "http://127.0.0.1:65536/",
+    "http://127.0.0.1:08123/",
+    "http://[0:0:0:0:0:0:0:1]:8123/",
+  ]) {
+    const announcement = validAnnouncement();
+    announcement.peer_base_url = peerBaseUrl;
+    assert.throws(
+      () => catalogApi.validatePeerFeed(validPeerFeed([announcement]), catalog, {
+        now: new Date("2026-08-28T00:00:00Z"),
+      }),
+      /HTTP requires an exact loopback host and bounded port|canonical spelling|port must be an integer/,
+      peerBaseUrl,
+    );
+  }
+});
+
+test("rejects local, reserved, and project-service HTTPS authorities", () => {
+  const catalog = validCatalog([validEntry()]);
+  for (const peerBaseUrl of [
+    "https://192.168.1.1/",
+    "https://203.0.113.1/",
+    "https://[2001:db8::1]/",
+    "https://peer.local/",
+    "https://peer.example.net/",
+    "https://tinyrustlm.com/",
+    "https://seed.minimodel.org/",
+  ]) {
+    const announcement = validAnnouncement();
+    announcement.peer_base_url = peerBaseUrl;
+    assert.throws(
+      () => catalogApi.validatePeerFeed(validPeerFeed([announcement]), catalog, {
+        now: new Date("2026-08-28T00:00:00Z"),
+      }),
+      /public and non-reserved|local or reserved DNS|project and service hosts/,
+      peerBaseUrl,
     );
   }
 });
@@ -269,12 +357,12 @@ test("rejects expired and project-hosted peer announcements", () => {
   );
 
   const hosted = validAnnouncement();
-  hosted.peer_base_url = "https://minimodel.org/models/";
+  hosted.peer_base_url = "https://minimodel.org/";
   assert.throws(
     () => catalogApi.validatePeerFeed(validPeerFeed([hosted]), catalog, {
       now: new Date("2026-08-28T00:00:00Z"),
     }),
-    /non-project peer/,
+    /non-project peer|project and service hosts/,
   );
 });
 

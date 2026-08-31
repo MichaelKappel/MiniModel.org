@@ -15,6 +15,16 @@
     "prompt.prompt2",
     "composition.acg2",
   ]);
+  const DIRECT_PEER_DENIED_HOSTS = Object.freeze([
+    "tinyrustlm.com",
+    "minimodel.org",
+    "slmcomposer.com",
+    "lmcomposer.com",
+    "mirust.com",
+    "uaix.org",
+    "memoryendpoints.com",
+    "huggingface.co",
+  ]);
 
   function isObject(value) {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -76,6 +86,203 @@
       throw new Error(`${label} must be a safe same-origin route`);
     }
     return normalized;
+  }
+
+  function strictIpv4Octets(hostname) {
+    const parts = String(hostname || "").split(".");
+    if (parts.length !== 4 || parts.some((part) => !/^(?:0|[1-9][0-9]{0,2})$/.test(part))) {
+      return null;
+    }
+    const octets = parts.map(Number);
+    return octets.some((octet) => octet > 255) ? null : octets;
+  }
+
+  function isPublicIpv4(octets) {
+    const [first, second, third] = octets;
+    return !(first === 0 || first === 10 || first === 127 || first >= 224
+      || (first === 100 && second >= 64 && second <= 127)
+      || (first === 169 && second === 254)
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 192 && second === 0)
+      || (first === 192 && second === 168)
+      || (first === 198 && (second === 18 || second === 19))
+      || (first === 198 && second === 51 && third === 100)
+      || (first === 203 && second === 0 && third === 113));
+  }
+
+  function ipv6Words(hostname) {
+    const host = String(hostname || "").replace(/^\[|\]$/g, "").toLowerCase();
+    if (!host || host.includes("%") || host.includes(".")) {
+      return null;
+    }
+    const halves = host.split("::");
+    if (halves.length > 2) {
+      return null;
+    }
+    const parseHalf = (half) => half
+      ? half.split(":").map((part) => /^[0-9a-f]{1,4}$/.test(part) ? Number.parseInt(part, 16) : NaN)
+      : [];
+    const left = parseHalf(halves[0]);
+    const right = halves.length === 2 ? parseHalf(halves[1]) : [];
+    if (left.some(Number.isNaN) || right.some(Number.isNaN)) {
+      return null;
+    }
+    if (halves.length === 1) {
+      return left.length === 8 ? left : null;
+    }
+    const omitted = 8 - left.length - right.length;
+    return omitted > 0 ? [...left, ...new Array(omitted).fill(0), ...right] : null;
+  }
+
+  function isPublicIpv6(words) {
+    if (!words || (words[0] & 0xe000) !== 0x2000) {
+      return false;
+    }
+    if (words.slice(0, 5).every((word) => word === 0) && words[5] === 0xffff) {
+      return false;
+    }
+    if (words[0] === 0x2002 || words[0] === 0x3ffe) {
+      return false;
+    }
+    if (words[0] !== 0x2001) {
+      return true;
+    }
+    if (words[1] === 0 || words[1] === 0x0db8) {
+      return false;
+    }
+    if (words[1] === 2 && words[2] === 0) {
+      return false;
+    }
+    return (words[1] & 0xfff0) !== 0x0010 && (words[1] & 0xfff0) !== 0x0020;
+  }
+
+  function isDeniedDirectPeerHost(hostname) {
+    const host = String(hostname || "").toLowerCase();
+    return DIRECT_PEER_DENIED_HOSTS.some((denied) => host === denied || host.endsWith(`.${denied}`));
+  }
+
+  function requirePublicDnsName(hostname) {
+    if (hostname.length > 253 || !hostname.includes(".")
+        || !/^[a-z0-9.-]+$/.test(hostname) || hostname.includes("..")
+        || hostname.split(".").some((label) => !label || label.length > 63
+          || label.startsWith("-") || label.endsWith("-"))) {
+      throw new Error("peer announcement.peer_base_url host must be public DNS or a supported IP literal");
+    }
+    if (/(?:^|\.)(?:example|internal|invalid|lan|local|localhost)$/.test(hostname)
+        || hostname.endsWith(".home.arpa")
+        || ["example.com", "example.net", "example.org"].some((reserved) =>
+          hostname === reserved || hostname.endsWith(`.${reserved}`))) {
+      throw new Error("peer announcement.peer_base_url host must not use a local or reserved DNS name");
+    }
+  }
+
+  function splitDirectPeerAuthority(authority) {
+    if (!authority || /[%@\\\s\u0000-\u001f\u007f]/.test(authority)) {
+      throw new Error("peer announcement.peer_base_url authority contains an encoded or unsafe alias");
+    }
+    let host;
+    let portText = "";
+    if (authority.startsWith("[")) {
+      const closing = authority.indexOf("]");
+      if (closing < 0) {
+        throw new Error("peer announcement.peer_base_url IPv6 host must be bracketed");
+      }
+      host = authority.slice(0, closing + 1);
+      const suffix = authority.slice(closing + 1);
+      if (suffix) {
+        if (!/^:[0-9]{1,5}$/.test(suffix)) {
+          throw new Error("peer announcement.peer_base_url port is invalid");
+        }
+        portText = suffix.slice(1);
+      }
+    } else {
+      if ((authority.match(/:/g) || []).length > 1) {
+        throw new Error("peer announcement.peer_base_url IPv6 host must be bracketed");
+      }
+      const separator = authority.lastIndexOf(":");
+      if (separator >= 0) {
+        host = authority.slice(0, separator);
+        portText = authority.slice(separator + 1);
+        if (!/^[0-9]{1,5}$/.test(portText)) {
+          throw new Error("peer announcement.peer_base_url port is invalid");
+        }
+      } else {
+        host = authority;
+      }
+    }
+    if (!host || host.endsWith(".")) {
+      throw new Error("peer announcement.peer_base_url host must not be empty or end in a dot");
+    }
+    if (portText) {
+      const port = Number(portText);
+      if (!Number.isInteger(port) || port < 1 || port > 65535 || String(port) !== portText) {
+        throw new Error("peer announcement.peer_base_url port must be an integer from 1 through 65535");
+      }
+    }
+    return { host, portText };
+  }
+
+  function normalizeDirectPeerBaseUrl(value) {
+    const raw = requireString(value, "peer announcement.peer_base_url", 512);
+    if (raw !== value || /[\u0000-\u001f\u007f]/.test(raw)) {
+      throw new Error("peer announcement.peer_base_url must be a bounded printable string");
+    }
+    const match = /^(https?):\/\/([^/?#]+)(\/?)$/i.exec(raw);
+    if (!match) {
+      throw new Error("peer announcement.peer_base_url must be an absolute root HTTP(S) origin");
+    }
+    const rawProtocol = `${match[1].toLowerCase()}:`;
+    const authority = splitDirectPeerAuthority(match[2]);
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch (_error) {
+      throw new Error("peer announcement.peer_base_url must be an absolute root HTTP(S) origin");
+    }
+    if (parsed.protocol !== rawProtocol || parsed.username || parsed.password
+        || parsed.search || parsed.hash || parsed.pathname !== "/") {
+      throw new Error("peer announcement.peer_base_url contains credentials or an unexpected endpoint path");
+    }
+
+    const rawHost = authority.host.toLowerCase();
+    const parsedHost = parsed.hostname.toLowerCase();
+    const bareHost = parsedHost.replace(/^\[|\]$/g, "");
+    const loopback = bareHost === "localhost" || bareHost === "127.0.0.1" || bareHost === "::1";
+    if (rawProtocol === "http:" && (!loopback || !authority.portText)) {
+      throw new Error("peer announcement.peer_base_url HTTP requires an exact loopback host and bounded port");
+    }
+    if (loopback) {
+      const exactLoopback = bareHost === "::1" ? "[::1]" : bareHost;
+      if (rawHost !== exactLoopback) {
+        throw new Error("peer announcement.peer_base_url loopback host must use its exact canonical spelling");
+      }
+    } else if (parsedHost.startsWith("[")) {
+      if (!isPublicIpv6(ipv6Words(parsedHost))) {
+        throw new Error("peer announcement.peer_base_url IPv6 address must be public and non-reserved");
+      }
+    } else {
+      const ipv4 = strictIpv4Octets(parsedHost);
+      if (ipv4) {
+        if (rawHost !== parsedHost) {
+          throw new Error("peer announcement.peer_base_url IPv4 host must not use a numeric alias");
+        }
+        if (!isPublicIpv4(ipv4)) {
+          throw new Error("peer announcement.peer_base_url IPv4 address must be public and non-reserved");
+        }
+      } else {
+        if (rawHost !== parsedHost) {
+          throw new Error("peer announcement.peer_base_url DNS host must not use an encoded or normalized alias");
+        }
+        requirePublicDnsName(parsedHost);
+      }
+    }
+    if (isDeniedDirectPeerHost(bareHost)) {
+      throw new Error("project and service hosts cannot serve direct peer model bytes");
+    }
+    if (rawProtocol === "http:") {
+      return `http://${parsedHost}:${authority.portText}/`;
+    }
+    return `${parsed.origin}/`;
   }
 
   function validateBrowserAdmission(value, label) {
@@ -254,21 +461,12 @@
         || value.outside_proof_status !== "current-passed") {
       throw new Error("peer announcement lacks explicit consent or current outside proof");
     }
-    let peerUrl;
-    try {
-      peerUrl = new URL(requireString(value.peer_base_url, "peer announcement.peer_base_url", 512));
-    } catch (_error) {
-      throw new Error("peer announcement.peer_base_url must be an absolute URL");
-    }
-    if (!["http:", "https:"].includes(peerUrl.protocol)
-        || peerUrl.origin.toLowerCase() === "https://minimodel.org") {
-      throw new Error("peer announcement must name a direct non-project peer");
-    }
+    const peerUrl = normalizeDirectPeerBaseUrl(value.peer_base_url);
     const expires = requireUtc(value.expires_utc, "peer announcement.expires_utc");
     if (Date.parse(expires) <= now) {
       throw new Error("peer announcement is expired");
     }
-    return { id, compositionId, peerUrl: peerUrl.toString(), expires };
+    return { id, compositionId, peerUrl, expires };
   }
 
   function validatePeerFeed(value, catalog, options = {}) {

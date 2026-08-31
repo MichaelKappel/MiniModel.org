@@ -59,6 +59,14 @@ Every admitted peer announcement must set `protocol_profile` to exactly
 composition HTTP profile. Former names, aliases, version fallbacks, and
 compatibility negotiation are not accepted.
 
+Its `peer_base_url` must be an exact root origin: an optional trailing `/` is
+canonicalized, but credentials, endpoint paths, query strings, and fragments
+are rejected. Public peers require HTTPS and a public, non-reserved DNS name or
+IP literal; project and service hosts cannot serve peer model bytes. HTTP is
+limited to explicit development loopback at canonical `localhost`,
+`127.0.0.1`, or `[::1]` with a port from 1 through 65535. Loopback admission
+does not establish public reachability or outside-network P2P evidence.
+
 The local-conversion path must pin and verify the public source revision,
 respect source licensing, expose storage and resource requirements, execute a
 bounded registered conversion, and run independent inspection before

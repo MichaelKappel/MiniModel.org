@@ -3,9 +3,19 @@
 
   const MAX_METADATA_BYTES = 1024 * 1024;
   const MAX_BROWSER_ADMISSION_BYTES = 64 * 1024;
+  const MAX_QUALIFICATION_RECEIPT_BYTES = 128 * 1024;
+  const MAX_SOURCE_AGE_MILLISECONDS = 24 * 60 * 60 * 1000;
+  const MAX_FUTURE_SKEW_MILLISECONDS = 5 * 60 * 1000;
+  const MAX_SOURCE_LIFETIME_MILLISECONDS = 24 * 60 * 60 * 1000;
+  const MAX_ENTRIES = 128;
+  const MAX_ANNOUNCEMENTS = 512;
+  const MAX_VERIFICATION_KEYS = 32;
+  const MAX_REVOCATIONS = 1024;
+  const MAX_SUPERSESSIONS = 1024;
   const CATALOG_SCHEMA = "minimodel.slm2_catalog.v1";
   const PEER_SCHEMA = "minimodel.slm2_peer_announcements.v1";
   const BROWSER_ADMISSION_SCHEMA = "tinyrustlm.browser-composition-admission/1";
+  const QUALIFICATION_RECEIPT_SCHEMA = "tinyrustlm.qualification-receipt/1";
   const DIRECT_COMPOSITION_PROTOCOL_PROFILE = "tinyrustlm.direct-composition-http.v1";
   const MEMBER_NAMES = Object.freeze([
     "model.slm2",
@@ -46,10 +56,14 @@
   }
 
   function requireString(value, label, maximum = 512) {
-    if (typeof value !== "string" || !value.trim() || value.length > maximum) {
-      throw new Error(`${label} must be a bounded non-empty string`);
+    if (typeof value !== "string"
+        || value.length < 1
+        || value.length > maximum
+        || value !== value.trim()
+        || /[\u0000-\u001f\u007f]/u.test(value)) {
+      throw new Error(`${label} must be a bounded printable string`);
     }
-    return value.trim();
+    return value;
   }
 
   function requireId(value, label) {
@@ -61,20 +75,86 @@
   }
 
   function requireSha256(value, label) {
-    const normalized = requireString(value, label, 71).toLowerCase();
-    if (!/^sha256:[a-f0-9]{64}$/.test(normalized)) {
-      throw new Error(`${label} must be a prefixed SHA-256 identity`);
+    const normalized = requireString(value, label, 71);
+    if (!/^sha256:[a-f0-9]{64}$/u.test(normalized)) {
+      throw new Error(`${label} must be a lower-case prefixed SHA-256 identity`);
     }
     return normalized;
   }
 
   function requireUtc(value, label) {
     const normalized = requireString(value, label, 20);
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(normalized)
-        || !Number.isFinite(Date.parse(normalized))) {
+    const milliseconds = Date.parse(normalized);
+    const canonical = Number.isFinite(milliseconds)
+      ? new Date(milliseconds).toISOString().replace(".000Z", "Z")
+      : "";
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u.test(normalized)
+        || !Number.isFinite(milliseconds)
+        || canonical !== normalized) {
       throw new Error(`${label} must be a UTC timestamp with second precision`);
     }
     return normalized;
+  }
+
+  function requireRevision(value, label) {
+    if (!Number.isSafeInteger(value) || value < 1 || value > Number.MAX_SAFE_INTEGER) {
+      throw new Error(`${label} must be a positive safe integer`);
+    }
+    return value;
+  }
+
+  function validationNow(options = {}) {
+    const now = options.now instanceof Date ? options.now.getTime() : Date.now();
+    if (!Number.isFinite(now)) {
+      throw new Error("catalog validation time is invalid");
+    }
+    return now;
+  }
+
+  function requireFreshWindow(generatedAtUtc, validUntilUtc, now, label) {
+    const generated = Date.parse(requireUtc(generatedAtUtc, `${label}.generated_at_utc`));
+    const validUntil = Date.parse(requireUtc(validUntilUtc, `${label}.valid_until_utc`));
+    if (generated > now + MAX_FUTURE_SKEW_MILLISECONDS
+        || generated < now - MAX_SOURCE_AGE_MILLISECONDS
+        || validUntil <= now
+        || validUntil <= generated
+        || validUntil - generated > MAX_SOURCE_LIFETIME_MILLISECONDS) {
+      throw new Error(`${label} is stale, future-dated, or has an excessive lifetime`);
+    }
+    return { generated, validUntil };
+  }
+
+  function requireBase64Url(value, byteLength, label) {
+    const expectedLength = Math.ceil(byteLength * 4 / 3);
+    if (typeof value !== "string"
+        || value.length !== expectedLength
+        || !/^[A-Za-z0-9_-]+$/u.test(value)) {
+      throw new Error(`${label} must be canonical unpadded base64url`);
+    }
+    const padding = "=".repeat((4 - (value.length % 4)) % 4);
+    let binary;
+    try {
+      binary = globalObject.atob(
+        value.replaceAll("-", "+").replaceAll("_", "/") + padding,
+      );
+    } catch (_error) {
+      throw new Error(`${label} must be canonical unpadded base64url`);
+    }
+    if (binary.length !== byteLength) {
+      throw new Error(`${label} must have the required decoded length`);
+    }
+    let bytes = "";
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes += String.fromCharCode(binary.charCodeAt(index));
+    }
+    const canonical = globalObject.btoa(bytes)
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/u, "");
+    if (canonical !== value) {
+      throw new Error(`${label} must be canonical unpadded base64url`);
+    }
+    return value;
   }
 
   function requireLocalRoute(value, label) {
@@ -362,9 +442,13 @@
       throw new Error(`${label}.composition must contain exactly six members`);
     }
     value.composition.members.forEach((member, index) => validateMember(member, `${label}.composition.members[${index}]`));
+    const wireNames = value.composition.members.map((member) => member.name);
     const memberNames = value.composition.members.map((member) => member.name).sort();
     if (memberNames.some((name, index) => name !== [...MEMBER_NAMES].sort()[index])) {
       throw new Error(`${label}.composition member set is not closed`);
+    }
+    if (wireNames.some((name, index) => name !== MEMBER_NAMES[index])) {
+      throw new Error(`${label}.composition members must use canonical P2P six-member wire order`);
     }
 
     validateBrowserAdmission(value.browser_admission, `${label}.browser_admission`);
@@ -377,6 +461,8 @@
     requireExactKeys(value.qualification, [
       "status",
       "receipt_id",
+      "receipt_route",
+      "receipt_bytes",
       "receipt_sha256",
       "numerical_status",
       "browser_status",
@@ -388,27 +474,89 @@
         || value.qualification.quality_status !== "qualified") {
       throw new Error(`${label}.qualification is incomplete`);
     }
-    requireId(value.qualification.receipt_id, `${label}.qualification.receipt_id`);
+    requireSha256(value.qualification.receipt_id, `${label}.qualification.receipt_id`);
+    requireLocalRoute(value.qualification.receipt_route, `${label}.qualification.receipt_route`);
+    if (!Number.isSafeInteger(value.qualification.receipt_bytes)
+        || value.qualification.receipt_bytes < 2
+        || value.qualification.receipt_bytes > MAX_QUALIFICATION_RECEIPT_BYTES) {
+      throw new Error(`${label}.qualification.receipt_bytes is outside its bound`);
+    }
     requireSha256(value.qualification.receipt_sha256, `${label}.qualification.receipt_sha256`);
 
     if (!Array.isArray(value.peer_announcement_ids)
+        || value.peer_announcement_ids.length > MAX_ANNOUNCEMENTS
         || new Set(value.peer_announcement_ids).size !== value.peer_announcement_ids.length) {
-      throw new Error(`${label}.peer_announcement_ids must be a unique array`);
+      throw new Error(`${label}.peer_announcement_ids must be a bounded unique array`);
     }
     value.peer_announcement_ids.forEach((item, index) => requireId(item, `${label}.peer_announcement_ids[${index}]`));
     return value;
   }
 
-  function validateCatalog(value) {
+  function validatePeerVerificationKey(value, label, now) {
+    requireExactKeys(value, [
+      "key_id",
+      "algorithm",
+      "public_key_base64url",
+      "not_before_utc",
+      "not_after_utc",
+    ], label);
+    const keyId = requireSha256(value.key_id, `${label}.key_id`);
+    if (value.algorithm !== "Ed25519") {
+      throw new Error(`${label}.algorithm is unsupported`);
+    }
+    const notBeforeUtc = requireUtc(value.not_before_utc, `${label}.not_before_utc`);
+    const notAfterUtc = requireUtc(value.not_after_utc, `${label}.not_after_utc`);
+    if (Date.parse(notBeforeUtc) > now + MAX_FUTURE_SKEW_MILLISECONDS
+        || Date.parse(notAfterUtc) <= now
+        || Date.parse(notAfterUtc) <= Date.parse(notBeforeUtc)) {
+      throw new Error(`${label} is not currently valid`);
+    }
+    requireBase64Url(value.public_key_base64url, 32, `${label}.public_key_base64url`);
+    return {
+      keyId,
+      publicKey: value.public_key_base64url,
+      notBeforeUtc,
+      notAfterUtc,
+    };
+  }
+
+  function validateSupersession(value, label) {
+    requireExactKeys(value, [
+      "superseded_composition_id",
+      "replacement_composition_id",
+      "effective_at_utc",
+    ], label);
+    const superseded = requireSha256(
+      value.superseded_composition_id,
+      `${label}.superseded_composition_id`,
+    );
+    const replacement = requireSha256(
+      value.replacement_composition_id,
+      `${label}.replacement_composition_id`,
+    );
+    if (superseded === replacement) {
+      throw new Error(`${label} must replace a different composition`);
+    }
+    requireUtc(value.effective_at_utc, `${label}.effective_at_utc`);
+    return value;
+  }
+
+  function validateCatalog(value, options = {}) {
     requireExactKeys(value, [
       "schema",
       "catalog_id",
+      "revision",
       "generated_at_utc",
+      "valid_until_utc",
       "project_server_serves_model_bytes",
       "project_server_proxies_model_bytes",
       "project_server_runs_inference",
       "qualification_policy",
+      "qualification_receipt_schema",
       "browser_admission_schema",
+      "peer_verification_keys",
+      "revoked_qualification_receipt_ids",
+      "supersessions",
       "entries",
     ], "catalog");
     if (value.schema !== CATALOG_SCHEMA
@@ -418,11 +566,47 @@
     if (value.browser_admission_schema !== BROWSER_ADMISSION_SCHEMA) {
       throw new Error("catalog browser admission schema is unsupported");
     }
+    if (value.qualification_receipt_schema !== QUALIFICATION_RECEIPT_SCHEMA) {
+      throw new Error("catalog qualification receipt schema is unsupported");
+    }
+    const now = validationNow(options);
     requireId(value.catalog_id, "catalog.catalog_id");
-    requireUtc(value.generated_at_utc, "catalog.generated_at_utc");
+    requireRevision(value.revision, "catalog.revision");
+    requireFreshWindow(value.generated_at_utc, value.valid_until_utc, now, "catalog");
     requireProjectBoundary(value, true, "catalog");
-    if (!Array.isArray(value.entries)) {
-      throw new Error("catalog.entries must be an array");
+    if (!Array.isArray(value.peer_verification_keys)
+        || value.peer_verification_keys.length > MAX_VERIFICATION_KEYS) {
+      throw new Error("catalog.peer_verification_keys must be a bounded array");
+    }
+    const peerKeys = value.peer_verification_keys.map((key, index) =>
+      validatePeerVerificationKey(key, `catalog.peer_verification_keys[${index}]`, now));
+    if (new Set(peerKeys.map((key) => key.keyId)).size !== peerKeys.length) {
+      throw new Error("catalog contains a duplicate peer verification key");
+    }
+    if (!Array.isArray(value.revoked_qualification_receipt_ids)
+        || value.revoked_qualification_receipt_ids.length > MAX_REVOCATIONS) {
+      throw new Error("catalog revocation set must be a bounded array");
+    }
+    value.revoked_qualification_receipt_ids.forEach((receiptId, index) => {
+      requireSha256(receiptId, `catalog.revoked_qualification_receipt_ids[${index}]`);
+    });
+    if (new Set(value.revoked_qualification_receipt_ids).size
+        !== value.revoked_qualification_receipt_ids.length) {
+      throw new Error("catalog contains a duplicate qualification revocation");
+    }
+    if (!Array.isArray(value.supersessions)
+        || value.supersessions.length > MAX_SUPERSESSIONS) {
+      throw new Error("catalog supersession set must be a bounded array");
+    }
+    value.supersessions.forEach((edge, index) => {
+      validateSupersession(edge, `catalog.supersessions[${index}]`);
+    });
+    if (new Set(value.supersessions.map((edge) => edge.superseded_composition_id)).size
+        !== value.supersessions.length) {
+      throw new Error("catalog supersedes one composition more than once");
+    }
+    if (!Array.isArray(value.entries) || value.entries.length > MAX_ENTRIES) {
+      throw new Error("catalog.entries must be a bounded array");
     }
     const ids = new Set();
     const compositions = new Set();
@@ -433,11 +617,17 @@
       }
       ids.add(entry.entry_id);
       compositions.add(entry.composition.composition_id);
+      if (value.revoked_qualification_receipt_ids.includes(entry.qualification.receipt_id)
+          || value.supersessions.some((edge) =>
+            edge.superseded_composition_id === entry.composition.composition_id
+              && Date.parse(edge.effective_at_utc) <= Date.parse(value.generated_at_utc))) {
+        throw new Error("catalog publishes a revoked or superseded entry as current");
+      }
     });
     return value;
   }
 
-  function validatePeerAnnouncement(value, catalogByComposition, now) {
+  function validatePeerAnnouncement(value, catalogByComposition, catalogKeys, now, feedWindow) {
     requireExactKeys(value, [
       "announcement_id",
       "composition_id",
@@ -445,8 +635,13 @@
       "peer_base_url",
       "protocol_profile",
       "consent_status",
+      "consent_receipt_sha256",
       "outside_proof_status",
+      "outside_proof_receipt_sha256",
+      "issued_at_utc",
       "expires_utc",
+      "verification_key_id",
+      "signature",
     ], "peer announcement");
     const id = requireId(value.announcement_id, "peer announcement.announcement_id");
     const compositionId = requireSha256(value.composition_id, "peer announcement.composition_id");
@@ -461,19 +656,47 @@
         || value.outside_proof_status !== "current-passed") {
       throw new Error("peer announcement lacks explicit consent or current outside proof");
     }
+    requireSha256(value.consent_receipt_sha256, "peer announcement.consent_receipt_sha256");
+    requireSha256(
+      value.outside_proof_receipt_sha256,
+      "peer announcement.outside_proof_receipt_sha256",
+    );
     const peerUrl = normalizeDirectPeerBaseUrl(value.peer_base_url);
+    const issued = requireUtc(value.issued_at_utc, "peer announcement.issued_at_utc");
     const expires = requireUtc(value.expires_utc, "peer announcement.expires_utc");
-    if (Date.parse(expires) <= now) {
-      throw new Error("peer announcement is expired");
+    if (Date.parse(issued) > now + MAX_FUTURE_SKEW_MILLISECONDS
+        || Date.parse(issued) < now - MAX_SOURCE_AGE_MILLISECONDS
+        || Date.parse(expires) <= now
+        || Date.parse(expires) <= Date.parse(issued)
+        || Date.parse(expires) - Date.parse(issued) > MAX_SOURCE_LIFETIME_MILLISECONDS) {
+      throw new Error("peer announcement is stale, future-dated, or expired");
     }
-    return { id, compositionId, peerUrl, expires };
+    if (Date.parse(issued) > feedWindow.generated
+        || Date.parse(expires) > feedWindow.validUntil) {
+      throw new Error("peer announcement lies outside its feed validity window");
+    }
+    const verificationKeyId = requireSha256(
+      value.verification_key_id,
+      "peer announcement.verification_key_id",
+    );
+    requireBase64Url(value.signature, 64, "peer announcement.signature");
+    const verificationKey = catalogKeys.get(verificationKeyId);
+    if (!verificationKey
+        || Date.parse(verificationKey.notBeforeUtc) > Date.parse(issued)
+        || Date.parse(verificationKey.notAfterUtc) < Date.parse(expires)) {
+      throw new Error("peer announcement is not covered by a current catalog verifier");
+    }
+    return { id, compositionId, peerUrl, issued, expires, verificationKeyId };
   }
 
-  function validatePeerFeed(value, catalog, options = {}) {
+  function validatePeerFeed(value, catalogValue, options = {}) {
+    const catalog = validateCatalog(catalogValue, options);
     requireExactKeys(value, [
       "schema",
       "feed_id",
+      "revision",
       "generated_at_utc",
+      "valid_until_utc",
       "project_server_serves_model_bytes",
       "project_server_proxies_model_bytes",
       "announcements",
@@ -482,30 +705,71 @@
       throw new Error("peer feed schema is unsupported");
     }
     requireId(value.feed_id, "peer feed.feed_id");
-    requireUtc(value.generated_at_utc, "peer feed.generated_at_utc");
+    requireRevision(value.revision, "peer feed.revision");
     requireProjectBoundary(value, false, "peer feed");
-    if (!Array.isArray(value.announcements)) {
-      throw new Error("peer feed.announcements must be an array");
+    if (!Array.isArray(value.announcements)
+        || value.announcements.length > MAX_ANNOUNCEMENTS) {
+      throw new Error("peer feed.announcements must be a bounded array");
     }
-    const now = options.now instanceof Date ? options.now.getTime() : Date.now();
+    const now = validationNow(options);
+    const feedWindow = requireFreshWindow(
+      value.generated_at_utc,
+      value.valid_until_utc,
+      now,
+      "peer feed",
+    );
+    if (Date.parse(value.generated_at_utc) < Date.parse(catalog.generated_at_utc)
+        || Date.parse(value.valid_until_utc) > Date.parse(catalog.valid_until_utc)) {
+      throw new Error("peer feed is not bounded by the current catalog window");
+    }
     const catalogByComposition = new Map(catalog.entries.map((entry) => [
       entry.composition.composition_id,
       entry,
     ]));
+    const catalogKeys = new Map(catalog.peer_verification_keys.map((key) => [
+      key.key_id,
+      validatePeerVerificationKey(key, "catalog peer verification key", now),
+    ]));
+    const catalogByPeerId = new Map();
+    catalog.entries.forEach((entry) => {
+      entry.peer_announcement_ids.forEach((peerId) => {
+        if (catalogByPeerId.has(peerId)) {
+          throw new Error("catalog declares one peer announcement more than once");
+        }
+        catalogByPeerId.set(peerId, entry.composition.composition_id);
+      });
+    });
     const ids = new Set();
-    return value.announcements.map((announcement) => {
-      const validated = validatePeerAnnouncement(announcement, catalogByComposition, now);
+    const announcements = value.announcements.map((announcement) => {
+      const validated = validatePeerAnnouncement(
+        announcement,
+        catalogByComposition,
+        catalogKeys,
+        now,
+        feedWindow,
+      );
       if (ids.has(validated.id)) {
         throw new Error("peer feed contains a duplicate announcement");
+      }
+      if (catalogByPeerId.get(validated.id) !== validated.compositionId) {
+        throw new Error("peer announcement is not declared by its catalog entry");
       }
       ids.add(validated.id);
       return validated;
     });
+    if (ids.size !== catalogByPeerId.size
+        || [...catalogByPeerId.keys()].some((id) => !ids.has(id))) {
+      throw new Error("catalog and peer feed announcement identities are not closed");
+    }
+    return announcements;
   }
 
   function buildCatalogView(catalogValue, peerFeedValue, options = {}) {
-    const catalog = validateCatalog(catalogValue);
+    const catalog = validateCatalog(catalogValue, options);
     const announcements = validatePeerFeed(peerFeedValue, catalog, options);
+    if (announcements.length !== 0) {
+      throw new Error("peer-backed views require asynchronous Ed25519 verification");
+    }
     const peersByComposition = new Map();
     announcements.forEach((announcement) => {
       const list = peersByComposition.get(announcement.compositionId) || [];
@@ -623,6 +887,26 @@
     renderFiltered();
   }
 
+  function parseCanonicalJsonText(text) {
+    if (typeof text !== "string") {
+      throw new Error("metadata must be canonical JSON text");
+    }
+    const byteLength = new TextEncoder().encode(text).length;
+    if (byteLength < 2 || byteLength > MAX_METADATA_BYTES || !text.endsWith("\n")) {
+      throw new Error("metadata was not bounded canonical JSON");
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (_error) {
+      throw new Error("metadata was not valid JSON");
+    }
+    if (`${JSON.stringify(parsed)}\n` !== text) {
+      throw new Error("metadata JSON bytes were not canonical");
+    }
+    return parsed;
+  }
+
   async function fetchJson(url, fetchImplementation) {
     const response = await fetchImplementation(url, {
       method: "GET",
@@ -634,10 +918,7 @@
       throw new Error(`metadata request failed with HTTP ${response.status}`);
     }
     const text = await response.text();
-    if (new TextEncoder().encode(text).length > MAX_METADATA_BYTES) {
-      throw new Error("metadata response exceeded the byte limit");
-    }
-    return JSON.parse(text);
+    return parseCanonicalJsonText(text);
   }
 
   async function loadCatalog(documentObject, fetchImplementation = globalObject.fetch) {
@@ -672,10 +953,13 @@
     CATALOG_SCHEMA,
     PEER_SCHEMA,
     BROWSER_ADMISSION_SCHEMA,
+    QUALIFICATION_RECEIPT_SCHEMA,
     DIRECT_COMPOSITION_PROTOCOL_PROFILE,
     MEMBER_NAMES,
     MAX_METADATA_BYTES,
     MAX_BROWSER_ADMISSION_BYTES,
+    MAX_QUALIFICATION_RECEIPT_BYTES,
+    parseCanonicalJsonText,
     validateCatalog,
     validatePeerFeed,
     buildCatalogView,

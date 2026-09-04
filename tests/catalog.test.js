@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
@@ -20,7 +21,14 @@ function sha(character) {
   return `sha256:${character.repeat(64)}`;
 }
 
-function validEntry() {
+const TEST_NOW = new Date("2026-09-04T21:10:00Z");
+const utc = (offsetMilliseconds) =>
+  new Date(TEST_NOW.getTime() + offsetMilliseconds).toISOString().replace(".000Z", "Z");
+const PEER_KEY_ID = sha("9");
+const PEER_PUBLIC_KEY = Buffer.alloc(32, 1).toString("base64url");
+const PEER_SIGNATURE = Buffer.alloc(64, 2).toString("base64url");
+
+function validEntry(options = {}) {
   return {
     entry_id: "qwen/qwen3-0.6b",
     display_name: "Qwen3 0.6B",
@@ -56,13 +64,15 @@ function validEntry() {
     },
     qualification: {
       status: "qualified",
-      receipt_id: "qualification/qwen3-0.6b",
+      receipt_id: sha("d"),
+      receipt_route: "/catalog/qualification-receipts/qwen3-0.6b.json",
+      receipt_bytes: 4096,
       receipt_sha256: sha("d"),
       numerical_status: "passed",
       browser_status: "passed",
       quality_status: "qualified",
     },
-    peer_announcement_ids: [],
+    peer_announcement_ids: options.peerIds || [],
   };
 }
 
@@ -70,12 +80,24 @@ function validCatalog(entries = []) {
   return {
     schema: catalogApi.CATALOG_SCHEMA,
     catalog_id: "minimodel.org/prelaunch",
-    generated_at_utc: "2026-08-28T00:00:00Z",
+    revision: 1,
+    generated_at_utc: utc(-60_000),
+    valid_until_utc: utc(60 * 60_000),
     project_server_serves_model_bytes: false,
     project_server_proxies_model_bytes: false,
     project_server_runs_inference: false,
     qualification_policy: "exact-current-evidence-required",
+    qualification_receipt_schema: catalogApi.QUALIFICATION_RECEIPT_SCHEMA,
     browser_admission_schema: catalogApi.BROWSER_ADMISSION_SCHEMA,
+    peer_verification_keys: [{
+      key_id: PEER_KEY_ID,
+      algorithm: "Ed25519",
+      public_key_base64url: PEER_PUBLIC_KEY,
+      not_before_utc: utc(-2 * 60 * 60_000),
+      not_after_utc: utc(2 * 60 * 60_000),
+    }],
+    revoked_qualification_receipt_ids: [],
+    supersessions: [],
     entries,
   };
 }
@@ -84,7 +106,9 @@ function validPeerFeed(announcements = []) {
   return {
     schema: catalogApi.PEER_SCHEMA,
     feed_id: "minimodel.org/prelaunch-peers",
-    generated_at_utc: "2026-08-28T00:00:00Z",
+    revision: 1,
+    generated_at_utc: utc(-60_000),
+    valid_until_utc: utc(60 * 60_000),
     project_server_serves_model_bytes: false,
     project_server_proxies_model_bytes: false,
     announcements,
@@ -99,27 +123,141 @@ function validAnnouncement() {
     peer_base_url: "https://peer.direct-model.net/",
     protocol_profile: catalogApi.DIRECT_COMPOSITION_PROTOCOL_PROFILE,
     consent_status: "explicit",
+    consent_receipt_sha256: sha("6"),
     outside_proof_status: "current-passed",
-    expires_utc: "2099-01-01T00:00:00Z",
+    outside_proof_receipt_sha256: sha("7"),
+    issued_at_utc: utc(-60_000),
+    expires_utc: utc(30 * 60_000),
+    verification_key_id: PEER_KEY_ID,
+    signature: PEER_SIGNATURE,
   };
 }
 
+function catalogWithPeer() {
+  return validCatalog([validEntry({ peerIds: ["peer/qwen3/lane-1"] })]);
+}
+
+function validateCatalogFixture(value) {
+  return catalogApi.validateCatalog(value, { now: TEST_NOW });
+}
+
 test("publishes a truthful empty current SLM2 catalog and peer feed", () => {
-  const catalog = readJson("catalog/compositions.v1.json");
-  const peers = readJson("catalog/peer-announcements.v1.json");
+  const catalogText = read("catalog/compositions.v1.json");
+  const peerText = read("catalog/peer-announcements.v1.json");
+  const catalog = catalogApi.parseCanonicalJsonText(catalogText);
+  const peers = catalogApi.parseCanonicalJsonText(peerText);
+  assert.equal(catalogText, `${JSON.stringify(catalog)}\n`);
+  assert.equal(peerText, `${JSON.stringify(peers)}\n`);
+  assert.deepEqual(Object.keys(catalog), [
+    "schema",
+    "catalog_id",
+    "revision",
+    "generated_at_utc",
+    "valid_until_utc",
+    "project_server_serves_model_bytes",
+    "project_server_proxies_model_bytes",
+    "project_server_runs_inference",
+    "qualification_policy",
+    "qualification_receipt_schema",
+    "browser_admission_schema",
+    "peer_verification_keys",
+    "revoked_qualification_receipt_ids",
+    "supersessions",
+    "entries",
+  ]);
+  assert.deepEqual(Object.keys(peers), [
+    "schema",
+    "feed_id",
+    "revision",
+    "generated_at_utc",
+    "valid_until_utc",
+    "project_server_serves_model_bytes",
+    "project_server_proxies_model_bytes",
+    "announcements",
+  ]);
   assert.equal(catalogApi.validateCatalog(catalog), catalog);
   assert.deepEqual(catalogApi.validatePeerFeed(peers, catalog), []);
   assert.deepEqual(catalogApi.buildCatalogView(catalog, peers), []);
+  assert.equal(catalog.revision, 2);
+  assert.equal(peers.revision, 2);
+  assert.equal(peers.generated_at_utc, catalog.generated_at_utc);
+  assert.equal(peers.valid_until_utc, catalog.valid_until_utc);
+  assert.ok(Date.parse(catalog.valid_until_utc) > Date.now());
+  assert.ok(Date.parse(peers.valid_until_utc) > Date.now());
+  assert.equal(
+    Date.parse(catalog.valid_until_utc) - Date.parse(catalog.generated_at_utc),
+    24 * 60 * 60 * 1000,
+  );
   assert.equal(
     catalog.browser_admission_schema,
     "tinyrustlm.browser-composition-admission/1",
   );
+  assert.equal(
+    catalog.qualification_receipt_schema,
+    "tinyrustlm.qualification-receipt/1",
+  );
+  assert.deepEqual(catalog.peer_verification_keys, []);
+  assert.deepEqual(catalog.revoked_qualification_receipt_ids, []);
+  assert.deepEqual(catalog.supersessions, []);
   assert.equal(catalog.entries.length, 0);
   assert.equal(peers.announcements.length, 0);
 });
 
+test("rejects noncanonical bytes and missing revision or validity authority", () => {
+  assert.throws(
+    () => catalogApi.parseCanonicalJsonText(`${JSON.stringify(validCatalog(), null, 2)}\n`),
+    /not canonical/,
+  );
+
+  const missingRevision = validCatalog();
+  delete missingRevision.revision;
+  assert.throws(() => validateCatalogFixture(missingRevision), /unknown or missing/);
+
+  const missingValidity = validPeerFeed();
+  delete missingValidity.valid_until_utc;
+  assert.throws(
+    () => catalogApi.validatePeerFeed(missingValidity, validCatalog(), { now: TEST_NOW }),
+    /unknown or missing/,
+  );
+});
+
+test("rejects stale, future, excessive, and cross-document validity windows", () => {
+  const stale = validCatalog();
+  stale.generated_at_utc = utc(-25 * 60 * 60_000);
+  stale.valid_until_utc = utc(30 * 60_000);
+  assert.throws(() => validateCatalogFixture(stale), /stale, future-dated, or has an excessive lifetime/);
+
+  const future = validCatalog();
+  future.generated_at_utc = utc(6 * 60_000);
+  future.valid_until_utc = utc(60 * 60_000);
+  assert.throws(() => validateCatalogFixture(future), /stale, future-dated, or has an excessive lifetime/);
+
+  const excessive = validCatalog();
+  excessive.valid_until_utc = utc(25 * 60 * 60_000);
+  assert.throws(() => validateCatalogFixture(excessive), /stale, future-dated, or has an excessive lifetime/);
+
+  const peers = validPeerFeed();
+  peers.generated_at_utc = utc(-2 * 60_000);
+  assert.throws(
+    () => catalogApi.validatePeerFeed(peers, validCatalog(), { now: TEST_NOW }),
+    /not bounded by the current catalog window/,
+  );
+
+  const atExpiry = validCatalog();
+  assert.throws(
+    () => catalogApi.validateCatalog(atExpiry, {
+      now: new Date(atExpiry.valid_until_utc),
+    }),
+    /stale, future-dated, or has an excessive lifetime/,
+  );
+});
+
 test("projects a qualified composition to explicit pinned local conversion", () => {
-  const [view] = catalogApi.buildCatalogView(validCatalog([validEntry()]), validPeerFeed());
+  const [view] = catalogApi.buildCatalogView(
+    validCatalog([validEntry()]),
+    validPeerFeed(),
+    { now: TEST_NOW },
+  );
   assert.equal(view.availability, "local-conversion");
   assert.equal(view.availabilityLabel, "Pinned local conversion");
   assert.equal(view.peerCount, 0);
@@ -132,20 +270,19 @@ test("projects a qualified composition to explicit pinned local conversion", () 
   assert.ok(Object.isFrozen(view.browserAdmission));
 });
 
-test("projects only a current explicitly consenting direct peer", () => {
-  const entry = validEntry();
-  entry.peer_announcement_ids.push("peer/qwen3/lane-1");
-  const [view] = catalogApi.buildCatalogView(
-    validCatalog([entry]),
-    validPeerFeed([validAnnouncement()]),
-    { now: new Date("2026-08-28T00:00:00Z") },
+test("requires asynchronous signature verification before projecting a direct peer", () => {
+  const catalog = catalogWithPeer();
+  const peers = validPeerFeed([validAnnouncement()]);
+  const [validated] = catalogApi.validatePeerFeed(peers, catalog, { now: TEST_NOW });
+  assert.equal(validated.peerUrl, "https://peer.direct-model.net/");
+  assert.throws(
+    () => catalogApi.buildCatalogView(catalog, peers, { now: TEST_NOW }),
+    /asynchronous Ed25519 verification/,
   );
-  assert.equal(view.availability, "peer");
-  assert.equal(view.peerCount, 1);
 });
 
 test("admits only the exact browser-consumable direct composition protocol", () => {
-  const catalog = validCatalog([validEntry()]);
+  const catalog = catalogWithPeer();
   assert.equal(
     catalogApi.DIRECT_COMPOSITION_PROTOCOL_PROFILE,
     "tinyrustlm.direct-composition-http.v1",
@@ -162,7 +299,7 @@ test("admits only the exact browser-consumable direct composition protocol", () 
     announcement.protocol_profile = protocolProfile;
     assert.throws(
       () => catalogApi.validatePeerFeed(validPeerFeed([announcement]), catalog, {
-        now: new Date("2026-08-28T00:00:00Z"),
+        now: TEST_NOW,
       }),
       /protocol profile is unsupported/,
       protocolProfile,
@@ -171,7 +308,7 @@ test("admits only the exact browser-consumable direct composition protocol", () 
 });
 
 test("accepts only root HTTPS peer origins and explicit loopback HTTP", () => {
-  const catalog = validCatalog([validEntry()]);
+  const catalog = catalogWithPeer();
   const accepted = [
     ["https://peer.direct-model.net", "https://peer.direct-model.net/"],
     ["https://peer.direct-model.net:8443/", "https://peer.direct-model.net:8443/"],
@@ -186,14 +323,14 @@ test("accepts only root HTTPS peer origins and explicit loopback HTTP", () => {
     const [validated] = catalogApi.validatePeerFeed(
       validPeerFeed([announcement]),
       catalog,
-      { now: new Date("2026-08-28T00:00:00Z") },
+      { now: TEST_NOW },
     );
     assert.equal(validated.peerUrl, expected, input);
   }
 });
 
 test("rejects peer URLs with endpoints, query, fragment, or credentials", () => {
-  const catalog = validCatalog([validEntry()]);
+  const catalog = catalogWithPeer();
   for (const peerBaseUrl of [
     "https://peer.direct-model.net/models/qwen3/",
     "https://peer.direct-model.net//",
@@ -205,7 +342,7 @@ test("rejects peer URLs with endpoints, query, fragment, or credentials", () => 
     announcement.peer_base_url = peerBaseUrl;
     assert.throws(
       () => catalogApi.validatePeerFeed(validPeerFeed([announcement]), catalog, {
-        now: new Date("2026-08-28T00:00:00Z"),
+        now: TEST_NOW,
       }),
       /absolute root HTTP\(S\) origin|credentials or an unexpected endpoint path|encoded or unsafe alias/,
       peerBaseUrl,
@@ -214,7 +351,7 @@ test("rejects peer URLs with endpoints, query, fragment, or credentials", () => 
 });
 
 test("rejects public HTTP and non-explicit loopback HTTP", () => {
-  const catalog = validCatalog([validEntry()]);
+  const catalog = catalogWithPeer();
   for (const peerBaseUrl of [
     "http://peer.direct-model.net:8123/",
     "http://localhost/",
@@ -227,7 +364,7 @@ test("rejects public HTTP and non-explicit loopback HTTP", () => {
     announcement.peer_base_url = peerBaseUrl;
     assert.throws(
       () => catalogApi.validatePeerFeed(validPeerFeed([announcement]), catalog, {
-        now: new Date("2026-08-28T00:00:00Z"),
+        now: TEST_NOW,
       }),
       /HTTP requires an exact loopback host and bounded port|canonical spelling|port must be an integer/,
       peerBaseUrl,
@@ -236,7 +373,7 @@ test("rejects public HTTP and non-explicit loopback HTTP", () => {
 });
 
 test("rejects local, reserved, and project-service HTTPS authorities", () => {
-  const catalog = validCatalog([validEntry()]);
+  const catalog = catalogWithPeer();
   for (const peerBaseUrl of [
     "https://192.168.1.1/",
     "https://203.0.113.1/",
@@ -250,7 +387,7 @@ test("rejects local, reserved, and project-service HTTPS authorities", () => {
     announcement.peer_base_url = peerBaseUrl;
     assert.throws(
       () => catalogApi.validatePeerFeed(validPeerFeed([announcement]), catalog, {
-        now: new Date("2026-08-28T00:00:00Z"),
+        now: TEST_NOW,
       }),
       /public and non-reserved|local or reserved DNS|project and service hosts/,
       peerBaseUrl,
@@ -260,11 +397,11 @@ test("rejects local, reserved, and project-service HTTPS authorities", () => {
 
 test("rejects unknown catalog fields and project-server model behavior", () => {
   assert.throws(
-    () => catalogApi.validateCatalog({ ...validCatalog(), legacy_alias: true }),
+    () => validateCatalogFixture({ ...validCatalog(), legacy_alias: true }),
     /unknown or missing/,
   );
   assert.throws(
-    () => catalogApi.validateCatalog({ ...validCatalog(), project_server_serves_model_bytes: true }),
+    () => validateCatalogFixture({ ...validCatalog(), project_server_serves_model_bytes: true }),
     /off project servers/,
   );
 });
@@ -274,14 +411,14 @@ test("rejects incomplete or drifted six-member composition closure", () => {
   entry.composition.members.pop();
   entry.composition.member_count = 5;
   assert.throws(
-    () => catalogApi.validateCatalog(validCatalog([entry])),
+    () => validateCatalogFixture(validCatalog([entry])),
     /exactly six members/,
   );
 
   const duplicate = validEntry();
   duplicate.composition.members[5].name = duplicate.composition.members[0].name;
   assert.throws(
-    () => catalogApi.validateCatalog(validCatalog([duplicate])),
+    () => validateCatalogFixture(validCatalog([duplicate])),
     /member set is not closed/,
   );
 });
@@ -290,7 +427,7 @@ test("rejects missing, unsafe, or drifted browser admission descriptors", () => 
   const missing = validEntry();
   delete missing.browser_admission;
   assert.throws(
-    () => catalogApi.validateCatalog(validCatalog([missing])),
+    () => validateCatalogFixture(validCatalog([missing])),
     /unknown or missing/,
   );
 
@@ -302,7 +439,7 @@ test("rejects missing, unsafe, or drifted browser admission descriptors", () => 
     const unsafe = validEntry();
     unsafe.browser_admission.route = route;
     assert.throws(
-      () => catalogApi.validateCatalog(validCatalog([unsafe])),
+      () => validateCatalogFixture(validCatalog([unsafe])),
       /safe same-origin route/,
     );
   }
@@ -310,28 +447,28 @@ test("rejects missing, unsafe, or drifted browser admission descriptors", () => 
   const oversized = validEntry();
   oversized.browser_admission.bytes = catalogApi.MAX_BROWSER_ADMISSION_BYTES + 1;
   assert.throws(
-    () => catalogApi.validateCatalog(validCatalog([oversized])),
+    () => validateCatalogFixture(validCatalog([oversized])),
     /positive bounded safe integer/,
   );
 
   const unprefixed = validEntry();
   unprefixed.browser_admission.sha256 = "f".repeat(64);
   assert.throws(
-    () => catalogApi.validateCatalog(validCatalog([unprefixed])),
+    () => validateCatalogFixture(validCatalog([unprefixed])),
     /prefixed SHA-256/,
   );
 
   const unknown = validEntry();
   unknown.browser_admission.media_type = "application/json";
   assert.throws(
-    () => catalogApi.validateCatalog(validCatalog([unknown])),
+    () => validateCatalogFixture(validCatalog([unknown])),
     /unknown or missing/,
   );
 
   const driftedSchema = validCatalog([validEntry()]);
   driftedSchema.browser_admission_schema = "tinyrustlm.browser-composition-admission/2";
   assert.throws(
-    () => catalogApi.validateCatalog(driftedSchema),
+    () => validateCatalogFixture(driftedSchema),
     /browser admission schema is unsupported/,
   );
 });
@@ -340,18 +477,18 @@ test("rejects an unqualified catalog entry", () => {
   const entry = validEntry();
   entry.qualification.browser_status = "untested";
   assert.throws(
-    () => catalogApi.validateCatalog(validCatalog([entry])),
+    () => validateCatalogFixture(validCatalog([entry])),
     /qualification is incomplete/,
   );
 });
 
 test("rejects expired and project-hosted peer announcements", () => {
-  const catalog = validCatalog([validEntry()]);
+  const catalog = catalogWithPeer();
   const expired = validAnnouncement();
-  expired.expires_utc = "2026-08-27T00:00:00Z";
+  expired.expires_utc = utc(-2 * 60_000);
   assert.throws(
     () => catalogApi.validatePeerFeed(validPeerFeed([expired]), catalog, {
-      now: new Date("2026-08-28T00:00:00Z"),
+      now: TEST_NOW,
     }),
     /expired/,
   );
@@ -360,7 +497,7 @@ test("rejects expired and project-hosted peer announcements", () => {
   hosted.peer_base_url = "https://minimodel.org/";
   assert.throws(
     () => catalogApi.validatePeerFeed(validPeerFeed([hosted]), catalog, {
-      now: new Date("2026-08-28T00:00:00Z"),
+      now: TEST_NOW,
     }),
     /non-project peer|project and service hosts/,
   );
@@ -379,8 +516,31 @@ test("publishes only current catalog routes and explicitly retires former routes
     assert.match(html + sitemap, new RegExp(current.replaceAll(".", "\\.")));
   }
   assert.doesNotMatch(html + sitemap, /models\.v0|manifest\.v0|minimodel-peer-offer/i);
+  const normalizedCatalogScript = read("catalog.js").replaceAll("\r\n", "\n");
+  assert.match(normalizedCatalogScript, /cache: "no-store"/);
+  assert.match(normalizedCatalogScript, /credentials: "omit"/);
+  assert.match(normalizedCatalogScript, /redirect: "error"/);
+  const catalogScriptSha256 = crypto.createHash("sha256")
+    .update(normalizedCatalogScript, "utf8")
+    .digest("hex");
+  const cacheIdentity = /catalog\.js\?v=(sha256-[a-f0-9]{64})/.exec(html);
+  assert.ok(cacheIdentity, "catalog.js must have a content-bound cache identity");
+  assert.equal(cacheIdentity[1], `sha256-${catalogScriptSha256}`);
   assert.match(apache, /R=410/);
   assert.match(apache, /models\\\.v0/);
+});
+
+test("prevents stale authority responses without disabling caching for other catalog files", () => {
+  const apache = read("catalog/.htaccess").replaceAll("\r\n", "\n");
+  const authorityPolicy = [
+    "  <FilesMatch \"^(compositions\\.v1\\.json|peer-announcements\\.v1\\.json)$\">",
+    "    Header always set Cache-Control \"no-store, max-age=0, must-revalidate\"",
+    "  </FilesMatch>",
+  ].join("\n");
+
+  assert.ok(apache.includes(authorityPolicy));
+  assert.equal((apache.match(/Header always set Cache-Control/gu) || []).length, 1);
+  assert.doesNotMatch(apache, /FilesMatch[^\n]*(?:browser-admissions|qualification-receipts|\.json\$)/u);
 });
 
 test("keeps the two MemoryEndpoints uses separate from model transport", () => {

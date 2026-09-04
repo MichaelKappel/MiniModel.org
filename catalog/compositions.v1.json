@@ -1,11 +1,1 @@
-{
-  "schema": "minimodel.slm2_catalog.v1",
-  "catalog_id": "minimodel.org/prelaunch",
-  "generated_at_utc": "2026-08-28T00:00:00Z",
-  "project_server_serves_model_bytes": false,
-  "project_server_proxies_model_bytes": false,
-  "project_server_runs_inference": false,
-  "qualification_policy": "exact-current-evidence-required",
-  "browser_admission_schema": "tinyrustlm.browser-composition-admission/1",
-  "entries": []
-}
+{"schema":"minimodel.slm2_catalog.v1","catalog_id":"minimodel.org/prelaunch","revision":2,"generated_at_utc":"2026-09-04T21:23:57Z","valid_until_utc":"2026-09-05T21:23:57Z","project_server_serves_model_bytes":false,"project_server_proxies_model_bytes":false,"project_server_runs_inference":false,"qualification_policy":"exact-current-evidence-required","qualification_receipt_schema":"tinyrustlm.qualification-receipt/1","browser_admission_schema":"tinyrustlm.browser-composition-admission/1","peer_verification_keys":[],"revoked_qualification_receipt_ids":[],"supersessions":[],"entries":[]}

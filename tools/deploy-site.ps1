@@ -241,7 +241,8 @@ function Get-PublicBytes {
         $response = $Client.SendAsync($request, [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
         try {
             if ([int]$response.StatusCode -ne 200) { throw "Public predecessor read returned a non-200 status." }
-            if ($response.Content.Headers.ContentLength -and $response.Content.Headers.ContentLength.Value -gt $MaximumBytes) {
+            $contentLength = $response.Content.Headers.ContentLength
+            if ($null -ne $contentLength -and [int64]$contentLength -gt $MaximumBytes) {
                 throw "Public predecessor read exceeded its byte bound."
             }
             $bytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
@@ -1468,7 +1469,8 @@ try {
             $url = "{0}{1}?release_smoke={2}" -f $manifest.origin, $route.path, $operationNonce
             $response = $client.GetAsync($url).GetAwaiter().GetResult()
             try {
-                if ($response.Content.Headers.ContentLength -and $response.Content.Headers.ContentLength.Value -gt 2097152) {
+                $contentLength = $response.Content.Headers.ContentLength
+                if ($null -ne $contentLength -and [int64]$contentLength -gt 2097152) {
                     throw "HTTPS route smoke exceeded its byte bound."
                 }
                 $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()

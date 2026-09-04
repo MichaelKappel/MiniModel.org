@@ -116,6 +116,19 @@ test("performs exact public admission before snapshot creation or credential acc
   assert.match(publisher, /New-FtpRequest[\s\S]*Assert-CustodyMutationAllowed -Phase \$script:phase -MutationKind remote/);
 });
 
+test("bounds HTTP content lengths without assuming a nullable Value wrapper", () => {
+  const publisher = read("tools/deploy-site.ps1");
+  assert.doesNotMatch(publisher, /ContentLength\.Value/);
+  assert.equal(
+    (publisher.match(/\$contentLength = \$response\.Content\.Headers\.ContentLength/g) ?? []).length,
+    2,
+  );
+  assert.equal(
+    (publisher.match(/\$null -ne \$contentLength -and \[int64\]\$contentLength -gt/g) ?? []).length,
+    2,
+  );
+});
+
 test("runs the fixed-root source-authority gate before every transport-capable action", () => {
   const publisher = read("tools/deploy-site.ps1");
   const gateCall = publisher.search(/Assert-EcosystemSingleSourceAuthority\r?\n/);

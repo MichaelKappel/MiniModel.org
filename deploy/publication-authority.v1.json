@@ -1,0 +1,63 @@
+{
+  "schema": "minimodel.publication_authority.v1",
+  "site": "minimodel.org",
+  "origin": "https://minimodel.org",
+  "repository": {
+    "root_policy": "script-parent-equals-git-toplevel",
+    "branch": "master",
+    "remote_name": "origin",
+    "remote_url": "https://github.com/MichaelKappel/MiniModel.org.git"
+  },
+  "candidate": {
+    "version": "1.1.2",
+    "release_id": "minimodel.org@1.1.2",
+    "manifest_path": "deploy/site-deployment-manifest.v1.json",
+    "source_commit": "7e0a6eb6bf292ff69e3030adf1d229c811606ce9",
+    "source_tree": "d2477347378109af4b8eade0a8208b6f0196eadd"
+  },
+  "predecessor": {
+    "version": "1.1.1",
+    "release_id": "minimodel.org@1.1.1",
+    "receipt_path": "deploy/receipts/site-deployment-20260831T061709Z.json",
+    "receipt_sha256": "e38bae2fa85fbdfb9688994cc200e2718e0a9a14751974731b59a9387c315014",
+    "release_path": ".well-known/site-release.json",
+    "release_bytes": 292,
+    "release_sha256": "5496360cd0decaae25b65547813c128693ce0dbfa55e168dd1f6693539112aef",
+    "history_path": ".well-known/site-release-history.json",
+    "history_bytes": 2453,
+    "history_sha256": "963d43ae96e78f59bdf31b2172ec01b5d1b676818ed6dc383a089964921755d8",
+    "ledger_release_ids": [
+      "minimodel.org@1.1.1",
+      "minimodel.org@1.1.0",
+      "minimodel.org@1.0.0"
+    ]
+  },
+  "public_invariants": {
+    "composition_catalog": {
+      "path": "catalog/compositions.v1.json",
+      "bytes": 422,
+      "sha256": "700b510d068934627bb0a308da36d7672c1a4e296c7d984ea33199b903692a42",
+      "array_property": "entries"
+    },
+    "peer_feed": {
+      "path": "catalog/peer-announcements.v1.json",
+      "bytes": 263,
+      "sha256": "10bea93b9613f9bbc7ffff0d03d22dbdeeb28abd276dcf6609dd929fdd2643a4",
+      "array_property": "announcements"
+    }
+  },
+  "transport": {
+    "status": "unbound",
+    "profile_name": "MiniModel.org",
+    "protocol": "ftps-explicit",
+    "host": null,
+    "port": null,
+    "username_sha256": null,
+    "remote_root": null,
+    "root_sentinel_path": ".minimodel-publication-root.v1.json",
+    "root_sentinel_source_path": "deploy/publication-root-sentinel.v1.json",
+    "root_sentinel_bytes": 165,
+    "root_sentinel_sha256": "b11cd954128332e63a44e32be5523ccbb3b1b005cfd23f4d03569f37ef97d1dd",
+    "lease_directory_path": ".minimodel-deployment-lease.v1"
+  }
+}

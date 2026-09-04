@@ -7,6 +7,20 @@
   "source_commit": "7e0a6eb6bf292ff69e3030adf1d229c811606ce9",
   "source_tree": "d2477347378109af4b8eade0a8208b6f0196eadd",
   "transport_profile": "MiniModel.org",
+  "materializations": [
+    {
+      "path": ".well-known/site-release-history.json",
+      "kind": "prepared-history-to-published-v1",
+      "source_bytes": 3291,
+      "source_sha256": "3bd9889cad1c12f015df9e4187cce55e3e109c742a09324c7662fee49cadaccd"
+    },
+    {
+      "path": ".well-known/site-release.json",
+      "kind": "prepared-release-to-published-v1",
+      "source_bytes": 291,
+      "source_sha256": "aee4a7183d77e2dd286da8078920aaae5a06f59bb1d488e2d40087ee74fe7eba"
+    }
+  ],
   "files": [
     {
       "path": ".htaccess",
@@ -16,8 +30,8 @@
     },
     {
       "path": ".well-known/site-release-history.json",
-      "bytes": 3291,
-      "sha256": "3bd9889cad1c12f015df9e4187cce55e3e109c742a09324c7662fee49cadaccd",
+      "bytes": 2873,
+      "sha256": "2a376fbdee4c1c50e82c6fc2d9c84391e6cb27a80e487c1ec2f41321e0f9fece",
       "https_readback_path": "/.well-known/site-release-history.json"
     },
     {
@@ -136,8 +150,8 @@
     },
     {
       "path": ".well-known/site-release.json",
-      "bytes": 291,
-      "sha256": "aee4a7183d77e2dd286da8078920aaae5a06f59bb1d488e2d40087ee74fe7eba",
+      "bytes": 255,
+      "sha256": "cb0f61a2cf24718f87389b951ccf52b74629469cd0a4aa653d006234390b42f7",
       "https_readback_path": "/.well-known/site-release.json"
     }
   ],

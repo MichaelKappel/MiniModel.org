@@ -8,9 +8,18 @@ const { execFileSync } = require("node:child_process");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const contentCommit = process.argv[2];
-const outputPath = path.resolve(repositoryRoot, process.argv[3] || "deploy/site-deployment-manifest.v1.json");
+const verifyIndex = process.argv.indexOf("--verify");
+const verifyPath = verifyIndex >= 0
+  ? path.resolve(repositoryRoot, process.argv[verifyIndex + 1] || "deploy/site-deployment-manifest.v1.json")
+  : null;
+const outputArgument = process.argv[3] && process.argv[3] !== "--verify"
+  ? process.argv[3]
+  : "deploy/site-deployment-manifest.v1.json";
+const outputPath = path.resolve(repositoryRoot, outputArgument);
 const version = "1.1.2";
-const stagingRoot = path.join(repositoryRoot, "deploy", "staging", version);
+const releaseDate = "2026-08-31";
+const releasePath = ".well-known/site-release.json";
+const historyPath = ".well-known/site-release-history.json";
 const retiredPaths = [
   "catalog/models.v0.json",
   "catalog/peer-source-announcements.v0.json",
@@ -36,7 +45,12 @@ if (!/^[0-9a-f]{40}$/.test(contentCommit || "")) {
 }
 
 function git(args, encoding = "utf8") {
-  return execFileSync("git", args, { cwd: repositoryRoot, encoding, maxBuffer: 128 * 1024 * 1024 });
+  return execFileSync("git", ["--no-optional-locks", ...args], {
+    cwd: repositoryRoot,
+    encoding,
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" },
+    maxBuffer: 128 * 1024 * 1024,
+  });
 }
 
 function isPublicPath(relativePath) {
@@ -61,6 +75,71 @@ function isPublicPath(relativePath) {
     relativePath.startsWith("updates/");
 }
 
+function sha256(bytes) {
+  return crypto.createHash("sha256").update(bytes).digest("hex");
+}
+
+function parseJsonBlob(bytes, label) {
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    throw new Error(`${label} must not contain a UTF-8 byte-order mark`);
+  }
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${label} is not strict UTF-8 JSON`);
+  }
+}
+
+function compactJsonBytes(value) {
+  return Buffer.from(`${JSON.stringify(value)}\n`, "utf8");
+}
+
+function materializePublishedArtifact(relativePath, sourceBytes) {
+  if (relativePath === releasePath) {
+    const release = parseJsonBlob(sourceBytes, "prepared release marker");
+    if (release.schema !== "uaix.site_release.v1" ||
+        release.release_id !== "minimodel.org@1.1.2" ||
+        release.version !== version ||
+        release.release_date !== releaseDate ||
+        release.last_publish_date !== "2026-08-29" ||
+        release.status !== "prepared") {
+      throw new Error("Prepared release marker does not preserve the truthful pre-publication state");
+    }
+    release.last_publish_date = releaseDate;
+    release.status = "published";
+    return {
+      kind: "prepared-release-to-published-v1",
+      bytes: compactJsonBytes(release),
+    };
+  }
+
+  if (relativePath === historyPath) {
+    const history = parseJsonBlob(sourceBytes, "prepared release history");
+    const releases = Array.isArray(history.releases) ? history.releases : [];
+    if (history.schema !== "uaix.site_release_history.v1" ||
+        history.current_release_id !== "minimodel.org@1.1.2" ||
+        releases.length !== 4 ||
+        releases[0]?.release_id !== "minimodel.org@1.1.2" ||
+        releases[0]?.version !== version ||
+        releases[0]?.release_date !== releaseDate ||
+        releases[0]?.last_publish_date !== null ||
+        releases[0]?.status !== "prepared" ||
+        releases[1]?.release_id !== "minimodel.org@1.1.1" ||
+        releases[1]?.last_publish_date !== "2026-08-29") {
+      throw new Error("Prepared release history does not preserve the truthful pre-publication ledger");
+    }
+    releases[0].last_publish_date = releaseDate;
+    releases[0].status = "published";
+    return {
+      kind: "prepared-history-to-published-v1",
+      bytes: compactJsonBytes(history),
+    };
+  }
+
+  return null;
+}
+
 git(["cat-file", "-e", `${contentCommit}^{commit}`]);
 const sourceTree = git(["rev-parse", `${contentCommit}^{tree}`]).trim();
 const tracked = git(["ls-tree", "-r", "--name-only", contentCommit])
@@ -68,19 +147,27 @@ const tracked = git(["ls-tree", "-r", "--name-only", contentCommit])
   .filter(Boolean)
   .filter(isPublicPath)
   .sort((left, right) => left.localeCompare(right));
-const marker = ".well-known/site-release.json";
+const marker = releasePath;
 const ordered = tracked.filter((item) => item !== marker);
 if (tracked.includes(marker)) ordered.push(marker);
 
+const materializations = [];
 const files = ordered.map((relativePath) => {
   const committed = git(["show", `${contentCommit}:${relativePath}`], null);
-  const stagedPath = path.join(stagingRoot, ...relativePath.split("/"));
-  fs.mkdirSync(path.dirname(stagedPath), { recursive: true });
-  fs.writeFileSync(stagedPath, committed);
+  const materialized = materializePublishedArtifact(relativePath, committed);
+  const publicationBytes = materialized ? materialized.bytes : committed;
+  if (materialized) {
+    materializations.push({
+      path: relativePath,
+      kind: materialized.kind,
+      source_bytes: committed.length,
+      source_sha256: sha256(committed),
+    });
+  }
   return {
     path: relativePath,
-    bytes: committed.length,
-    sha256: crypto.createHash("sha256").update(committed).digest("hex"),
+    bytes: publicationBytes.length,
+    sha256: sha256(publicationBytes),
     https_readback_path: relativePath.endsWith(".htaccess") ? null : `/${relativePath}`,
   };
 });
@@ -90,6 +177,11 @@ if (files.length < 20 || files.length > 40 || files.at(-1)?.path !== marker) {
 }
 if (files.some((file) => file.path.endsWith(".slm"))) {
   throw new Error("Model bytes entered the public deployment closure");
+}
+if (materializations.length !== 2 ||
+    materializations[0].path !== historyPath ||
+    materializations[1].path !== releasePath) {
+  throw new Error("The two governed publication records were not materialized exactly");
 }
 
 const manifest = {
@@ -101,6 +193,7 @@ const manifest = {
   source_commit: contentCommit,
   source_tree: sourceTree,
   transport_profile: "MiniModel.org",
+  materializations,
   files,
   retired_paths: retiredPaths,
   route_smokes: [
@@ -113,6 +206,15 @@ const manifest = {
   ],
 };
 
-fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-fs.writeFileSync(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-process.stdout.write(`${outputPath}\n${files.length} files\n${stagingRoot}\n`);
+const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+if (verifyPath) {
+  const actual = fs.readFileSync(verifyPath);
+  if (!actual.equals(manifestBytes)) {
+    throw new Error("Deployment manifest is stale or was not generated byte-for-byte from the bound content commit");
+  }
+  process.stdout.write(`VERIFIED ${verifyPath}\n${files.length} files\n`);
+} else {
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, manifestBytes);
+  process.stdout.write(`${outputPath}\n${files.length} files\n`);
+}

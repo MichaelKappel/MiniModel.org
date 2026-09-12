@@ -64,3 +64,9 @@ prohibitions:
 # Keep bounded operation-bound upload bytes in memory, compare committed and current canonical source, and recheck exact published identities before use.
 # Preserve upload/rollback failure lessons with actual canonical functions and memory-only transport simulations; tests must not recreate obsolete snapshots or fake source/authority trees.
 # Compact review: artifacts/reports/publication-input-review-20260912.json. A passing simulated transaction does not prove actual FTPS, publication, model quality or live seeding.
+
+# Publication command lesson 2026-09-12
+# Do not add arbitrary manifest output paths, broad public-directory copying or a new site/source stage. Emit bounded metadata to stdout; reviewed metadata belongs only in the canonical manifest.
+# Compare the current public closure with exact committed bytes, including ignored and untracked extras. Pin canonical line endings instead of creating a copied stage to conceal differences.
+# Every Node child must use reviewed executable/tool identities, bounded output and a deadline with owned-process termination. Exclude inherited NODE_* settings for every child, including later generator checks, and leave the caller environment unchanged.
+# Retain failures and limitations in artifacts/reports/publication-command-review-20260912.json and lesson C24. Metadata consistency and simulated transport do not establish model qualification, hosting or publication.

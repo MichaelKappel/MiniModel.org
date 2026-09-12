@@ -3,6 +3,7 @@ param(
     [string]$ManifestPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "deploy\site-deployment-manifest.v1.json"),
     [string]$FileZillaProfilePath = (Join-Path $env:APPDATA "FileZilla\sitemanager.xml"),
     [string]$ReportPath = (Join-Path (Split-Path -Parent $PSScriptRoot) ("deploy\receipts\site-deployment-{0}.json" -f (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ"))),
+    [string]$NodeExecutablePath = (Join-Path $env:ProgramFiles 'nodejs\node.exe'),
     [switch]$Publish
 )
 
@@ -24,6 +25,99 @@ function Test-BootstrapPathHasReparsePoint {
         $current = $parent
     }
     return $false
+}
+
+# Execute only the reviewed gate or manifest tool with pinned, read-leased files and bounded pipes.
+function Invoke-VerifiedNode {
+    param(
+        [Parameter(Mandatory)][ValidateSet('source-authority','manifest')][string]$Tool,
+        [AllowEmptyCollection()][string[]]$Arguments = @(),
+        [ValidateRange(1,120000)][int]$TimeoutMilliseconds = 120000
+    )
+
+    if ($Tool -ceq 'source-authority') {
+        if (@($Arguments | Where-Object { $_ -cnotin @('--require-clean','--require-remote-exact') }).Count -gt 0 -or
+            @($Arguments | Select-Object -Unique).Count -ne $Arguments.Count) { throw 'Invalid source-authority arguments.' }
+        $toolPath = Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\tools\verify-single-source-authority.js'
+        $toolBytes = 141430
+        $toolSha256 = 'f99083edfe7eae96279acafcb624eb88e1a26e43d5622d498711fe280691647d'
+        $maximumOutput = 4096
+    }
+    else {
+        if ($Arguments.Count -lt 1 -or $Arguments.Count -gt 2 -or $Arguments[0].Length -ne 40 -or $Arguments[0] -cnotmatch '^[0-9a-f]{40}$' -or
+            ($Arguments.Count -eq 2 -and $Arguments[1] -cne '--verify')) { throw 'Invalid manifest arguments.' }
+        $toolPath = Join-Path $repositoryRoot 'tools\build-site-deployment-manifest.js'
+        $toolBytes = 15664
+        $toolSha256 = '5ea76bd8797903c542bedc4bbd2f595e6ac770083e9cb61ae1dea2b730a2e4bb'
+        $maximumOutput = 2097152
+    }
+    if (-not [IO.Path]::IsPathRooted($NodeExecutablePath)) { throw 'Node executable path must be absolute.' }
+    $nodePath = [IO.Path]::GetFullPath($NodeExecutablePath)
+    $leases = [Collections.Generic.List[IDisposable]]::new()
+    $process = [Diagnostics.Process]::new()
+    $output = [IO.MemoryStream]::new([byte[]]::new($maximumOutput + 1),$true)
+    $errors = [IO.MemoryStream]::new([byte[]]::new(65537),$true)
+    $output.SetLength(0); $errors.SetLength(0)
+    $started = $false
+    try {
+        foreach ($identity in @(
+            @{Path=$nodePath;Bytes=91380224;Sha256='63c259c81e5d472b5f11c8d506070130cb04a1ecf84b80377a34ed6ec9048088'},
+            @{Path=$toolPath;Bytes=$toolBytes;Sha256=$toolSha256}
+        )) {
+            if (Test-BootstrapPathHasReparsePoint -Path $identity.Path) { throw 'Verified Node input contains a reparse point.' }
+            $file = Get-Item -LiteralPath $identity.Path -Force
+            if ($file -isnot [IO.FileInfo] -or $file.Length -ne $identity.Bytes) { throw 'Verified Node file identity drifted.' }
+            $lease = [IO.File]::Open($file.FullName,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+            $leases.Add($lease)
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try { $actual=([BitConverter]::ToString($sha.ComputeHash($lease))).Replace('-','').ToLowerInvariant() }
+            finally { $sha.Dispose() }
+            if ($actual -cne $identity.Sha256) { throw 'Verified Node file identity drifted.' }
+        }
+        $start=[Diagnostics.ProcessStartInfo]::new()
+        $start.FileName=$nodePath
+        $start.WorkingDirectory=$repositoryRoot
+        $start.UseShellExecute=$false
+        $start.CreateNoWindow=$true
+        $start.RedirectStandardOutput=$true
+        $start.RedirectStandardError=$true
+        # Arguments are fixed canonical paths, exact object IDs and admitted literal flags, never shell code.
+        $start.Arguments=(@($toolPath)+@($Arguments) | ForEach-Object { '"'+$_+'"' }) -join ' '
+        foreach ($name in @($start.EnvironmentVariables.Keys)) {
+            if ([string]$name -like 'NODE_*') { $start.EnvironmentVariables.Remove([string]$name) }
+        }
+        $process.StartInfo=$start
+        $started=$process.Start()
+        if (-not $started) { throw 'Unable to start verified Node.' }
+        $watch=[Diagnostics.Stopwatch]::StartNew()
+        $stdoutTask=$process.StandardOutput.BaseStream.CopyToAsync($output)
+        $stderrTask=$process.StandardError.BaseStream.CopyToAsync($errors)
+        if (-not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdoutTask,$stderrTask),$TimeoutMilliseconds) -or
+            -not $process.WaitForExit([Math]::Max(0,$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds))) {
+            throw 'Verified Node exceeded its deadline.'
+        }
+        if ($output.Length -gt $maximumOutput -or $errors.Length -gt 65536) { throw 'Verified Node exceeded its output budget.' }
+        $utf8=[Text.UTF8Encoding]::new($false,$true)
+        return [pscustomobject]@{ExitCode=$process.ExitCode;Stdout=$utf8.GetString($output.ToArray());Stderr=$utf8.GetString($errors.ToArray())}
+    }
+    finally {
+        try {
+            if ($started -and -not $process.HasExited) {
+                # Native stderr can race with successful process exit. Always inspect the owned handle afterward.
+                $nativePreference = $ErrorActionPreference
+                try {
+                    $ErrorActionPreference = 'Continue'
+                    & (Join-Path $env:SystemRoot 'System32\taskkill.exe') /PID $process.Id /T /F *> $null
+                }
+                finally { $ErrorActionPreference = $nativePreference }
+                if (-not $process.WaitForExit(5000)) { throw 'Verified Node child did not terminate.' }
+            }
+        }
+        finally {
+            $output.Dispose(); $errors.Dispose(); $process.Dispose()
+            foreach ($lease in $leases) { $lease.Dispose() }
+        }
+    }
 }
 
 function Assert-EcosystemSingleSourceAuthority {
@@ -52,12 +146,13 @@ function Assert-EcosystemSingleSourceAuthority {
         throw "The canonical ecosystem source-authority gate is unavailable or unsafe."
     }
 
-    $gateArguments = @($authorityGate)
+    $gateArguments = @()
     if ($Publish) {
         $gateArguments += @("--require-clean", "--require-remote-exact")
     }
-    $gateOutput = @(& node @gateArguments 2>&1)
-    if ($LASTEXITCODE -ne 0 -or $gateOutput.Count -ne 1) {
+    $gateResult = Invoke-VerifiedNode -Tool source-authority -Arguments $gateArguments
+    $gateOutput = @($gateResult.Stdout.TrimEnd("`r","`n") -split "\r?\n")
+    if ($gateResult.ExitCode -ne 0 -or $gateResult.Stderr.Length -ne 0 -or $gateOutput.Count -ne 1) {
         throw "The ecosystem source-authority gate failed closed."
     }
     try {
@@ -1153,8 +1248,8 @@ foreach ($retiredPathValue in @($manifest.retired_paths)) {
     $retiredSeen[$retiredPath] = $true
 }
 
-$builderOutput = @(& node (Join-Path $PSScriptRoot "build-site-deployment-manifest.js") ([string]$manifest.source_commit) --verify $canonicalManifestPath 2>&1)
-if ($LASTEXITCODE -ne 0 -or @($builderOutput | Where-Object { [string]$_ -match "^VERIFIED " }).Count -ne 1) {
+$builderResult = Invoke-VerifiedNode -Tool manifest -Arguments @([string]$manifest.source_commit,'--verify')
+if ($builderResult.ExitCode -ne 0 -or $builderResult.Stderr.Length -ne 0 -or $builderResult.Stdout -cne "VERIFIED $canonicalManifestPath`n$(@($manifest.files).Count) files`n") {
     throw "Deployment manifest regeneration check failed."
 }
 

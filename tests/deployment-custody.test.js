@@ -207,11 +207,10 @@ test("runs the fixed-root source-authority gate before every transport-capable a
   for (const later of [remoteHead, publicRead, input, credential, ftpUse]) {
     assert.ok(later > gateCall, `transport-capable action at ${later} preceded source-authority gate`);
   }
-  assert.match(
-    publisher,
-    /\$gateArguments = @\(\$authorityGate\)\r?\n\s*if \(\$Publish\) \{\r?\n\s*\$gateArguments \+= @\("--require-clean", "--require-remote-exact"\)\r?\n\s*\}\r?\n\s*\$gateOutput = @\(& node @gateArguments 2>&1\)/,
-  );
-  assert.doesNotMatch(publisher, /& node \$authorityGate/);
+  assert.match(publisher, /Invoke-VerifiedNode -Tool source-authority -Arguments \$gateArguments/);
+  assert.match(publisher, /\$gateArguments \+= @\("--require-clean", "--require-remote-exact"\)/);
+  assert.match(publisher, /Invoke-VerifiedNode -Tool manifest -Arguments/);
+  assert.doesNotMatch(publisher, /& node\b/i);
   assert.match(publisher, /TinyRustLM\.com\\tinyrustlm/);
   assert.match(publisher, /New-FtpRequest[\s\S]*if \(-not \$script:sourceAuthorityAdmitted\)/);
   assert.doesNotMatch(publisher, /E:\\Source\\Rust\\MiniModel\.org/);
@@ -249,7 +248,7 @@ test("never converts FTP 550 or SIZE failure into remote absence", () => {
   assert.match(publisher, /Get-RemoteFileObservation[\s\S]*Remote SIZE and LIST observations contradict/);
 });
 
-test("verifies the manifest without reconstructing mutable repo-local staging", () => {
+test("rejects the stale manifest without reconstructing mutable repo-local staging", () => {
   const builder = read("tools/build-site-deployment-manifest.js");
   const publisher = read("tools/deploy-site.ps1");
   const custody = read("tools/MiniModel.DeploymentCustody.psm1");
@@ -274,14 +273,31 @@ test("verifies the manifest without reconstructing mutable repo-local staging", 
       path.join(repositoryRoot, "tools/build-site-deployment-manifest.js"),
       "7e0a6eb6bf292ff69e3030adf1d229c811606ce9",
       "--verify",
-      manifestPath,
     ],
-    { cwd: repositoryRoot, encoding: "utf8", timeout: 30_000 },
+    { cwd: repositoryRoot, encoding: "utf8", timeout: 90_000, windowsHide: true },
   );
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /^VERIFIED /m);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Canonical public source differs/);
+  assert.equal(result.stdout, "");
   assert.equal(sha256(fs.readFileSync(manifestPath)), beforeHash);
   assert.equal(fs.statSync(manifestPath).mtimeMs, before.mtimeMs);
+});
+
+test("actual publisher checks both Node children despite hostile startup settings and stops before public admission", () => {
+  const receipts = path.join(repositoryRoot, "deploy/receipts");
+  const before = fs.readdirSync(receipts).sort();
+  const manifestPath = path.join(repositoryRoot, "deploy/site-deployment-manifest.v1.json");
+  const beforeManifest = fs.readFileSync(manifestPath);
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(repositoryRoot, "tools/deploy-site.ps1"), "-NodeExecutablePath", process.execPath], {
+    cwd: repositoryRoot, encoding: "utf8", windowsHide: true, timeout: 120_000, maxBuffer: 65536,
+    env: { ...process.env, NODE_OPTIONS: "--require definitely-not-loaded", NODE_PATH: "definitely-not-searched" },
+  });
+  assert.ifError(result.error);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /Deployment manifest regeneration check failed/);
+  assert.doesNotMatch(result.stdout + result.stderr, /Cannot find module|READ-ONLY-ADMISSION-PASS|Get-CredentialProfile/);
+  assert.deepEqual(fs.readdirSync(receipts).sort(), before);
+  assert.deepEqual(fs.readFileSync(manifestPath), beforeManifest);
 });
 
 test("preserves a truthfully empty prepared catalog and peer feed", () => {

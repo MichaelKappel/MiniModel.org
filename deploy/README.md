@@ -13,6 +13,9 @@ mutate the authenticated target:
 - a passing fixed-root ecosystem source-authority gate derived from the
   canonical sibling repository before any remote observation or credential
   access;
+- the reviewed Node 24.14.0 executable and exact gate/generator bytes, read-locked
+  throughout each child process; inherited `NODE_*` settings are excluded from
+  the child without modifying the caller's environment;
 - clean equality among local `HEAD`, `origin/master`, and a fresh read-only
   `ls-remote` observation;
 - the generated 1.1.2 manifest bound to content commit
@@ -35,6 +38,32 @@ The read-only preflight is:
 ```powershell
 .\tools\deploy-site.ps1
 ```
+
+The current manifest still names an older content commit. Preflight now rejects
+its disagreement with current public files before any public-site observation.
+Transport also remains unbound. Neither this cleanup nor successful metadata
+generation makes the candidate publishable.
+
+The manifest generator emits JSON to stdout and accepts no output location:
+
+```text
+node tools/build-site-deployment-manifest.js <40-character-content-commit>
+node tools/build-site-deployment-manifest.js <40-character-content-commit> --verify
+```
+
+Both forms run the reviewed canonical source gate and require all 22 explicitly
+admitted public files to match the chosen ancestor commit. Verification reads
+only the canonical deployment manifest. Untracked and ignored public extras,
+links, unknown paths, wrong Git object bytes and stale working files are refused.
+The generator writes no files. Reviewed metadata belongs in the single canonical
+manifest with UTF-8/LF bytes; Windows PowerShell's default text redirection must
+not be used to save a byte-bound manifest.
+
+The publisher defaults to the installed Node executable and also accepts
+`-NodeExecutablePath` for that exact reviewed binary. A different runtime or
+changed tool requires reviewing and updating its pin before use. Child processes
+have bounded stdout/stderr and a 120-second deadline; timeout terminates the
+owned process tree. Each generator Git read has its own 30-second deadline.
 
 Once the authority is legitimately bound, the publication command is:
 

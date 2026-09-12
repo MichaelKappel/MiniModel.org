@@ -1,0 +1,308 @@
+{
+  "schema": "minimodel.publication_command_cleanup_review.v1",
+  "reviewed_utc": "2026-09-12T23:46:42Z",
+  "baseline_commit": "ef924db7b721ed3fea371fb3f29416261d8f31b8",
+  "purpose": "Remove arbitrary manifest output and broad source inclusion; protect every Node publication subprocess and compare canonical public bytes directly.",
+  "baseline_git_files": {
+    ".gitattributes": {
+      "bytes": 675,
+      "sha256": "c82244fb2430a70501737c34649eebf7bad6cf6f05af3f4341a692378fb80f38"
+    },
+    ".uai/short-term-memory.uai": {
+      "bytes": 7850,
+      "sha256": "b6008f51bad40783bae63f22443b1c5d65835121ade67832c30f12dfd2f2c8a5"
+    },
+    ".uai/taboo.uai": {
+      "bytes": 13433,
+      "sha256": "8b4516b51e8e68e4518e71834c7363d5c0e47a5f53f63e4eb67a1a655002fd9f"
+    },
+    "deploy/README.md": {
+      "bytes": 3665,
+      "sha256": "0617621e0840b97c7b49a8b6f130b4912d466340e095fa25f027c70d90b7a9fa"
+    },
+    "tools/build-site-deployment-manifest.js": {
+      "bytes": 8214,
+      "sha256": "056b16d501699e1cca51aea2aa59f3972e0cf7bf97e47256c88ee8935c07e4fb"
+    },
+    "tools/deploy-site.ps1": {
+      "bytes": 73596,
+      "sha256": "d2a6863b155a7ebf9deea88c3794650afbad0cf7bf45388d282e4e055fcf60cd"
+    },
+    "tests/deployment-custody.test.js": {
+      "bytes": 15115,
+      "sha256": "2fafb4fe97010fd0af56ee71af5756187eb695f5667eb615ce85124d9e799156"
+    },
+    "tests/MiniModel.DeploymentCustody_test.ps1": {
+      "bytes": 24779,
+      "sha256": "7456e30d51e4359d351345bd4514abd91aac7ed7c23e2b61c11e4cc63c42d2a0"
+    }
+  },
+  "current_worktree_files": {
+    ".gitattributes": {
+      "bytes": 1496,
+      "sha256": "2210d3fdeb4f032479f2547ce976289b0787b3957679c2160a4361ccb203e094"
+    },
+    ".uai/short-term-memory.uai": {
+      "bytes": 9462,
+      "sha256": "46ad218495a8af11190fdc153fab1884dc23841867a35059e53dad34d74f7624"
+    },
+    ".uai/taboo.uai": {
+      "bytes": 14336,
+      "sha256": "757fde0cce45ea0bd115e27f6b6d179d5e90604e0f33125f0edda99609852645"
+    },
+    "deploy/README.md": {
+      "bytes": 5321,
+      "sha256": "386ba6b2f054ca2438edd5ea17fef978c04c9ff5fd1462e279100387a04328f2"
+    },
+    "tools/build-site-deployment-manifest.js": {
+      "bytes": 15664,
+      "sha256": "5ea76bd8797903c542bedc4bbd2f595e6ac770083e9cb61ae1dea2b730a2e4bb"
+    },
+    "tools/deploy-site.ps1": {
+      "bytes": 79289,
+      "sha256": "137e109f4fe1e1d994033a17b3d9af1a6cc1274e1dc843cd91fc3e1f01cd26b9"
+    },
+    "tests/build-site-deployment-manifest_test.js": {
+      "bytes": 8348,
+      "sha256": "35c7745df13d5f6590d66f0f0e8a5dc2b68a44b11acf95e762be6840b93d0d7a"
+    },
+    "tests/deployment-custody.test.js": {
+      "bytes": 16420,
+      "sha256": "b5fbfa8b54e8373d401b05a5488789b52d9298d123041cc0d405f1149c22b4c9"
+    },
+    "tests/MiniModel.DeploymentCustody_test.ps1": {
+      "bytes": 27436,
+      "sha256": "e99f66713220ffc7b52036f5eebfb7f8e9a318176d681833b0d2a659fc7a478b"
+    }
+  },
+  "public_source_files": [
+    {
+      "path": ".htaccess",
+      "bytes": 518,
+      "sha256": "32f2da8f9a1aaf52091d4979bc301cb2abe9adbbe496d73c19f8abbb8f132495"
+    },
+    {
+      "path": ".well-known/site-release-history.json",
+      "bytes": 3291,
+      "sha256": "3bd9889cad1c12f015df9e4187cce55e3e109c742a09324c7662fee49cadaccd"
+    },
+    {
+      "path": ".well-known/uaix-talisman.txt",
+      "bytes": 1248,
+      "sha256": "de6535a19dfd593036cd625e62e49aae71f3a03c146980e15e5e06f0bcc8f75d"
+    },
+    {
+      "path": "catalog.js",
+      "bytes": 44937,
+      "sha256": "4a1df0995f040c806ccb5a8b956859e815b03ed56be6c2509e71593211b557d0"
+    },
+    {
+      "path": "catalog/.htaccess",
+      "bytes": 456,
+      "sha256": "770e8f53cbd732e0e3184ad035995af506a7bb2532c7c4af6c8b9f5e71c62e8b"
+    },
+    {
+      "path": "catalog/compositions.v1.json",
+      "bytes": 593,
+      "sha256": "d6396eb9d608e5d0b99cc0466accfb4580ae3a3a922884154d765ccf4550de0b"
+    },
+    {
+      "path": "catalog/peer-announcements.v1.json",
+      "bytes": 292,
+      "sha256": "b45ff62016fecdeceb44a9906fe2f1efd364fc0c52324a49500841884d4d3773"
+    },
+    {
+      "path": "docs/acquisition-contract.md",
+      "bytes": 1481,
+      "sha256": "7b33f69515195aa193f8d3ed943796b3331226b9df03167bd4e7e5fdfb0d11f5"
+    },
+    {
+      "path": "docs/catalog-boundary.md",
+      "bytes": 9152,
+      "sha256": "1fd82aa93c6b7e44e43374440d9319dcd7bb0cbb1edcfd4d1fa89b8ffabcc163"
+    },
+    {
+      "path": "docs/memory-endpoints.md",
+      "bytes": 1162,
+      "sha256": "be7e8de15cc18ff49f74414f7d9e0b4d64f126d540055c6a10650c7b59bfdc3d"
+    },
+    {
+      "path": "docs/peer-companion.md",
+      "bytes": 1792,
+      "sha256": "9cb32e44da8fc065f6eda396848cfd683ffa6b39de10e4fe0bb65ce448907696"
+    },
+    {
+      "path": "docs/slm2-composition.md",
+      "bytes": 1241,
+      "sha256": "175e8d0636228c861bd7bf3a14531f8c0ff60014cc7088474a5e64bffa2355cf"
+    },
+    {
+      "path": "index.html",
+      "bytes": 8416,
+      "sha256": "7c7019a6b03646d287f1e33da43a187d192af3ffdbb26113fa1adc2415c1f3b0"
+    },
+    {
+      "path": "LICENSE.txt",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "llms-full.txt",
+      "bytes": 2680,
+      "sha256": "8476b3bd8af0303999e47ba7d84433863af072401e891f194efd8a632fd6f56b"
+    },
+    {
+      "path": "llms.txt",
+      "bytes": 1087,
+      "sha256": "9ccf62be5fe54899d8c22528cf6bb3abc57413346144c1ccb169d922ed333353"
+    },
+    {
+      "path": "ROADMAP.md",
+      "bytes": 2400,
+      "sha256": "f41c07feb8cdffd996ca5515e977e504ab7befcfdbab9e67d8d1dd27ff71e013"
+    },
+    {
+      "path": "robots.txt",
+      "bytes": 154,
+      "sha256": "be2018ab31e0fe270d66ce1770ff12dad7529db405a535ab9569449447e72589"
+    },
+    {
+      "path": "sitemap.xml",
+      "bytes": 1204,
+      "sha256": "400abbcd7a4dee68ba90ba237db7e987014e44f441fd566540714515955c13e9"
+    },
+    {
+      "path": "styles.css",
+      "bytes": 12888,
+      "sha256": "3d262ee6f3a565a15f2f7708a50dc0977ec17b013a9d2f42bf70ba38b3a5f369"
+    },
+    {
+      "path": "updates/index.html",
+      "bytes": 4150,
+      "sha256": "3e4bf4b73228f5ac93f02158452e637936b5ace053e977a9213256ab3cf89c55"
+    },
+    {
+      "path": ".well-known/site-release.json",
+      "bytes": 291,
+      "sha256": "aee4a7183d77e2dd286da8078920aaae5a06f59bb1d488e2d40087ee74fe7eba"
+    }
+  ],
+  "public_git_content_changed": false,
+  "public_worktree_source_bytes": 110790,
+  "materialized_publication_bytes": 110336,
+  "newline_correction": {
+    "initial_crlf_only_differences": 20,
+    "verified_current_git_equal_files": 22,
+    "method": "Normalize only already-proved CRLF equivalents at their existing canonical paths and add explicit LF attributes."
+  },
+  "removed_behavior": [
+    "arbitrary manifest output path and directory/file writer",
+    "broad public prefix inclusion",
+    "unbounded 128 MiB Git reader without deadline",
+    "bare PATH-selected Node invocations and inherited NODE_* startup settings",
+    "arbitrary --verify path"
+  ],
+  "current_contract": {
+    "manifest_output": "stdout-only",
+    "verify_input": "canonical deploy/site-deployment-manifest.v1.json only",
+    "public_files": 22,
+    "max_file_bytes": 16777216,
+    "max_payload_bytes": 67108864,
+    "git_deadline_ms": 30000,
+    "git_tree_bytes": 4194304,
+    "node_deadline_ms": 120000,
+    "node_gate_stdout_bytes": 4096,
+    "node_manifest_stdout_bytes": 2097152,
+    "node_stderr_bytes": 65536,
+    "node_sha256": "63c259c81e5d472b5f11c8d506070130cb04a1ecf84b80377a34ed6ec9048088",
+    "node_bytes": 91380224,
+    "source_gate_sha256": "f99083edfe7eae96279acafcb624eb88e1a26e43d5622d498711fe280691647d",
+    "source_gate_bytes": 141430,
+    "manifest_tool": {
+      "bytes": 15664,
+      "sha256": "5ea76bd8797903c542bedc4bbd2f595e6ac770083e9cb61ae1dea2b730a2e4bb"
+    },
+    "file_leases": "Node and selected tool stay open with FileShare.Read through process exit",
+    "startup_settings": "Remove every NODE_* key only from each child environment; parent environment unchanged",
+    "termination": "Request Windows taskkill for the owned process tree, then verify the owned root process handle has exited even if native stderr raced with termination."
+  },
+  "verification": {
+    "command": "node --test tests/build-site-deployment-manifest_test.js tests/catalog.test.js tests/catalog-contract.test.js tests/deployment-custody.test.js",
+    "node": {
+      "total": 64,
+      "passed": 64,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    "pester": {
+      "total": 27,
+      "passed": 27,
+      "failed": 0,
+      "actual_timeout_terminations": 3
+    },
+    "coverage": "New generator/bootstrap line and branch coverage was not collected. The existing custody-module instrumentation remains 238/545 commands; it does not quantify new bootstrap coverage.",
+    "actual_entrypoints": [
+      "generator emits current exact metadata to stdout after canonical gate",
+      "generator rejects removed output argument with zero stdout/no file",
+      "generator refuses stale content commit without rewriting manifest",
+      "full 22-file JS output is admitted and materialized identically by the canonical PowerShell module in memory",
+      "actual publisher with hostile NODE_OPTIONS/NODE_PATH passes both verified child boundaries then rejects stale manifest before public admission",
+      "actual Node timeout verifies terminal root handle and restores PowerShell error preference"
+    ],
+    "memory_only_adversarial_cases": [
+      "ignored/untracked public extras",
+      "unknown public paths, aliases, links and submodules",
+      "invalid/truncated/oversized Git tree",
+      "same-length Git blob corruption and empty member identities",
+      "invalid arguments including a trailing newline on an otherwise valid commit"
+    ],
+    "owned_output": "Pester output beneath canonical artifacts/tests physically removed; parent empty."
+  },
+  "experimental_findings": [
+    {
+      "observation": "The old command could create a manifest at any output path and accepted any file below broad public directory prefixes.",
+      "lesson": "Use stdout-only metadata plus a reviewed exact public set and current-file equality; do not rebuild a source stage."
+    },
+    {
+      "observation": "Twenty Windows public files differed from Git only by CRLF; all source identities matched after line-ending normalization.",
+      "lesson": "Make canonical checkout bytes stable with explicit attributes rather than hiding differences in copied packages."
+    },
+    {
+      "observation": "The initial direct CLI probe lacked service-account safe-directory declarations, so the unchanged canonical source gate rejected Git identity.",
+      "lesson": "Use the established per-process declarations for the seven canonical repositories; no global Git setting or source gate was weakened."
+    },
+    {
+      "observation": "One full run had 63/64 Node passes because native taskkill stderr replaced the expected timeout even though both observed PIDs 47012 and 57808 were subsequently absent.",
+      "lesson": "Native termination text can race with process exit. Preserve the timeout failure, inspect the owned process handle afterward and still reject a live child. The corrected full suite passed, including three actual timeout closures."
+    },
+    {
+      "observation": "Both JavaScript and PowerShell end anchors can match before a final newline.",
+      "lesson": "Exact commit parameters also require exactly 40 characters; trailing-newline arguments are now rejected before process execution."
+    }
+  ],
+  "publication_state": {
+    "prepared_version": "1.1.2",
+    "manifest": {
+      "bytes": 6868,
+      "sha256": "84b3a3fcfee576a72c9f0fe21e8aeefa22932cec34bb1ac532ce8597516e1364"
+    },
+    "bound_source_commit": "7e0a6eb6bf292ff69e3030adf1d229c811606ce9",
+    "transport": "unbound",
+    "catalog": "unchanged, empty and expired",
+    "production_receipts_created": 0,
+    "public_requests_from_actual_publisher": 0,
+    "ftps_executed": false
+  },
+  "limits": [
+    "Local metadata and simulated transport are not publication, remote atomicity or outside-network seed evidence.",
+    "Timeout tests verified actual Node root termination; a resistant descendant process was not reproduced.",
+    "Fresh release identity/authority/manifest preparation, model qualification and hosting remain open.",
+    "No new model acquisition, training, model deletion or historical-file deletion.",
+    "Existing policy-blocked cleanup groups are unchanged."
+  ],
+  "storage": {
+    "measured_storage_recovery_bytes": null
+  },
+  "lesson_pointer": "../TinyRustLM.com/wiki/runtime-mirust/reports/ecosystem-experiment-lessons-2026-09-12.md#c24"
+}

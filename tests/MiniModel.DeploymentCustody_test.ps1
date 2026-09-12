@@ -341,24 +341,67 @@ Describe 'Publication input through the actual file publisher' {
     }
 }
 
-# A command mock replaces the Node process only inside this test scope; no fake executable is written.
-function node { param($Gate,$Clean,$Remote) throw 'Unmocked test command is forbidden.' }
+Describe 'Verified Node child boundary' {
+    BeforeEach {
+        $script:NodeExecutablePath='C:\Program Files\nodejs\node.exe'
+    }
+    It 'rejects arbitrary tools, arguments and wrong runtime identities before execution' {
+        { Invoke-VerifiedNode -Tool manifest -Arguments @('HEAD') } | Should Throw 'Invalid manifest arguments'
+        { Invoke-VerifiedNode -Tool manifest -Arguments @((('a'*40)+"`n")) } | Should Throw 'Invalid manifest arguments'
+        { Invoke-VerifiedNode -Tool manifest -Arguments @(('a'*40),'unexpected.json') } | Should Throw 'Invalid manifest arguments'
+        { Invoke-VerifiedNode -Tool source-authority -Arguments @('--require-clean','--require-clean') } | Should Throw 'Invalid source-authority arguments'
+        { Invoke-VerifiedNode -Tool source-authority -Arguments @('--eval') } | Should Throw 'Invalid source-authority arguments'
+        $script:NodeExecutablePath='node.exe'
+        { Invoke-VerifiedNode -Tool source-authority } | Should Throw 'must be absolute'
+        $script:NodeExecutablePath=Join-Path $PSHOME 'powershell.exe'
+        { Invoke-VerifiedNode -Tool source-authority } | Should Throw 'file identity drifted'
+    }
+    It 'terminates its actual Node child when the deadline expires' {
+        1..3 | ForEach-Object {
+            { Invoke-VerifiedNode -Tool source-authority -TimeoutMilliseconds 1 } | Should Throw 'exceeded its deadline'
+        }
+    }
+    It 'runs the real manifest tool with hostile Node startup settings excluded from its child only' {
+        $saved=@{}
+        $coveragePath=Join-Path $TestDrive 'must-not-create-node-coverage'
+        $settings=@{NODE_OPTIONS='--require definitely-not-loaded';NODE_PATH='definitely-not-searched';NODE_V8_COVERAGE=$coveragePath;NODE_TLS_REJECT_UNAUTHORIZED='0'}
+        foreach ($name in $settings.Keys) {
+            $saved[$name]=[Environment]::GetEnvironmentVariable($name,'Process')
+            [Environment]::SetEnvironmentVariable($name,$settings[$name],'Process')
+        }
+        try {
+            $head=& git -c safe.directory=E:/Source/Rust/MiniModel.org -C $repositoryRoot rev-parse HEAD
+            $result=Invoke-VerifiedNode -Tool manifest -Arguments @($head)
+            $result.ExitCode | Should Be 0
+            $result.Stderr | Should Be ''
+            ($result.Stdout | ConvertFrom-Json).files.Count | Should Be 22
+            foreach ($name in $settings.Keys) { [Environment]::GetEnvironmentVariable($name,'Process') | Should Be $settings[$name] }
+            Test-Path -LiteralPath $coveragePath | Should Be $false
+        }
+        finally {
+            foreach ($name in $settings.Keys) { [Environment]::SetEnvironmentVariable($name,$saved[$name],'Process') }
+        }
+    }
+}
+
+# Gate responses are mocked at the verified process boundary; no executable or source copy is written.
 Describe 'Publisher source-authority gate admission' {
     BeforeEach {
         $script:Publish=$true
         $script:gateVerdict='{"verdict":"pass","canonicalLayoutAvailable":true,"localScanPerformed":true,"coverageClass":"registered-governed-roots-only"}'
         $script:gateArguments=@()
-        Mock node {
-            param($Gate,$Clean,$Remote)
-            $script:gateArguments=@($Gate,$Clean,$Remote)
-            return $script:gateVerdict
+        Mock Invoke-VerifiedNode {
+            param($Tool,$Arguments)
+            $script:gateTool=$Tool
+            $script:gateArguments=@($Arguments)
+            return [pscustomobject]@{ExitCode=0;Stdout=($script:gateVerdict+"`n");Stderr=''}
         }
     }
     It 'requires the fixed gate and both publication flags' {
         Assert-EcosystemSingleSourceAuthority
-        $script:gateArguments[0] | Should Be 'E:\Source\Rust\TinyRustLM.com\tinyrustlm\tools\verify-single-source-authority.js'
-        $script:gateArguments[1] | Should Be '--require-clean'
-        $script:gateArguments[2] | Should Be '--require-remote-exact'
+        $script:gateTool | Should Be 'source-authority'
+        $script:gateArguments[0] | Should Be '--require-clean'
+        $script:gateArguments[1] | Should Be '--require-remote-exact'
     }
     It 'rejects a failed, malformed or incomplete gate verdict' {
         foreach ($verdict in @('invalid-json','{}','{"verdict":"fail","canonicalLayoutAvailable":true,"localScanPerformed":true,"coverageClass":"registered-governed-roots-only"}','{"verdict":"pass","canonicalLayoutAvailable":true,"localScanPerformed":false,"coverageClass":"registered-governed-roots-only"}')) {

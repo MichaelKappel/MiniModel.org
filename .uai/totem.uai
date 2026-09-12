@@ -7,6 +7,8 @@ authority_file_mutability: read_only_without_exact_human_artifact_and_operation_
 site_authority:
   - MiniModel.org is the bounded metadata catalog and direct-P2P discovery surface for qualified SLM2 compositions.
   - It does not proxy model bytes. Exact qualified bytes move directly between consenting peers or are converted explicitly by an installed local companion.
+  - The owner authorizes MiniModel.org to provide the initial verified current SLM2 seeds from D:\LLMs\TinyRustLM. TinyRustLM restores a usable cached model or automatically acquires a small qualified starter; Hugging Face, local files, conversion, and manual peer/IP settings belong in Advanced.
+  - Hosting authorization and source implementation do not prove a working qualified model, deployed seed service, or live public transfer.
   - Bind source, license, composition, profile, member, piece, qualification, runtime, and expiring peer identities cryptographically.
   - Keep catalog metadata, peer transfer, local execution, browser activation, and publication as separate claims.
 

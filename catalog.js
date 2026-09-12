@@ -16,6 +16,7 @@
   const PEER_SCHEMA = "minimodel.slm2_peer_announcements.v1";
   const BROWSER_ADMISSION_SCHEMA = "tinyrustlm.browser-composition-admission/1";
   const QUALIFICATION_RECEIPT_SCHEMA = "tinyrustlm.qualification-receipt/1";
+  const PEER_PROOF_SCHEMA = "tinyrustlm.peer-announcement-proof/1";
   const DIRECT_COMPOSITION_PROTOCOL_PROFILE = "tinyrustlm.direct-composition-http.v1";
   const MEMBER_NAMES = Object.freeze([
     "model.slm2",
@@ -302,7 +303,7 @@
     return { host, portText };
   }
 
-  function normalizeDirectPeerBaseUrl(value) {
+  function normalizeDirectPeerBaseUrl(value, options = {}) {
     const raw = requireString(value, "peer announcement.peer_base_url", 512);
     if (raw !== value || /[\u0000-\u001f\u007f]/.test(raw)) {
       throw new Error("peer announcement.peer_base_url must be a bounded printable string");
@@ -327,20 +328,22 @@
     const rawHost = authority.host.toLowerCase();
     const parsedHost = parsed.hostname.toLowerCase();
     const bareHost = parsedHost.replace(/^\[|\]$/g, "");
-    const loopback = bareHost === "localhost" || bareHost === "127.0.0.1" || bareHost === "::1";
-    if (rawProtocol === "http:" && (!loopback || !authority.portText)) {
-      throw new Error("peer announcement.peer_base_url HTTP requires an exact loopback host and bounded port");
+    // Only the operator-owned HTTPS bootstrap seed is exempt from the IP rule.
+    const bootstrapSeed = rawHost === "minimodel.org"
+      && parsed.origin === "https://minimodel.org";
+    const exactLoopback = (rawHost === "127.0.0.1" && parsedHost === "127.0.0.1")
+      || (rawHost === "[::1]" && parsedHost === "[::1]");
+    if (rawProtocol !== "https:" && !exactLoopback) {
+      throw new Error("peer announcement.peer_base_url HTTP requires an exact loopback IP literal");
     }
-    if (loopback) {
-      const exactLoopback = bareHost === "::1" ? "[::1]" : bareHost;
-      if (rawHost !== exactLoopback) {
-        throw new Error("peer announcement.peer_base_url loopback host must use its exact canonical spelling");
-      }
-    } else if (parsedHost.startsWith("[")) {
+    if (!bootstrapSeed && isDeniedDirectPeerHost(bareHost)) {
+      throw new Error("project and service hosts cannot serve direct peer model bytes");
+    }
+    if (!bootstrapSeed && !exactLoopback && parsedHost.startsWith("[")) {
       if (!isPublicIpv6(ipv6Words(parsedHost))) {
         throw new Error("peer announcement.peer_base_url IPv6 address must be public and non-reserved");
       }
-    } else {
+    } else if (!bootstrapSeed && !exactLoopback) {
       const ipv4 = strictIpv4Octets(parsedHost);
       if (ipv4) {
         if (rawHost !== parsedHost) {
@@ -350,17 +353,21 @@
           throw new Error("peer announcement.peer_base_url IPv4 address must be public and non-reserved");
         }
       } else {
-        if (rawHost !== parsedHost) {
-          throw new Error("peer announcement.peer_base_url DNS host must not use an encoded or normalized alias");
-        }
         requirePublicDnsName(parsedHost);
+        throw new Error("browser peer routes cannot pin DNS resolution and require a public or loopback IP literal");
       }
     }
-    if (isDeniedDirectPeerHost(bareHost)) {
-      throw new Error("project and service hosts cannot serve direct peer model bytes");
-    }
-    if (rawProtocol === "http:") {
-      return `http://${parsedHost}:${authority.portText}/`;
+    const applicationOrigin = options.applicationOrigin === undefined
+      ? globalObject.location?.origin : options.applicationOrigin;
+    if (applicationOrigin !== undefined && applicationOrigin !== null) {
+      let application;
+      try { application = new URL(applicationOrigin); } catch (_error) {
+        throw new Error("application origin was invalid");
+      }
+      if (!/^https?:$/u.test(application.protocol) || application.origin === "null"
+          || (!bootstrapSeed && application.origin === parsed.origin)) {
+        throw new Error("the application origin cannot serve direct peer bytes");
+      }
     }
     return `${parsed.origin}/`;
   }
@@ -381,10 +388,10 @@
   }
 
   function requireProjectBoundary(value, includeInference, label) {
-    if (value.project_server_serves_model_bytes !== false
+    if (typeof value.project_server_serves_model_bytes !== "boolean"
         || value.project_server_proxies_model_bytes !== false
         || (includeInference && value.project_server_runs_inference !== false)) {
-      throw new Error(`${label} must keep model bytes and inference off project servers`);
+      throw new Error(`${label} must declare seed hosting and keep proxying and inference off project servers`);
     }
   }
 
@@ -627,7 +634,7 @@
     return value;
   }
 
-  function validatePeerAnnouncement(value, catalogByComposition, catalogKeys, now, feedWindow) {
+  function validatePeerAnnouncement(value, catalogByComposition, catalogKeys, now, feedWindow, options) {
     requireExactKeys(value, [
       "announcement_id",
       "composition_id",
@@ -661,7 +668,7 @@
       value.outside_proof_receipt_sha256,
       "peer announcement.outside_proof_receipt_sha256",
     );
-    const peerUrl = normalizeDirectPeerBaseUrl(value.peer_base_url);
+    const peerUrl = normalizeDirectPeerBaseUrl(value.peer_base_url, options);
     const issued = requireUtc(value.issued_at_utc, "peer announcement.issued_at_utc");
     const expires = requireUtc(value.expires_utc, "peer announcement.expires_utc");
     if (Date.parse(issued) > now + MAX_FUTURE_SKEW_MILLISECONDS
@@ -747,6 +754,7 @@
         catalogKeys,
         now,
         feedWindow,
+        options,
       );
       if (ids.has(validated.id)) {
         throw new Error("peer feed contains a duplicate announcement");
@@ -770,6 +778,65 @@
     if (announcements.length !== 0) {
       throw new Error("peer-backed views require asynchronous Ed25519 verification");
     }
+    return projectCatalog(catalog, announcements);
+  }
+
+  function peerAnnouncementSigningBytes(announcement) {
+    return new TextEncoder().encode(`${JSON.stringify({
+      schema: PEER_PROOF_SCHEMA,
+      announcement_id: announcement.announcement_id,
+      composition_id: announcement.composition_id,
+      piece_set_sha256: announcement.piece_set_sha256,
+      peer_base_url: announcement.peer_base_url,
+      protocol_profile: announcement.protocol_profile,
+      consent_status: announcement.consent_status,
+      consent_receipt_sha256: announcement.consent_receipt_sha256,
+      outside_proof_status: announcement.outside_proof_status,
+      outside_proof_receipt_sha256: announcement.outside_proof_receipt_sha256,
+      issued_at_utc: announcement.issued_at_utc,
+      expires_utc: announcement.expires_utc,
+      verification_key_id: announcement.verification_key_id,
+    })}\n`);
+  }
+
+  function decodeBase64Url(value, byteLength, label) {
+    requireBase64Url(value, byteLength, label);
+    const padding = "=".repeat((4 - (value.length % 4)) % 4);
+    const binary = globalObject.atob(value.replaceAll("-", "+").replaceAll("_", "/") + padding);
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  }
+
+  async function buildVerifiedCatalogView(catalogValue, peerFeedValue, options = {}) {
+    // Own the validated inputs across crypto awaits; caller mutations cannot change the view.
+    const catalog = parseCanonicalJsonText(`${JSON.stringify(catalogValue)}\n`);
+    const peerFeed = parseCanonicalJsonText(`${JSON.stringify(peerFeedValue)}\n`);
+    const announcements = validatePeerFeed(peerFeed, catalog, options);
+    if (announcements.length) {
+      const subtle = (options.crypto || globalObject.crypto)?.subtle;
+      if (!subtle || typeof subtle.importKey !== "function" || typeof subtle.verify !== "function") {
+        throw new Error("Ed25519 verification is unavailable");
+      }
+      for (const peer of announcements) {
+        const announcement = peerFeed.announcements.find((item) => item.announcement_id === peer.id);
+        const verifier = catalog.peer_verification_keys.find((item) => item.key_id === peer.verificationKeyId);
+        const publicKey = decodeBase64Url(verifier.public_key_base64url, 32, "peer public key");
+        const signature = decodeBase64Url(announcement.signature, 64, "peer signature");
+        // The browser signs the normalized root origin, including its trailing slash.
+        const bytes = peerAnnouncementSigningBytes({ ...announcement, peer_base_url: peer.peerUrl });
+        let valid;
+        try {
+          const key = await subtle.importKey("raw", publicKey, { name: "Ed25519" }, false, ["verify"]);
+          valid = await subtle.verify({ name: "Ed25519" }, key, signature, bytes);
+        } catch (_error) {
+          throw new Error("peer announcement signature verification failed");
+        }
+        if (valid !== true) throw new Error("peer announcement signature is invalid");
+      }
+    }
+    return projectCatalog(catalog, announcements);
+  }
+
+  function projectCatalog(catalog, announcements) {
     const peersByComposition = new Map();
     announcements.forEach((announcement) => {
       const list = peersByComposition.get(announcement.compositionId) || [];
@@ -791,11 +858,18 @@
           bytes: entry.browser_admission.bytes,
           sha256: entry.browser_admission.sha256,
         }),
+        qualification: Object.freeze({
+          schema: QUALIFICATION_RECEIPT_SCHEMA,
+          receiptId: entry.qualification.receipt_id,
+          receiptRoute: entry.qualification.receipt_route,
+          receiptBytes: entry.qualification.receipt_bytes,
+          receiptSha256: entry.qualification.receipt_sha256,
+        }),
         quantizationProfile: entry.profiles.quantization,
         licenseRoute: entry.license.route,
         availability: peers.length ? "peer" : "local-conversion",
         availabilityLabel: peers.length
-          ? `${peers.length} current direct ${peers.length === 1 ? "peer" : "peers"}`
+          ? `${peers.length} signed peer ${peers.length === 1 ? "announcement" : "announcements"}; reachability not proven`
           : "Pinned local conversion",
         peerCount: peers.length,
       };
@@ -921,7 +995,7 @@
     return parseCanonicalJsonText(text);
   }
 
-  async function loadCatalog(documentObject, fetchImplementation = globalObject.fetch) {
+  async function loadCatalog(documentObject, fetchImplementation = globalObject.fetch, options = {}) {
     if (typeof fetchImplementation !== "function") {
       throw new Error("catalog fetch is unavailable");
     }
@@ -930,7 +1004,7 @@
       fetchJson(new URL("/catalog/compositions.v1.json", base), fetchImplementation),
       fetchJson(new URL("/catalog/peer-announcements.v1.json", base), fetchImplementation),
     ]);
-    const views = buildCatalogView(catalog, peerFeed);
+    const views = await buildVerifiedCatalogView(catalog, peerFeed, options);
     renderCatalog(documentObject, views);
 
     const total = documentObject.getElementById("modelCatalogTotal");
@@ -954,6 +1028,7 @@
     PEER_SCHEMA,
     BROWSER_ADMISSION_SCHEMA,
     QUALIFICATION_RECEIPT_SCHEMA,
+    PEER_PROOF_SCHEMA,
     DIRECT_COMPOSITION_PROTOCOL_PROFILE,
     MEMBER_NAMES,
     MAX_METADATA_BYTES,
@@ -963,6 +1038,7 @@
     validateCatalog,
     validatePeerFeed,
     buildCatalogView,
+    buildVerifiedCatalogView,
     renderCatalog,
     loadCatalog,
   });

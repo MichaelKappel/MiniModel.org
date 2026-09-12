@@ -120,7 +120,7 @@ function validAnnouncement() {
     announcement_id: "peer/qwen3/lane-1",
     composition_id: sha("c"),
     piece_set_sha256: sha("e"),
-    peer_base_url: "https://peer.direct-model.net/",
+    peer_base_url: "https://8.8.8.8/",
     protocol_profile: catalogApi.DIRECT_COMPOSITION_PROTOCOL_PROFILE,
     consent_status: "explicit",
     consent_receipt_sha256: sha("6"),
@@ -141,7 +141,7 @@ function validateCatalogFixture(value) {
   return catalogApi.validateCatalog(value, { now: TEST_NOW });
 }
 
-test("publishes a truthful empty current SLM2 catalog and peer feed", () => {
+test("keeps canonical empty source metadata valid only within its declared window", () => {
   const catalogText = read("catalog/compositions.v1.json");
   const peerText = read("catalog/peer-announcements.v1.json");
   const catalog = catalogApi.parseCanonicalJsonText(catalogText);
@@ -175,15 +175,17 @@ test("publishes a truthful empty current SLM2 catalog and peer feed", () => {
     "project_server_proxies_model_bytes",
     "announcements",
   ]);
-  assert.equal(catalogApi.validateCatalog(catalog), catalog);
-  assert.deepEqual(catalogApi.validatePeerFeed(peers, catalog), []);
-  assert.deepEqual(catalogApi.buildCatalogView(catalog, peers), []);
-  assert.equal(catalog.revision, 2);
-  assert.equal(peers.revision, 2);
+  const options = { now: new Date(catalog.generated_at_utc) };
+  assert.equal(catalogApi.validateCatalog(catalog, options), catalog);
+  assert.deepEqual(catalogApi.validatePeerFeed(peers, catalog, options), []);
+  assert.deepEqual(catalogApi.buildCatalogView(catalog, peers, options), []);
+  assert.ok(catalog.revision >= 2);
+  assert.equal(peers.revision, catalog.revision);
   assert.equal(peers.generated_at_utc, catalog.generated_at_utc);
   assert.equal(peers.valid_until_utc, catalog.valid_until_utc);
-  assert.ok(Date.parse(catalog.valid_until_utc) > Date.now());
-  assert.ok(Date.parse(peers.valid_until_utc) > Date.now());
+  assert.throws(() => catalogApi.validatePeerFeed(peers, catalog, {
+    now: new Date(catalog.valid_until_utc),
+  }), /stale/);
   assert.equal(
     Date.parse(catalog.valid_until_utc) - Date.parse(catalog.generated_at_utc),
     24 * 60 * 60 * 1000,
@@ -274,7 +276,7 @@ test("requires asynchronous signature verification before projecting a direct pe
   const catalog = catalogWithPeer();
   const peers = validPeerFeed([validAnnouncement()]);
   const [validated] = catalogApi.validatePeerFeed(peers, catalog, { now: TEST_NOW });
-  assert.equal(validated.peerUrl, "https://peer.direct-model.net/");
+  assert.equal(validated.peerUrl, "https://8.8.8.8/");
   assert.throws(
     () => catalogApi.buildCatalogView(catalog, peers, { now: TEST_NOW }),
     /asynchronous Ed25519 verification/,
@@ -310,9 +312,9 @@ test("admits only the exact browser-consumable direct composition protocol", () 
 test("accepts only root HTTPS peer origins and explicit loopback HTTP", () => {
   const catalog = catalogWithPeer();
   const accepted = [
-    ["https://peer.direct-model.net", "https://peer.direct-model.net/"],
-    ["https://peer.direct-model.net:8443/", "https://peer.direct-model.net:8443/"],
-    ["http://localhost:8123/", "http://localhost:8123/"],
+    ["https://8.8.8.8", "https://8.8.8.8/"],
+    ["https://8.8.8.8:8443/", "https://8.8.8.8:8443/"],
+    ["http://127.0.0.1:80/", "http://127.0.0.1/"],
     ["http://127.0.0.1:8123/", "http://127.0.0.1:8123/"],
     ["http://[::1]:8123/", "http://[::1]:8123/"],
   ];
@@ -366,7 +368,7 @@ test("rejects public HTTP and non-explicit loopback HTTP", () => {
       () => catalogApi.validatePeerFeed(validPeerFeed([announcement]), catalog, {
         now: TEST_NOW,
       }),
-      /HTTP requires an exact loopback host and bounded port|canonical spelling|port must be an integer/,
+      /HTTP requires an exact loopback IP literal|canonical spelling|port must be an integer/,
       peerBaseUrl,
     );
   }
@@ -395,15 +397,17 @@ test("rejects local, reserved, and project-service HTTPS authorities", () => {
   }
 });
 
-test("rejects unknown catalog fields and project-server model behavior", () => {
+test("allows declared seed hosting but rejects unknown fields and inference", () => {
   assert.throws(
     () => validateCatalogFixture({ ...validCatalog(), legacy_alias: true }),
     /unknown or missing/,
   );
-  assert.throws(
-    () => validateCatalogFixture({ ...validCatalog(), project_server_serves_model_bytes: true }),
-    /off project servers/,
-  );
+  assert.doesNotThrow(() => validateCatalogFixture({
+    ...validCatalog(), project_server_serves_model_bytes: true,
+  }));
+  assert.throws(() => validateCatalogFixture({
+    ...validCatalog(), project_server_runs_inference: true,
+  }), /off project servers/);
 });
 
 test("rejects incomplete or drifted six-member composition closure", () => {
@@ -494,7 +498,7 @@ test("rejects expired and project-hosted peer announcements", () => {
   );
 
   const hosted = validAnnouncement();
-  hosted.peer_base_url = "https://minimodel.org/";
+  hosted.peer_base_url = "https://tinyrustlm.com/";
   assert.throws(
     () => catalogApi.validatePeerFeed(validPeerFeed([hosted]), catalog, {
       now: TEST_NOW,

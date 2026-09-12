@@ -35,7 +35,7 @@ ecosystem_source_root_prohibitions:
   - Any committed change to a declared public artifact invalidates deployed-current status until a strictly newer release is published from one clean canonical commit, every declared readable file passes byte-for-byte HTTPS readback, every retired route is absent, and the public release records agree. Never mask drift with stale metadata, a partial upload, an overwrite under an old version, or source-only success.
 
 prohibitions:
-  - Do not host or proxy model weights, run remote inference, perform server conversion, or imply MiniModel.org owns or certifies third-party model quality.
+  - MiniModel.org may host the owner's initial verified current SLM2 seeds from D:\LLMs\TinyRustLM. Do not proxy arbitrary model weights, run remote inference, perform server conversion, or imply MiniModel.org owns or certifies third-party model quality. The owner's 2026-09-12 direction supersedes the older blanket no-hosting prohibition.
   - Do not mix pieces from different identities, accept aliases to different bytes, or bypass local cryptographic verification before activation.
   - Do not infer live peers, outside-network reachability, qualification, browser activation, or publication from catalog rows, fixtures, local probes, source, or mocks.
   - Do not describe MemoryEndpoints.com as unauthorized, disconnected, or outside the ecosystem plan.
@@ -43,3 +43,13 @@ prohibitions:
   - Do not silently upload prompts, transcripts, local memory, meeting content, credentials, invitation URLs, tokens, model bytes, or raw hosted-memory payloads.
   - Do not let redundant prelaunch memory copies drift or contradict one another; keep every maintained copy current, secret-safe, and provenance-labeled.
   - Do not deploy from dirty, partially tested, ambiguous, stale, or undocumented source.
+
+# User directive 2026-09-12: TinyRustLM storage and replacement policy
+# TinyRustLM editable source has one home: E:\Source\Rust\TinyRustLM.com.
+# TinyRustLM models have one home: D:\LLMs\TinyRustLM; model payloads stay out of Git.
+# Never create extra source clones, worktrees, backups, dated copies, proof copies, or scattered tool/build folders.
+# Check in coherent source changes regularly; Git history replaces backup source directories.
+# Keep bounded temporary build/test output under the canonical repository and remove it when its operation ends.
+# When a verified new version replaces an old version, retain only the current copy and remove the superseded bytes.
+# Preserve useful unique work in the canonical source or model root before deleting duplicates; keep receipts, not junk copies.
+# This explicit user directive supersedes older instructions allowing TinyRustLM source/model sprawl or forbidding the designated D: model store.

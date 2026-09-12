@@ -3,10 +3,11 @@ updated_utc: 2026-08-28T00:00:00Z
 site: MiniModel.org
 status: prelaunch-catalog-authority
 current_authority:
-  - MiniModel.org publishes bounded discovery metadata and does not proxy model bytes.
+  - MiniModel.org publishes bounded discovery metadata and may directly seed verified models from D:\LLMs\TinyRustLM; it does not proxy model bytes or run inference.
   - Exact qualified SLM2 compositions move directly between consenting peers; otherwise an installed local companion performs explicit pinned local conversion.
   - Catalog identity, qualification, peer availability, transfer, browser activation, and publication are separate claims.
   - Read .uai/totem.uai, .uai/taboo.uai, and docs/catalog-boundary.md before changing behavior or claims.
+  - The human instruction on 2026-09-12 explicitly authorizes this server as the initial MiniModel.org seed and supersedes older metadata-only and no-project-hosting restrictions. This is permission and implementation intent, not a claim of live seeding.
 
 memory_endpoints_two_lane_authority:
   direct_agent_coordination: Agents working on all ecosystem sites use MemoryEndpoints.com directly for agent-to-agent long-term memory, meetings, handoffs, and coordination.

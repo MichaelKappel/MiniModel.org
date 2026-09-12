@@ -1,16 +1,21 @@
 # MiniModel.org Catalog Boundary
 
 MiniModel.org is the metadata catalog and discovery surface for qualified tiny
-model compositions. It is not a model host, inference service, conversion
-service, or model-quality authority.
+model compositions. The operator has authorized MiniModel.org to host the
+initial model seeds. It is not an inference service, conversion service, or
+model-quality authority.
 
 ## Model-Byte Boundary
 
 MiniModel.org supports direct P2P discovery, but it does not proxy model bytes.
-Exact qualified composition bytes move only between consenting peers. If an
+The HTTPS MiniModel.org server may be a consenting initial seed, serving its
+own verified files directly from `D:\LLMs\TinyRustLM`. If an
 exact qualified peer composition is unavailable, an installed local companion
 may acquire a pinned public source and perform an explicit local conversion.
-Project sites do not receive model bytes or prompts.
+TinyRustLM.com does not serve model bytes, and neither site receives prompts.
+`project_server_serves_model_bytes` declares actual seed hosting as a boolean;
+proxying and server inference must remain false. The empty catalog still
+declares false until the seed is actually deployed.
 
 The current TinyRustLM composition format is SLM2. Catalog metadata must bind
 the exact composition identity, member sizes and digests, source revision,
@@ -25,9 +30,54 @@ metadata route, its positive byte count of at most 64 KiB, and the lowercase
 prefixed SHA-256 digest of its canonical bytes. TinyRustLM fetches that metadata
 separately and must verify the declared length, digest, canonical serialization,
 and schema before browser activation. The admission is metadata, not a seventh
-SLM2 member. Serving it does not permit MiniModel.org to serve or proxy model
-bytes. The empty prelaunch catalog publishes the schema identity but no entry,
+SLM2 member. Its descriptor grants no byte-transfer authority; the operator's
+separate initial-seed authorization permits only the exact verified composition
+files. Arbitrary model-byte proxying remains outside this contract. The empty
+prelaunch catalog publishes the schema identity but no entry,
 descriptor, claim, or evidence.
+
+Both catalog and peer feed require a positive safe-integer `revision`, canonical
+second-precision `generated_at_utc` and `valid_until_utc`, and a current window
+of at most 24 hours. Future skew is limited to five minutes. The peer feed must
+be contained within the catalog window. A source update requires a strictly
+newer revision and generation time; consumers reject rollback and same-revision
+equivocation. Expiry is failure, not permission to reuse stale metadata.
+
+`qualification_receipt_schema` is exactly `tinyrustlm.qualification-receipt/1`.
+Each entry binds `receipt_id`, a safe same-origin `receipt_route`, `receipt_bytes`
+from 2 through 131072, and a lowercase prefixed `receipt_sha256`. These are
+descriptors, not receipt verification: the consumer must check the actual bytes.
+The catalog also requires unique `revoked_qualification_receipt_ids` and
+`supersessions`. Revoked receipts and compositions superseded at the catalog's
+generation time cannot be listed as current.
+
+Peer verifiers are bounded `Ed25519` keys with SHA-256 key IDs, canonical
+unpadded base64url 32-byte public keys, and UTC validity intervals. Each
+announcement binds its composition, piece set, consent and outside-proof
+receipt digests, protocol, normalized peer origin, issuance, expiry, and key ID
+in a detached 64-byte signature over the canonical newline-terminated
+`tinyrustlm.peer-announcement-proof/1` payload. The key must cover the entire
+announcement interval. Both the site and consumer verify signatures
+asynchronously before projecting a peer-backed view. A verified signature
+authenticates metadata; it does not establish reachability or prove the claims.
+
+## Empty Metadata Preparation
+
+`tools/build-empty-catalog.js` is limited to the empty prelaunch inventory.
+It never creates keys, signatures, entries, receipts, or proofs, and refuses to
+erase existing keys, entries, revocations, supersessions, or announcements.
+Generation requires explicit `--revision`, `--generated-at-utc`,
+`--valid-until-utc`, and `--document catalog` or `--document peerFeed` arguments.
+Output goes only to stdout for review; source changes and publication are
+separate operations. No expiry window is extended automatically.
+
+Run `node tools/build-empty-catalog.js --check` to check the exact local source
+bytes and wall-clock freshness. Run
+`node --test tests/catalog.test.js tests/catalog-contract.test.js tests/deployment-custody.test.js`
+for deterministic source-window, cross-contract, and custody tests. The
+cross-contract suite reads only the named canonical TinyRustLM browser module
+from its sibling repository; it does not copy source or contact peers. Synthetic
+test metadata and ephemeral test signatures have no qualification authority.
 
 ## Catalog Claims
 
@@ -43,9 +93,9 @@ claims remain independent:
 - browser activation; and
 - public site deployment and readback.
 
-An empty or expired announcement set is valid metadata but does not make a
-model available. Loopback, LAN, fixture, mocked, or source-only evidence does
-not establish a public P2P lane.
+An empty, fresh announcement set is valid metadata; expired announcements are
+rejected and do not make a model available. Loopback, LAN, fixture, mocked, or
+source-only evidence does not establish a public P2P lane.
 
 ## Transfer And Installation
 
@@ -62,11 +112,18 @@ compatibility negotiation are not accepted.
 Its `peer_base_url` must be an exact root origin: an optional trailing `/` is
 canonicalized, but credentials, endpoint paths, query strings, and fragments
 are rejected. Public peer URLs require HTTPS and HTTP is loopback-only. Public
-HTTPS peers require a public, non-reserved DNS name or IP literal; project and
-service hosts cannot serve peer model bytes. Development loopback HTTP is
-limited to canonical `localhost`, `127.0.0.1`, or `[::1]` with a port from 1
-through 65535. Loopback admission does not establish public reachability or
-outside-network P2P evidence.
+HTTPS community peers require a public, non-reserved IP literal. DNS names, including
+`localhost`, are rejected because the browser cannot pin their resolution.
+Loopback is limited to exact `127.0.0.1` or `[::1]` literals. Explicit ports must
+be from 1 through 65535; default ports normalize to the URL origin. Project and
+service hosts and the application's own origin cannot serve peer model bytes,
+except for the exact operator seed origin `https://minimodel.org`. That origin
+uses HTTPS certificate validation, may appear on MiniModel.org itself, and
+does not authorize alternate ports, subdomains, arbitrary DNS peers, proxying,
+or unverified model activation. Signed announcements and all artifact checks
+still apply.
+Loopback admission does not establish public reachability or outside-network
+P2P evidence.
 
 The local-conversion path must pin and verify the public source revision,
 respect source licensing, expose storage and resource requirements, execute a

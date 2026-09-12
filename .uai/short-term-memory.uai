@@ -1,5 +1,5 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-09-12T16:13:08Z
+updated_utc: 2026-09-12T23:12:19Z
 site: MiniModel.org
 status: prepared_source_1.1.2_not_published
 
@@ -8,10 +8,30 @@ ecosystem_cleanup_2026_09_12:
   - Preserved pending strict catalog/peer validation, canonical bytes, expiry, Ed25519 signatures, qualification and browser-admission descriptors, lifecycle revocation, and exact MiniModel.org seed-origin admission.
   - All 32 catalog and cross-project contract tests passed. Test-only signatures and entries are synthetic; they do not establish model qualification or live peer transfer.
   - Current source is a prepared 1.1.2 candidate. The checked-in empty revision-3 catalog expired on 2026-09-09; no freshness, qualified starter, live seed or new deployment is claimed.
-  - Companion implementation ownership is TinyRustLM.com/tinyrustlm/companion and its Rust crates. MiniModel.org does not regain its retired pre-SLM2 native workspace.
-  - Full publication custody and test-fixture cleanup remain part of the ecosystem goal; no transport was invoked for this checkpoint.
+  - Production Companion ownership is TinyRustLM.com/dotnet/src/TinyRustLM.Companion, its CompanionHost tool, conversion/P2P projects and current Rust crates. Source acquisition, operation ownership, terminal reconciliation and browser wiring are implemented; real-model qualification and live seed proof remain open. MiniModel.org does not regain its retired pre-SLM2 native workspace.
+  - Publication input now stays in bounded memory instead of copied site snapshots. Remaining deployment entrypoint/runtime, generator and release-identity review is open; no transport was invoked for this checkpoint.
 
-last_verified_release:
+publication_input_cleanup_2026_09_12:
+  status: implemented_and_locally_verified_not_published
+  source: tools/MiniModel.DeploymentCustody.psm1 and tools/deploy-site.ps1
+  evidence: artifacts/reports/publication-input-review-20260912.json
+  lessons: ../TinyRustLM.com/wiki/runtime-mirust/reports/ecosystem-experiment-lessons-2026-09-12.md C23
+  change: Removed disk snapshot creation, Win32 snapshot directory identity, snapshot cleanup, BlobReader test hook and copied-source fixture case. Read bounded canonical Git/current bytes, bind exact materialized payloads in memory, and authenticate before upload or partial rollback.
+  verification: All 53 Node checks and 24 nested Pester checks pass, zero skipped/cancelled. Actual Git/current catalog admission and stale-manifest rejection pass. Pester whole-module command coverage 238/545; publisher function execution uses actual parsed canonical definitions with transport mocked only in memory. No branch coverage or actual FTPS claim.
+  temporary_output: Owned marker and Pester directories under artifacts/tests were physically removed; no copied source, local site stage or production receipt was created.
+  unresolved: The manifest still binds 7e0a6eb6bf292ff69e3030adf1d229c811606ce9 and fails current catalog input admission. Transport is intentionally unbound. The Node launcher and metadata generator need their remaining deep review. The catalog remains empty and expired, and real model/hosting decisions remain open.
+  storage: No historical files or model payloads were deleted in this checkpoint; no measured storage recovery.
+
+publication_predecessor:
+  authority: deploy/publication-authority.v1.json
+  status: immutable_recorded_predecessor_not_fresh_live_observation
+  version: 1.1.1
+  receipt: deploy/receipts/site-deployment-20260831T061709Z.json
+  receipt_sha256: e38bae2fa85fbdfb9688994cc200e2718e0a9a14751974731b59a9387c315014
+  source_commit: 77d65bdfab168bdd12d3b0ba90fa9d3cc349e7ab
+  closure: 22 files, 80143 bytes
+
+historical_verification_2026_08_29:
   version: 1.1.1
   release_date: 2026-08-29
   publisher_commit: 52598ea59332962d43611efb06caf3fe92c9e12e
@@ -37,7 +57,7 @@ source_cleanup:
   removed: Obsolete pre-SLM2 Rust CLI, v0 fixtures, tracked single-file model demo, and stale duplicate-checkout path dependency.
   authority: Deleted material remains only in Git history and has no executable, compatibility, fallback, or test authority.
   current_implementation: Strict metadata-only SLM2 catalog, peer-feed validator, and browser surface.
-  native_companion: Not currently claimed or shipped; any implementation must begin from current six-member SLM2 vectors and contracts.
+  native_companion: Current implementation belongs to the canonical TinyRustLM.com dotnet projects and Rust crates; this historical removal does not instruct agents to rebuild that owner or assert a deployed native release.
 
 memory_endpoints_authority:
   uses: 2
@@ -60,7 +80,7 @@ historical_releases:
     status: superseded_historical_evidence_only
     success_receipt: deploy/receipts/site-deployment-20260811T145917Z.json
 
-verification:
+historical_2026_08_29_checks:
   node_catalog_tests: 12 passed, 0 failed
   chromium: desktop and mobile current empty-catalog smoke passed
   clean_source_gate: Retired Cargo, crates, v0 fixture, demo model, and duplicate-authority surfaces are absent.

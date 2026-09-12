@@ -4,3 +4,12 @@ deploy/publication-authority.v1.json text eol=lf
 deploy/publication-root-sentinel.v1.json text eol=lf
 deploy/site-deployment-manifest.v1.json text eol=lf
 deploy/receipts/*.json -text -diff
+tools/MiniModel.DeploymentCustody.psm1 text eol=lf
+tools/deploy-site.ps1 text eol=lf
+tests/MiniModel.DeploymentCustody_test.ps1 text eol=lf
+tests/deployment-custody.harness.ps1 text eol=lf
+tests/deployment-custody.test.js text eol=lf
+deploy/README.md text eol=lf
+.uai/short-term-memory.uai text eol=lf
+.uai/taboo.uai text eol=lf
+artifacts/reports/publication-input-review-20260912.json text eol=lf

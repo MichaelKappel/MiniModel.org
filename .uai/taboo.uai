@@ -58,3 +58,9 @@ prohibitions:
 # Before retiring an experiment, record its purpose, inputs/operation identity, observed outcome, useful lessons, uncertainty, and applicable current tests or code in the owning canonical repository.
 # Preserve compact evidence identities and Git references for failed as well as successful experiments; do not preserve copied source trees or superseded models merely as a substitute for recording what was learned.
 # Reviewed TinyRustLM and retired-Runtime findings begin at E:\Source\Rust\TinyRustLM.com\wiki\runtime-mirust\reports\ecosystem-experiment-lessons-2026-09-12.md; this is a growing review, not blanket proof that every experiment has been assessed.
+
+# Publication input lesson 2026-09-12
+# Never reconstruct this site into an OS-temp snapshot or another editable publication tree.
+# Keep bounded operation-bound upload bytes in memory, compare committed and current canonical source, and recheck exact published identities before use.
+# Preserve upload/rollback failure lessons with actual canonical functions and memory-only transport simulations; tests must not recreate obsolete snapshots or fake source/authority trees.
+# Compact review: artifacts/reports/publication-input-review-20260912.json. A passing simulated transaction does not prove actual FTPS, publication, model quality or live seeding.

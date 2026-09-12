@@ -1,77 +1,5 @@
 Set-StrictMode -Version Latest
 
-if (-not ("MiniModelDeploymentCustody.NativeMethods" -as [type])) {
-    Add-Type -TypeDefinition @"
-using System;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
-
-namespace MiniModelDeploymentCustody {
-    public static class NativeMethods {
-        [StructLayout(LayoutKind.Sequential)]
-        private struct ByHandleFileInformation {
-            public uint FileAttributes;
-            public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
-            public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
-            public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
-            public uint VolumeSerialNumber;
-            public uint FileSizeHigh;
-            public uint FileSizeLow;
-            public uint NumberOfLinks;
-            public uint FileIndexHigh;
-            public uint FileIndexLow;
-        }
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern SafeFileHandle CreateFile(
-            string fileName,
-            uint desiredAccess,
-            uint shareMode,
-            IntPtr securityAttributes,
-            uint creationDisposition,
-            uint flagsAndAttributes,
-            IntPtr templateFile);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool GetFileInformationByHandle(
-            SafeFileHandle file,
-            out ByHandleFileInformation information);
-
-        public static string GetPathIdentity(string path) {
-            const uint FileShareRead = 1;
-            const uint FileShareWrite = 2;
-            const uint FileShareDelete = 4;
-            const uint OpenExisting = 3;
-            const uint FileFlagBackupSemantics = 0x02000000;
-            const uint FileFlagOpenReparsePoint = 0x00200000;
-            using (SafeFileHandle handle = CreateFile(
-                path,
-                0,
-                FileShareRead | FileShareWrite | FileShareDelete,
-                IntPtr.Zero,
-                OpenExisting,
-                FileFlagBackupSemantics | FileFlagOpenReparsePoint,
-                IntPtr.Zero)) {
-                if (handle.IsInvalid) {
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to open custody path identity");
-                }
-                ByHandleFileInformation information;
-                if (!GetFileInformationByHandle(handle, out information)) {
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to read custody path identity");
-                }
-                return String.Format(
-                    "{0:x8}:{1:x8}{2:x8}",
-                    information.VolumeSerialNumber,
-                    information.FileIndexHigh,
-                    information.FileIndexLow);
-            }
-        }
-    }
-}
-"@
-}
-
 function Test-CustodyPathHasReparsePoint {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -85,18 +13,8 @@ function Test-CustodyPathHasReparsePoint {
     return $false
 }
 
-function Get-CustodyPathIdentity {
-    param([Parameter(Mandatory)][string]$Path)
-
-    $full = [IO.Path]::GetFullPath($Path)
-    if (Test-CustodyPathHasReparsePoint -Path $full) {
-        throw "Custody path contains a reparse point."
-    }
-    return [MiniModelDeploymentCustody.NativeMethods]::GetPathIdentity($full)
-}
-
 function Get-CustodyByteSha256 {
-    param([Parameter(Mandatory)][byte[]]$Bytes)
+    param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes)
 
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
@@ -376,7 +294,7 @@ function Assert-CustodyMutationAllowed {
         [Parameter(Mandatory)][ValidateSet("local", "remote")][string]$MutationKind
     )
 
-    $localPhases = @("public-admitted", "snapshot-sealed", "transport-admitted", "leased", "mutating", "rolling-back", "finalizing", "complete")
+    $localPhases = @("public-admitted", "input-verified", "transport-admitted", "leased", "mutating", "rolling-back", "finalizing", "complete")
     $remotePhases = @("transport-admitted", "leased", "mutating", "rolling-back", "finalizing")
     $allowed = if ($MutationKind -ceq "local") { $localPhases -contains $Phase } else { $remotePhases -contains $Phase }
     if (-not $allowed) {
@@ -732,9 +650,12 @@ function Get-CustodyGitBlobBytes {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string]$Commit,
-        [Parameter(Mandatory)][string]$RelativePath
+        [Parameter(Mandatory)][string]$RelativePath,
+        [ValidateRange(0,16777216)][int]$MaximumBytes = 16777216
     )
 
+    $root = Assert-CustodyCanonicalRepositoryRoot -RepositoryRoot $RepositoryRoot
+    if ($Commit -cnotmatch '^[0-9a-f]{40}$') { throw 'Git publication commit must be an exact object identity.' }
     $path = Assert-CustodyRelativePath -Path $RelativePath
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = "git"
@@ -742,323 +663,211 @@ function Get-CustodyGitBlobBytes {
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
     $start.CreateNoWindow = $true
+    $start.EnvironmentVariables['GIT_OPTIONAL_LOCKS'] = '0'
+    $start.EnvironmentVariables['GIT_TERMINAL_PROMPT'] = '0'
     if ($start.PSObject.Properties.Name -contains "ArgumentList") {
         $start.ArgumentList.Add("--no-optional-locks")
+        $start.ArgumentList.Add("-c")
+        $start.ArgumentList.Add("safe.directory=$root")
         $start.ArgumentList.Add("-C")
-        $start.ArgumentList.Add($RepositoryRoot)
+        $start.ArgumentList.Add($root)
         $start.ArgumentList.Add("cat-file")
         $start.ArgumentList.Add("blob")
         $start.ArgumentList.Add("${Commit}:$path")
     }
     else {
-        $escapedRoot = $RepositoryRoot.Replace('"', '\"')
+        $escapedRoot = $root.Replace('"', '\"')
         $escapedObject = ("${Commit}:$path").Replace('"', '\"')
-        $start.Arguments = "--no-optional-locks -C `"$escapedRoot`" cat-file blob `"$escapedObject`""
+        $start.Arguments = "--no-optional-locks -c `"safe.directory=$escapedRoot`" -C `"$escapedRoot`" cat-file blob `"$escapedObject`""
     }
     $process = [Diagnostics.Process]::new()
     $process.StartInfo = $start
-    if (-not $process.Start()) { throw "Unable to start Git blob reader." }
-    $memory = [IO.MemoryStream]::new()
+    $memory = [IO.MemoryStream]::new([byte[]]::new($MaximumBytes + 1), $true)
+    $errors = [IO.MemoryStream]::new([byte[]]::new(65537), $true)
+    $memory.SetLength(0)
+    $errors.SetLength(0)
+    $started = $false
     try {
-        $process.StandardOutput.BaseStream.CopyTo($memory)
-        $errorText = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
-        if ($process.ExitCode -ne 0) { throw "Git blob read failed: $errorText" }
-        return $memory.ToArray()
+        $started = $process.Start()
+        if (-not $started) { throw 'Unable to start Git blob reader.' }
+        $deadline = [Diagnostics.Stopwatch]::StartNew()
+        $outputTask = $process.StandardOutput.BaseStream.CopyToAsync($memory)
+        $errorTask = $process.StandardError.BaseStream.CopyToAsync($errors)
+        if (-not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($outputTask,$errorTask),30000) -or
+            -not $process.WaitForExit([Math]::Max(0,30000 - [int]$deadline.ElapsedMilliseconds))) {
+            throw 'Git publication read exceeded its deadline.'
+        }
+        if ($process.ExitCode -ne 0 -or $memory.Length -gt $MaximumBytes -or $errors.Length -gt 65536) {
+            throw 'Git publication read failed or exceeded its byte bound.'
+        }
+        return ,$memory.ToArray()
+    }
+    catch {
+        throw 'Git publication read failed within its bounded process contract.'
     }
     finally {
+        if ($started -and -not $process.HasExited) {
+            $process.Kill()
+            $null = $process.WaitForExit(5000)
+        }
         $memory.Dispose()
+        $errors.Dispose()
         $process.Dispose()
     }
 }
 
-function New-CustodySealedSnapshot {
+# Permit Git and working-file reads only from this direct canonical repository.
+function Assert-CustodyCanonicalRepositoryRoot {
+    param([Parameter(Mandatory)][string]$RepositoryRoot)
+    $expected = 'E:\Source\Rust\MiniModel.org'
+    $resolved = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\','/')
+    $moduleRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')).TrimEnd('\','/')
+    if (-not [string]::Equals($resolved,$expected,[StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals($moduleRoot,$expected,[StringComparison]::OrdinalIgnoreCase) -or
+        (Test-CustodyPathHasReparsePoint -Path $resolved)) {
+        throw 'Publication input requires the canonical MiniModel repository.'
+    }
+    return $resolved
+}
+
+# Read bounded current bytes in place; callers independently compare the committed identity.
+function Read-CustodyPublicationSourceBytes {
+    param([Parameter(Mandatory)][string]$RepositoryRoot,[Parameter(Mandatory)][string]$RelativePath,[Parameter(Mandatory)][int]$MaximumBytes)
+    $root = Assert-CustodyCanonicalRepositoryRoot -RepositoryRoot $RepositoryRoot
+    $relative = Assert-CustodyRelativePath -Path $RelativePath
+    $file = Join-Path $root ($relative -replace '/', '\')
+    if ($MaximumBytes -lt 0 -or $MaximumBytes -gt 16777216 -or (Test-CustodyPathHasReparsePoint -Path $file)) {
+        throw 'Publication source path or bound is invalid.'
+    }
+    $item = Get-Item -LiteralPath $file -Force
+    if ($item.PSIsContainer -or $item.Length -gt $MaximumBytes) { throw 'Publication source is not a bounded regular file.' }
+    $stream = [IO.File]::Open($file,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+    try {
+        if ($stream.Length -gt $MaximumBytes) { throw 'Publication source exceeded its read bound.' }
+        $bytes = [byte[]]::new([int]$stream.Length)
+        $offset = 0
+        while ($offset -lt $bytes.Length) {
+            $read = $stream.Read($bytes,$offset,$bytes.Length - $offset)
+            if ($read -eq 0) { throw 'Publication source ended before its declared length.' }
+            $offset += $read
+        }
+        if ($stream.ReadByte() -ne -1) { throw 'Publication source exceeded its read bound.' }
+        return ,$bytes
+    }
+    finally { $stream.Dispose() }
+}
+
+# Bind one bounded publication closure in memory, with no source or control files written.
+function New-CustodyPublicationInput {
     param(
         [Parameter(Mandatory)][string]$Phase,
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)]$Manifest,
         [Parameter(Mandatory)][string]$ManifestSha256,
-        [Parameter(Mandatory)][string]$SnapshotParent,
         [Parameter(Mandatory)][string]$OperationId,
-        $Authority,
-        [scriptblock]$BlobReader
+        [Parameter(Mandatory)]$Authority
     )
-
     Assert-CustodyMutationAllowed -Phase $Phase -MutationKind local
-    if ($OperationId -notmatch "^[0-9a-f]{32}$" -or $ManifestSha256 -notmatch "^[0-9a-f]{64}$") {
-        throw "Snapshot operation or manifest identity is invalid."
+    $root = Assert-CustodyCanonicalRepositoryRoot -RepositoryRoot $RepositoryRoot
+    if ($OperationId -cnotmatch '^[0-9a-f]{32}$' -or $ManifestSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        [string]$Manifest.source_commit -cnotmatch '^[0-9a-f]{40}$' -or [string]$Manifest.source_tree -cnotmatch '^[0-9a-f]{40}$') {
+        throw 'Publication operation or source identity is invalid.'
     }
-    $repositoryFull = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-    $parentFull = [IO.Path]::GetFullPath($SnapshotParent).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    $snapshotRoot = [IO.Path]::GetFullPath((Join-Path $parentFull $OperationId))
-    if ($snapshotRoot.StartsWith($repositoryFull, [StringComparison]::OrdinalIgnoreCase) -or
-        -not $snapshotRoot.StartsWith($parentFull + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
-        (Test-Path -LiteralPath $snapshotRoot)) {
-        throw "Snapshot root is occupied or not operation-owned outside the checkout."
+    $files = @($Manifest.files)
+    if ($files.Count -lt 1 -or $files.Count -gt 500) { throw 'Publication closure count is invalid.' }
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $total = [int64]0
+    foreach ($file in $files) {
+        $relative = Assert-CustodyRelativePath -Path ([string]$file.path)
+        $length = [int64]$file.bytes
+        if (-not $seen.Add($relative) -or $file.bytes -ne $length -or $length -lt 0 -or $length -gt 16777216 -or
+            [string]$file.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Publication member identity is invalid.' }
+        $total += $length
+        if ($total -gt 67108864) { throw 'Publication closure exceeds the total byte budget.' }
     }
-    [IO.Directory]::CreateDirectory($parentFull) | Out-Null
-    if (Test-CustodyPathHasReparsePoint -Path $parentFull) {
-        throw "Snapshot parent path must not contain a reparse point."
-    }
-    [IO.Directory]::CreateDirectory($snapshotRoot) | Out-Null
-    $rootIdentity = Get-CustodyPathIdentity -Path $snapshotRoot
-
     $materializations = @{}
-    $materializationProperty = $Manifest.PSObject.Properties["materializations"]
-    if ($null -ne $materializationProperty) {
-        foreach ($materialization in @($materializationProperty.Value)) {
-            Assert-CustodyExactKeys -Value $materialization -Expected @(
-                "path", "kind", "source_bytes", "source_sha256"
-            ) -Label "deployment materialization"
-            $materializedPath = Assert-CustodyRelativePath -Path ([string]$materialization.path)
-            if ($materializations.ContainsKey($materializedPath) -or
-                [string]$materialization.kind -notin @(
-                    "prepared-release-to-published-v1",
-                    "prepared-history-to-published-v1"
-                ) -or
-                [int64]$materialization.source_bytes -lt 1 -or
-                [string]$materialization.source_sha256 -notmatch "^[0-9a-f]{64}$") {
-                throw "Deployment materialization identity is invalid."
-            }
-            $materializations[$materializedPath] = $materialization
+    foreach ($row in @($Manifest.materializations)) {
+        Assert-CustodyExactKeys -Value $row -Expected @('path','kind','source_bytes','source_sha256') -Label 'deployment materialization'
+        $relative = Assert-CustodyRelativePath -Path ([string]$row.path)
+        if ($materializations.ContainsKey($relative) -or
+            [string]$row.kind -cnotin @('prepared-release-to-published-v1','prepared-history-to-published-v1') -or
+            [int64]$row.source_bytes -lt 1 -or [int64]$row.source_bytes -gt 16777216 -or
+            [string]$row.source_sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Deployment materialization identity is invalid.' }
+        $materializations[$relative]=$row
+    }
+    $payloads = [Collections.Generic.Dictionary[string,byte[]]]::new([StringComparer]::Ordinal)
+    $identities = [Collections.Generic.List[object]]::new()
+    $used = @{}
+    foreach ($file in $files) {
+        $relative = Assert-CustodyRelativePath -Path ([string]$file.path)
+        $length = [int64]$file.bytes
+        $materialization = $materializations[$relative]
+        $sourceLength = if ($null -ne $materialization) { [int]$materialization.source_bytes } else { [int]$length }
+        $sourceHash = if ($null -ne $materialization) { [string]$materialization.source_sha256 } else { [string]$file.sha256 }
+        $bytes = Get-CustodyGitBlobBytes -RepositoryRoot $root -Commit ([string]$Manifest.source_commit) -RelativePath $relative -MaximumBytes $sourceLength
+        if ($bytes -isnot [byte[]] -or $bytes.Length -ne $sourceLength -or (Get-CustodyByteSha256 -Bytes $bytes) -cne $sourceHash) {
+            throw 'Committed publication source identity drifted.'
         }
+        $working = Read-CustodyPublicationSourceBytes -RepositoryRoot $root -RelativePath $relative -MaximumBytes $sourceLength
+        if ($working.Length -ne $sourceLength -or (Get-CustodyByteSha256 -Bytes $working) -cne $sourceHash) {
+            throw 'Canonical working source differs from the bound publication commit.'
+        }
+        if ($null -ne $materialization) {
+            $bytes = [byte[]](ConvertTo-CustodyPublishedArtifactBytes -Kind ([string]$materialization.kind) -SourceBytes $bytes -Authority $Authority)
+            $used[$relative]=$true
+        }
+        if ($bytes.Length -ne $length -or (Get-CustodyByteSha256 -Bytes $bytes) -cne [string]$file.sha256) { throw 'Materialized publication identity drifted.' }
+        $payloads.Add($relative,[byte[]]$bytes.Clone())
+        $identities.Add([pscustomobject][ordered]@{path=$relative;bytes=$length;sha256=[string]$file.sha256})
     }
-    if ($materializations.Count -gt 0 -and $null -eq $Authority) {
-        throw "Publication authority is required for governed materialization."
-    }
+    if ($used.Count -ne $materializations.Count) { throw 'Deployment manifest contains an unused materialization.' }
+    $binding = [pscustomobject][ordered]@{schema='minimodel.publication_input.v1';operation_id=$OperationId;manifest_sha256=$ManifestSha256;source_commit=[string]$Manifest.source_commit;source_tree=[string]$Manifest.source_tree;files=$identities.ToArray()}
+    $bindingBytes = [Text.UTF8Encoding]::new($false).GetBytes(($binding | ConvertTo-Json -Depth 8 -Compress))
+    return [pscustomobject]@{Binding=$binding;BindingSha256=(Get-CustodyByteSha256 -Bytes $bindingBytes);Payloads=[Collections.ObjectModel.ReadOnlyDictionary[string,byte[]]]::new($payloads)}
+}
 
-    $sealedFiles = @()
-    $usedMaterializations = @{}
-    try {
-        foreach ($file in @($Manifest.files)) {
-            $relative = Assert-CustodyRelativePath -Path ([string]$file.path)
-            $destination = [IO.Path]::GetFullPath((Join-Path $snapshotRoot ($relative -replace "/", "\")))
-            if (-not $destination.StartsWith($snapshotRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-                throw "Snapshot member escaped the operation root."
-            }
-            [IO.Directory]::CreateDirectory((Split-Path -Parent $destination)) | Out-Null
-            $bytes = if ($BlobReader) {
-                & $BlobReader ([string]$Manifest.source_commit) $relative
-            }
-            else {
-                Get-CustodyGitBlobBytes -RepositoryRoot $RepositoryRoot -Commit ([string]$Manifest.source_commit) -RelativePath $relative
-            }
-            if ($bytes -isnot [byte[]]) { $bytes = [byte[]]$bytes }
-            if ($materializations.ContainsKey($relative)) {
-                $materialization = $materializations[$relative]
-                if ($bytes.Length -ne [int64]$materialization.source_bytes -or
-                    (Get-CustodyByteSha256 -Bytes $bytes) -cne [string]$materialization.source_sha256) {
-                    throw "Prepared Git blob does not match its governed materialization source: $relative"
-                }
-                $bytes = ConvertTo-CustodyPublishedArtifactBytes `
-                    -Kind ([string]$materialization.kind) `
-                    -SourceBytes $bytes `
-                    -Authority $Authority
-                $usedMaterializations[$relative] = $true
-            }
-            if ($bytes.Length -ne [int64]$file.bytes -or (Get-CustodyByteSha256 -Bytes $bytes) -cne [string]$file.sha256) {
-                throw "Governed publication bytes do not match the deployment manifest: $relative"
-            }
-            [IO.File]::WriteAllBytes($destination, $bytes)
-            (Get-Item -LiteralPath $destination).IsReadOnly = $true
-            $sealedFiles += [ordered]@{ path = $relative; bytes = [int64]$file.bytes; sha256 = [string]$file.sha256 }
-        }
-        if ($usedMaterializations.Count -ne $materializations.Count) {
-            throw "Deployment manifest contains an unused materialization."
-        }
-        $seal = [ordered]@{
-            schema = "minimodel.publication_snapshot.v1"
-            operation_id = $OperationId
-            root_identity = $rootIdentity
-            manifest_sha256 = $ManifestSha256
-            source_commit = [string]$Manifest.source_commit
-            source_tree = [string]$Manifest.source_tree
-            files = $sealedFiles
-        }
-        $sealPath = Join-Path $snapshotRoot ".minimodel-publication-snapshot.v1.json"
-        [IO.File]::WriteAllText($sealPath, (($seal | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
-        (Get-Item -LiteralPath $sealPath).IsReadOnly = $true
-        return [pscustomobject]@{
-            Root = $snapshotRoot
-            SealPath = $sealPath
-            SealSha256 = Get-CustodyFileSha256 -Path $sealPath
-            OperationId = $OperationId
-            RootIdentity = $rootIdentity
-        }
+# Recheck operation binding, exact member closure and every payload before its use.
+function Assert-CustodyPublicationInput {
+    param([Parameter(Mandatory)]$InputRecord,[Parameter(Mandatory)][string]$InputSha256,[Parameter(Mandatory)][string]$ManifestSha256,[Parameter(Mandatory)][string]$OperationId)
+    Assert-CustodyExactKeys -Value $InputRecord -Expected @('Binding','BindingSha256','Payloads') -Label 'publication input'
+    $binding=$InputRecord.Binding
+    Assert-CustodyExactKeys -Value $binding -Expected @('schema','operation_id','manifest_sha256','source_commit','source_tree','files') -Label 'publication binding'
+    if ($OperationId -cnotmatch '^[0-9a-f]{32}$' -or $ManifestSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        [string]$binding.source_commit -cnotmatch '^[0-9a-f]{40}$' -or [string]$binding.source_tree -cnotmatch '^[0-9a-f]{40}$') {
+        throw 'Publication input operation or source identity is invalid.'
     }
-    catch {
-        throw
+    $encoded=[Text.UTF8Encoding]::new($false).GetBytes(($binding | ConvertTo-Json -Depth 8 -Compress))
+    if ($InputSha256 -cnotmatch '^[0-9a-f]{64}$' -or (Get-CustodyByteSha256 -Bytes $encoded) -cne $InputSha256 -or
+        $InputRecord.BindingSha256 -cne $InputSha256 -or $binding.schema -cne 'minimodel.publication_input.v1' -or
+        $binding.operation_id -cne $OperationId -or $binding.manifest_sha256 -cne $ManifestSha256 -or
+        $InputRecord.Payloads -isnot [Collections.ObjectModel.ReadOnlyDictionary[string,byte[]]]) { throw 'Publication input binding drifted.' }
+    $files=@($binding.files)
+    if ($files.Count -lt 1 -or $files.Count -gt 500 -or $InputRecord.Payloads.Count -ne $files.Count) { throw 'Publication input closure drifted.' }
+    $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $total=[int64]0
+    foreach ($file in $files) {
+        Assert-CustodyExactKeys -Value $file -Expected @('path','bytes','sha256') -Label 'publication member'
+        $relative=Assert-CustodyRelativePath -Path ([string]$file.path)
+        $bytes=$InputRecord.Payloads[$relative]
+        if (-not $seen.Add($relative) -or $null -eq $bytes -or $bytes.Length -gt 16777216 -or $bytes.Length -ne [int64]$file.bytes -or
+            (Get-CustodyByteSha256 -Bytes $bytes) -cne [string]$file.sha256) { throw 'Publication input bytes drifted.' }
+        $total += $bytes.Length
+        if ($total -gt 67108864) { throw 'Publication input exceeds the total byte budget.' }
     }
 }
 
-function Assert-CustodySealedSnapshot {
-    param(
-        [Parameter(Mandatory)][string]$SnapshotRoot,
-        [Parameter(Mandatory)][string]$SnapshotParent,
-        [Parameter(Mandatory)]$Manifest,
-        [Parameter(Mandatory)][string]$SealSha256,
-        [Parameter(Mandatory)][string]$OperationId,
-        [Parameter(Mandatory)][string]$RootIdentity
-    )
-
-    $root = [IO.Path]::GetFullPath($SnapshotRoot)
-    $parent = [IO.Path]::GetFullPath($SnapshotParent).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    $expectedRoot = [IO.Path]::GetFullPath((Join-Path $parent $OperationId))
-    if ($OperationId -notmatch "^[0-9a-f]{32}$" -or
-        $RootIdentity -notmatch "^[0-9a-f]{8}:[0-9a-f]{16}$" -or
-        $SealSha256 -notmatch "^[0-9a-f]{64}$" -or
-        -not [string]::Equals($root, $expectedRoot, [StringComparison]::OrdinalIgnoreCase) -or
-        -not (Test-Path -LiteralPath $root -PathType Container) -or
-        (Test-CustodyPathHasReparsePoint -Path $root) -or
-        (Get-CustodyPathIdentity -Path $root) -cne $RootIdentity) {
-        throw "Publication snapshot root was replaced or is not exactly operation-owned."
-    }
-    $sealPath = Join-Path $root ".minimodel-publication-snapshot.v1.json"
-    if (-not (Test-Path -LiteralPath $sealPath -PathType Leaf) -or
-        (Test-CustodyPathHasReparsePoint -Path $sealPath) -or
-        (Get-CustodyFileSha256 -Path $sealPath) -cne $SealSha256) {
-        throw "Publication snapshot seal changed."
-    }
-    $sealRecord = Read-CustodyJsonFile -Path $sealPath -MaximumBytes 2097152 -Label "publication snapshot seal"
-    $seal = $sealRecord.Value
-    Assert-CustodyExactKeys -Value $seal -Expected @(
-        "schema", "operation_id", "root_identity", "manifest_sha256", "source_commit", "source_tree", "files"
-    ) -Label "publication snapshot seal"
-    if ($seal.schema -cne "minimodel.publication_snapshot.v1" -or
-        $seal.operation_id -cne $OperationId -or
-        $seal.root_identity -cne $RootIdentity -or
-        $seal.source_commit -cne [string]$Manifest.source_commit -or
-        $seal.source_tree -cne [string]$Manifest.source_tree -or
-        @($seal.files).Count -ne @($Manifest.files).Count) {
-        throw "Publication snapshot seal ownership changed."
-    }
-
-    $expectedEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $expectedEntries.Add("f:.minimodel-publication-snapshot.v1.json") | Out-Null
-    foreach ($file in @($Manifest.files)) {
-        $relative = Assert-CustodyRelativePath -Path ([string]$file.path)
-        $expectedEntries.Add("f:$relative") | Out-Null
-        $parts = $relative -split "/"
-        if ($parts.Count -gt 1) {
-            $directoryParts = @()
-            for ($partIndex = 0; $partIndex -lt $parts.Count - 1; $partIndex++) {
-                $directoryParts += $parts[$partIndex]
-                $expectedEntries.Add("d:$($directoryParts -join '/')") | Out-Null
-            }
-        }
-        $path = [IO.Path]::GetFullPath((Join-Path $root ($relative -replace "/", "\")))
-        if (-not $path.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
-            -not (Test-Path -LiteralPath $path -PathType Leaf) -or
-            (Test-CustodyPathHasReparsePoint -Path $path) -or
-            (Get-Item -LiteralPath $path).Length -ne [int64]$file.bytes -or
-            (Get-CustodyFileSha256 -Path $path) -cne [string]$file.sha256) {
-            throw "Publication snapshot member changed: $relative"
-        }
-    }
-
-    for ($index = 0; $index -lt @($Manifest.files).Count; $index++) {
-        $manifestFile = @($Manifest.files)[$index]
-        $sealedFile = @($seal.files)[$index]
-        if ($sealedFile.path -cne $manifestFile.path -or
-            [int64]$sealedFile.bytes -ne [int64]$manifestFile.bytes -or
-            $sealedFile.sha256 -cne $manifestFile.sha256) {
-            throw "Publication snapshot seal file closure changed."
-        }
-    }
-
-    $actualEntries = @(Get-ChildItem -LiteralPath $root -Recurse -Force | ForEach-Object {
-        if (($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "Publication snapshot contains a reparse point."
-        }
-        $kind = if ($_.PSIsContainer) { "d:" } else { "f:" }
-        $kind + $_.FullName.Substring($root.Length + 1).Replace("\", "/")
-    })
-    if ($actualEntries.Count -ne $expectedEntries.Count) {
-        throw "Publication snapshot contains an overlay or missing entry."
-    }
-    foreach ($entry in $actualEntries) {
-        if (-not $expectedEntries.Contains([string]$entry)) {
-            throw "Publication snapshot contains an overlay or missing entry."
-        }
-    }
-}
-
-function Remove-CustodySealedSnapshot {
-    param(
-        [Parameter(Mandatory)][string]$Phase,
-        [Parameter(Mandatory)][string]$SnapshotRoot,
-        [Parameter(Mandatory)][string]$SnapshotParent,
-        [Parameter(Mandatory)][string]$RepositoryRoot,
-        [Parameter(Mandatory)]$Manifest,
-        [Parameter(Mandatory)][string]$SealSha256,
-        [Parameter(Mandatory)][string]$OperationId,
-        [Parameter(Mandatory)][string]$RootIdentity
-    )
-
-    Assert-CustodyMutationAllowed -Phase $Phase -MutationKind local
-    $root = [IO.Path]::GetFullPath($SnapshotRoot)
-    $parent = [IO.Path]::GetFullPath($SnapshotParent).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    $repository = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-    if (-not $root.StartsWith($parent + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
-        $root.StartsWith($repository, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to remove an unowned publication snapshot path."
-    }
-    Assert-CustodySealedSnapshot `
-        -SnapshotRoot $root `
-        -SnapshotParent $parent `
-        -Manifest $Manifest `
-        -SealSha256 $SealSha256 `
-        -OperationId $OperationId `
-        -RootIdentity $RootIdentity
-    if ((Get-CustodyPathIdentity -Path $root) -cne $RootIdentity) {
-        throw "Refusing cleanup after publication snapshot root replacement."
-    }
-    $directories = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($file in @($Manifest.files)) {
-        $relative = Assert-CustodyRelativePath -Path ([string]$file.path)
-        $memberPath = [IO.Path]::GetFullPath((Join-Path $root ($relative -replace "/", "\")))
-        if (Test-CustodyPathHasReparsePoint -Path $memberPath) {
-            throw "Refusing cleanup after publication snapshot member replacement."
-        }
-        $member = Get-Item -LiteralPath $memberPath -Force
-        if ($member.Length -ne [int64]$file.bytes -or
-            (Get-CustodyFileSha256 -Path $memberPath) -cne [string]$file.sha256) {
-            throw "Refusing cleanup after publication snapshot member change."
-        }
-        $member.IsReadOnly = $false
-        [IO.File]::Delete($memberPath)
-
-        $parentPath = [IO.Path]::GetDirectoryName($memberPath)
-        while (-not [string]::Equals($parentPath, $root, [StringComparison]::OrdinalIgnoreCase)) {
-            $directories.Add($parentPath) | Out-Null
-            $parentPath = [IO.Path]::GetDirectoryName($parentPath)
-        }
-    }
-    $sealPath = Join-Path $root ".minimodel-publication-snapshot.v1.json"
-    if ((Test-CustodyPathHasReparsePoint -Path $sealPath) -or
-        (Get-CustodyFileSha256 -Path $sealPath) -cne $SealSha256) {
-        throw "Refusing cleanup after publication snapshot seal replacement."
-    }
-    (Get-Item -LiteralPath $sealPath -Force).IsReadOnly = $false
-    [IO.File]::Delete($sealPath)
-
-    foreach ($directory in @($directories | Sort-Object { $_.Length } -Descending)) {
-        if (Test-CustodyPathHasReparsePoint -Path $directory) {
-            throw "Refusing cleanup after publication snapshot directory replacement."
-        }
-        [IO.Directory]::Delete($directory, $false)
-    }
-    if ((Get-CustodyPathIdentity -Path $root) -cne $RootIdentity) {
-        throw "Refusing cleanup after publication snapshot root replacement."
-    }
-    [IO.Directory]::Delete($root, $false)
-    if (Test-Path -LiteralPath $root) { throw "Publication snapshot cleanup did not complete." }
+# Return an authenticated member from the bounded input without reopening mutable source.
+function Get-CustodyPublicationFileBytes {
+    param([Parameter(Mandatory)]$InputRecord,[Parameter(Mandatory)][string]$InputSha256,[Parameter(Mandatory)][string]$ManifestSha256,[Parameter(Mandatory)][string]$OperationId,[Parameter(Mandatory)][string]$RelativePath)
+    Assert-CustodyPublicationInput -InputRecord $InputRecord -InputSha256 $InputSha256 -ManifestSha256 $ManifestSha256 -OperationId $OperationId
+    $relative=Assert-CustodyRelativePath -Path $RelativePath
+    if (-not $InputRecord.Payloads.ContainsKey($relative)) { throw 'Publication input member is absent.' }
+    return ,$InputRecord.Payloads[$relative]
 }
 
 Export-ModuleMember -Function @(
     "Get-CustodyByteSha256",
     "Get-CustodyFileSha256",
-    "Get-CustodyPathIdentity",
     "Read-CustodyJsonFile",
     "Assert-CustodyPublicationAuthority",
     "Assert-CustodyRepositoryIdentity",
@@ -1075,7 +884,7 @@ Export-ModuleMember -Function @(
     "New-CustodyLeaseOwnerBytes",
     "Assert-CustodyLeaseOwnership",
     "Get-CustodyGitBlobBytes",
-    "New-CustodySealedSnapshot",
-    "Assert-CustodySealedSnapshot",
-    "Remove-CustodySealedSnapshot"
+    "New-CustodyPublicationInput",
+    "Assert-CustodyPublicationInput",
+    "Get-CustodyPublicationFileBytes"
 )

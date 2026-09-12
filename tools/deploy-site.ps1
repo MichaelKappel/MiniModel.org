@@ -83,11 +83,9 @@ $script:credential = $null
 $script:ftpHost = $null
 $script:ftpPort = 0
 $script:remoteRoot = $null
-$script:snapshotRoot = $null
-$script:snapshotParent = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) "MiniModel.org-publication-snapshots-v1"))
-$script:snapshotSealSha256 = $null
-$script:snapshotOperationId = $null
-$script:snapshotRootIdentity = $null
+$script:publicationInput = $null
+$script:publicationInputSha256 = $null
+$script:publicationOperationId = $null
 $script:lease = $null
 $script:transactionJournal = [Collections.Generic.List[object]]::new()
 $script:commitCleanupStarted = $false
@@ -569,67 +567,41 @@ function Write-RemoteChunk {
     }
 }
 
-function Get-LocalPrefixSha256 {
-    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][int64]$Bytes)
-
-    $item = Get-Item -LiteralPath $Path
-    if ($Bytes -lt 0 -or $Bytes -gt $item.Length) { throw "Invalid sealed-snapshot prefix length." }
-    $stream = [IO.File]::OpenRead($Path)
+function Get-PublicationPrefixSha256 {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Payload, [Parameter(Mandatory)][int64]$Bytes)
+    if ($Bytes -lt 0 -or $Bytes -gt $Payload.Length) { throw "Invalid publication prefix length." }
     $sha = [Security.Cryptography.SHA256]::Create()
-    $buffer = New-Object byte[] 65536
-    $remaining = $Bytes
-    try {
-        while ($remaining -gt 0) {
-            $requested = [int][Math]::Min([int64]$buffer.Length, $remaining)
-            $read = $stream.Read($buffer, 0, $requested)
-            if ($read -ne $requested) { throw "Unexpected end of sealed publication snapshot file." }
-            $sha.TransformBlock($buffer, 0, $read, $buffer, 0) | Out-Null
-            $remaining -= $read
-        }
-        $empty = New-Object byte[] 0
-        $sha.TransformFinalBlock($empty, 0, 0) | Out-Null
-        return ([BitConverter]::ToString($sha.Hash)).Replace("-", "").ToLowerInvariant()
-    }
-    finally {
-        $sha.Dispose()
-        $stream.Dispose()
-    }
+    try { return ([BitConverter]::ToString($sha.ComputeHash($Payload,0,[int]$Bytes))).Replace("-", "").ToLowerInvariant() }
+    finally { $sha.Dispose() }
 }
 
 function Send-RemoteFile {
-    param([string]$LocalPath, [string]$LogicalPath)
-
-    $expectedBytes = (Get-Item -LiteralPath $LocalPath).Length
+    param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Payload, [Parameter(Mandatory)][string]$LogicalPath)
+    $expectedBytes = $Payload.Length
+    if ($expectedBytes -gt 16777216) { throw "Publication member exceeds its byte budget." }
     if ((Get-RemoteFileObservation -LogicalPath $LogicalPath).State -cne "absent") {
         throw "Operation-owned remote staging path was not exactly absent."
     }
-    $input = [IO.File]::OpenRead($LocalPath)
-    $offset = [int64]0
-    try {
-        if ($expectedBytes -eq 0) {
-            Write-RemoteChunk -LogicalPath $LogicalPath -Bytes (New-Object byte[] 0) -Append $false
-            $observation = Get-RemoteFileObservation -LogicalPath $LogicalPath
-            if ($observation.State -cne "present" -or [int64]$observation.Size -ne 0) {
-                throw "Remote staging did not commit the empty file exactly."
-            }
-            return
+    $offset = 0
+    if ($expectedBytes -eq 0) {
+        Write-RemoteChunk -LogicalPath $LogicalPath -Bytes ([byte[]]::new(0)) -Append $false
+        $observation = Get-RemoteFileObservation -LogicalPath $LogicalPath
+        if ($observation.State -cne "present" -or [int64]$observation.Size -ne 0) {
+            throw "Remote staging did not commit the empty file exactly."
         }
-        while ($offset -lt $expectedBytes) {
-            $count = [int][Math]::Min([int64]8192, $expectedBytes - $offset)
-            $chunk = New-Object byte[] $count
-            $read = $input.Read($chunk, 0, $count)
-            if ($read -ne $count) { throw "Unexpected end of sealed publication snapshot file." }
-            $intendedSize = $offset + $count
-            Write-RemoteChunk -LogicalPath $LogicalPath -Bytes $chunk -Append ($offset -gt 0)
-            $observation = Get-RemoteFileObservation -LogicalPath $LogicalPath
-            if ($observation.State -cne "present" -or [int64]$observation.Size -ne $intendedSize) {
-                throw "Remote staging offset drifted from the intended chunk boundary."
-            }
-            $offset = $intendedSize
-        }
+        return
     }
-    finally {
-        $input.Dispose()
+    while ($offset -lt $expectedBytes) {
+        $count = [int][Math]::Min(8192, $expectedBytes - $offset)
+        $chunk = [byte[]]::new($count)
+        [Array]::Copy($Payload,$offset,$chunk,0,$count)
+        $intendedSize = $offset + $count
+        Write-RemoteChunk -LogicalPath $LogicalPath -Bytes $chunk -Append ($offset -gt 0)
+        $observation = Get-RemoteFileObservation -LogicalPath $LogicalPath
+        if ($observation.State -cne "present" -or [int64]$observation.Size -ne $intendedSize) {
+            throw "Remote staging offset drifted from the intended chunk boundary."
+        }
+        $offset = $intendedSize
     }
 }
 
@@ -810,19 +782,14 @@ function Publish-File {
     )
 
     Assert-RemoteLeaseOwned
-    Assert-CustodySealedSnapshot `
-        -SnapshotRoot $script:snapshotRoot `
-        -SnapshotParent $script:snapshotParent `
-        -Manifest $script:manifest `
-        -SealSha256 $script:snapshotSealSha256 `
-        -OperationId $script:snapshotOperationId `
-        -RootIdentity $script:snapshotRootIdentity
     $relative = [string]$File.path
-    $localPath = [IO.Path]::GetFullPath((Join-Path $script:snapshotRoot ($relative -replace "/", "\")))
-    if (-not $localPath.StartsWith($script:snapshotRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
-        (Get-Item -LiteralPath $localPath).Length -ne [int64]$File.bytes -or
-        (Get-CustodyFileSha256 -Path $localPath) -cne [string]$File.sha256) {
-        throw "Sealed publication snapshot changed before upload."
+    $payload = Get-CustodyPublicationFileBytes `
+        -InputRecord $script:publicationInput -InputSha256 $script:publicationInputSha256 `
+        -ManifestSha256 $script:manifestSha256 -OperationId $script:publicationOperationId `
+        -RelativePath $relative
+    if ($payload.Length -ne [int64]$File.bytes -or
+        (Get-CustodyByteSha256 -Bytes $payload) -cne [string]$File.sha256) {
+        throw "Publication input changed before upload."
     }
     $target = Get-RemoteBoundedIdentity `
         -LogicalPath $relative `
@@ -862,7 +829,7 @@ function Publish-File {
         State = "planned"
     }
     $script:transactionJournal.Add($entry)
-    Send-RemoteFile -LocalPath $localPath -LogicalPath $stagePath
+    Send-RemoteFile -Payload $payload -LogicalPath $stagePath
     Assert-RemoteExactIdentity -LogicalPath $stagePath -Bytes ([int64]$File.bytes) -Sha256 ([string]$File.sha256)
     $entry.State = "staged"
     if ($entry.HadPredecessor) {
@@ -940,13 +907,15 @@ function Remove-RemoteCandidateStageForRollback {
             -Sha256 ([string]$Entry.CandidateSha256) | Out-Null
         return
     }
-    $localPath = [IO.Path]::GetFullPath((Join-Path $script:snapshotRoot (([string]$Entry.Path) -replace "/", "\")))
-    if (-not (Test-Path -LiteralPath $localPath -PathType Leaf) -or
-        (Get-Item -LiteralPath $localPath).Length -ne [int64]$Entry.CandidateBytes -or
-        (Get-CustodyFileSha256 -Path $localPath) -cne [string]$Entry.CandidateSha256) {
-        throw "Exact rollback cannot authenticate a partial stage from the sealed candidate."
+    $payload = Get-CustodyPublicationFileBytes `
+        -InputRecord $script:publicationInput -InputSha256 $script:publicationInputSha256 `
+        -ManifestSha256 $script:manifestSha256 -OperationId $script:publicationOperationId `
+        -RelativePath ([string]$Entry.Path)
+    if ($payload.Length -ne [int64]$Entry.CandidateBytes -or
+        (Get-CustodyByteSha256 -Bytes $payload) -cne [string]$Entry.CandidateSha256) {
+        throw "Exact rollback cannot authenticate a partial stage from the publication input."
     }
-    $prefixSha256 = Get-LocalPrefixSha256 -Path $localPath -Bytes ([int64]$Identity.Bytes)
+    $prefixSha256 = Get-PublicationPrefixSha256 -Payload $payload -Bytes ([int64]$Identity.Bytes)
     if ($Identity.Sha256 -cne $prefixSha256) {
         throw "Exact rollback found substituted staging bytes: $($Entry.StagePath)"
     }
@@ -1146,6 +1115,7 @@ if (-not [string]::Equals([IO.Path]::GetFullPath($ManifestPath), $canonicalManif
 }
 $manifestRecord = Read-CustodyJsonFile -Path $canonicalManifestPath -MaximumBytes 2097152 -Label "deployment manifest"
 $script:manifest = $manifestRecord.Value
+$script:manifestSha256 = $manifestRecord.Sha256
 $manifest = $script:manifest
 if ($manifest.schema -cne "uaix.static_site_deployment_manifest.v1" -or
     $manifest.site -cne [string]$authority.site -or
@@ -1246,27 +1216,26 @@ if ($authority.transport.status -cne "bound") {
 }
 
 $operationNonce = [Guid]::NewGuid().ToString("N")
-$snapshot = New-CustodySealedSnapshot `
-    -Phase $script:phase `
-    -RepositoryRoot $repositoryRoot `
-    -Manifest $manifest `
-    -ManifestSha256 $manifestRecord.Sha256 `
-    -SnapshotParent $script:snapshotParent `
-    -OperationId $operationNonce `
-    -Authority $authority
-$script:snapshotRoot = $snapshot.Root
-$script:snapshotSealSha256 = $snapshot.SealSha256
-$script:snapshotOperationId = $snapshot.OperationId
-$script:snapshotRootIdentity = $snapshot.RootIdentity
-$script:phase = "snapshot-sealed"
-$snapshotReleaseBytes = [IO.File]::ReadAllBytes((Join-Path $script:snapshotRoot (([string]$authority.predecessor.release_path) -replace "/", "\")))
-$snapshotHistoryBytes = [IO.File]::ReadAllBytes((Join-Path $script:snapshotRoot (([string]$authority.predecessor.history_path) -replace "/", "\")))
+$script:publicationInput = New-CustodyPublicationInput `
+    -Phase $script:phase -RepositoryRoot $repositoryRoot -Manifest $manifest `
+    -ManifestSha256 $manifestRecord.Sha256 -OperationId $operationNonce -Authority $authority
+$script:publicationInputSha256 = $script:publicationInput.BindingSha256
+$script:publicationOperationId = $operationNonce
+$script:phase = "input-verified"
+$publicationReleaseBytes = Get-CustodyPublicationFileBytes `
+    -InputRecord $script:publicationInput -InputSha256 $script:publicationInputSha256 `
+    -ManifestSha256 $script:manifestSha256 -OperationId $script:publicationOperationId `
+    -RelativePath ([string]$authority.predecessor.release_path)
+$publicationHistoryBytes = Get-CustodyPublicationFileBytes `
+    -InputRecord $script:publicationInput -InputSha256 $script:publicationInputSha256 `
+    -ManifestSha256 $script:manifestSha256 -OperationId $script:publicationOperationId `
+    -RelativePath ([string]$authority.predecessor.history_path)
 Assert-CustodyPublishedReleasePair `
     -Authority $authority `
     -PreparedReleaseBytes $candidateReleaseBytes `
     -PreparedHistoryBytes $candidateHistoryBytes `
-    -PublishedReleaseBytes $snapshotReleaseBytes `
-    -PublishedHistoryBytes $snapshotHistoryBytes
+    -PublishedReleaseBytes $publicationReleaseBytes `
+    -PublishedHistoryBytes $publicationHistoryBytes
 
 $startedUtc = (Get-Date).ToUniversalTime().ToString("o")
 $results = @()
@@ -1344,13 +1313,9 @@ try {
         -CandidateHistoryBytes $candidateHistoryBytes `
         -CandidateCatalogBytes $candidateCatalogBytes `
         -CandidatePeerBytes $candidatePeerBytes
-    Assert-CustodySealedSnapshot `
-        -SnapshotRoot $script:snapshotRoot `
-        -SnapshotParent $script:snapshotParent `
-        -Manifest $manifest `
-        -SealSha256 $script:snapshotSealSha256 `
-        -OperationId $script:snapshotOperationId `
-        -RootIdentity $script:snapshotRootIdentity
+    Assert-CustodyPublicationInput `
+        -InputRecord $script:publicationInput -InputSha256 $script:publicationInputSha256 `
+        -ManifestSha256 $script:manifestSha256 -OperationId $script:publicationOperationId
 
     $releaseMarkerPath = [string]$authority.predecessor.release_path
     foreach ($file in @($manifest.files | Where-Object { [string]$_.path -cne $releaseMarkerPath })) {
@@ -1392,7 +1357,7 @@ try {
         -Authority $authority `
         -PreparedReleaseBytes $candidateReleaseBytes `
         -PreparedHistoryBytes $candidateHistoryBytes `
-        -PublishedReleaseBytes $snapshotReleaseBytes `
+        -PublishedReleaseBytes $publicationReleaseBytes `
         -PublishedHistoryBytes $remotePublishedHistory
     $preMarkerPaths = @($nonMarkerFiles | ForEach-Object { [string]$_.path }) + @(
         $releaseMarkerPath,
@@ -1503,16 +1468,7 @@ try {
     Remove-RemoteDeploymentLease
     $leaseAcquired = $false
 
-    Remove-CustodySealedSnapshot `
-        -Phase $script:phase `
-        -SnapshotRoot $script:snapshotRoot `
-        -SnapshotParent $script:snapshotParent `
-        -RepositoryRoot $repositoryRoot `
-        -Manifest $manifest `
-        -SealSha256 $script:snapshotSealSha256 `
-        -OperationId $script:snapshotOperationId `
-        -RootIdentity $script:snapshotRootIdentity
-    $script:snapshotRoot = $null
+    $script:publicationInput = $null
     $script:phase = "complete"
 
     $receipt = [ordered]@{
@@ -1526,7 +1482,7 @@ try {
         manifest_sha256 = $manifestRecord.Sha256
         authority_sha256 = $authorityRecord.Sha256
         predecessor_receipt_sha256 = [string]$authority.predecessor.receipt_sha256
-        snapshot_seal_sha256 = $snapshot.SealSha256
+        publication_input_sha256 = $script:publicationInputSha256
         operation_nonce = $operationNonce
         started_utc = $startedUtc
         completed_utc = (Get-Date).ToUniversalTime().ToString("o")
@@ -1580,23 +1536,7 @@ catch {
         )
     }
 
-    if ($script:snapshotRoot -and (Test-Path -LiteralPath $script:snapshotRoot)) {
-        try {
-            Remove-CustodySealedSnapshot `
-                -Phase $script:phase `
-                -SnapshotRoot $script:snapshotRoot `
-                -SnapshotParent $script:snapshotParent `
-                -RepositoryRoot $repositoryRoot `
-                -Manifest $manifest `
-                -SealSha256 $script:snapshotSealSha256 `
-                -OperationId $script:snapshotOperationId `
-                -RootIdentity $script:snapshotRootIdentity
-            $script:snapshotRoot = $null
-        }
-        catch {
-            $publicationError = [InvalidOperationException]::new("Publication failed and bounded snapshot cleanup also failed.", $publicationError)
-        }
-    }
+    $script:publicationInput = $null
     if ($script:phase -ceq "read-only") { throw $publicationError }
     $failure = [ordered]@{
         schema = "uaix.site_deployment_receipt.v2"
@@ -1609,7 +1549,7 @@ catch {
         manifest_sha256 = $manifestRecord.Sha256
         authority_sha256 = $authorityRecord.Sha256
         predecessor_receipt_sha256 = [string]$authority.predecessor.receipt_sha256
-        snapshot_seal_sha256 = $snapshot.SealSha256
+        publication_input_sha256 = $script:publicationInputSha256
         operation_nonce = $operationNonce
         started_utc = $startedUtc
         completed_utc = (Get-Date).ToUniversalTime().ToString("o")

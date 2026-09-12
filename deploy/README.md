@@ -43,10 +43,19 @@ Once the authority is legitimately bound, the publication command is:
 ```
 
 The publisher completes every local and public read-only admission check
-first. It then reconstructs canonical Git blobs into a new operation-owned
-snapshot outside the checkout and materializes the two prepared release
-records there as genuinely published 1.1.2 records. The tracked source records
-remain truthful that 1.1.2 is prepared and public production is still 1.1.1.
+first. It then reads the committed publication files into bounded memory and
+requires the current checkout to match those source identities. It materializes
+the two prepared release records in memory as published 1.1.2 records. No local
+site snapshot or staging tree is created. The tracked records remain truthful
+that 1.1.2 is prepared and the recorded public predecessor is 1.1.1.
+
+Publication input is limited to 500 files, 16 MiB per file and 64 MiB total.
+Each Git blob read has bounded output and a 30-second deadline. The input binds
+the source commit, tree, manifest digest, operation and exact published file
+identities. Every member is rechecked before upload or partial-stage rollback;
+uploads consume those authenticated bytes without reopening mutable source.
+New receipts record `publication_input_sha256`. Historical receipts are retained
+byte for byte. These local checks do not establish a successful live deployment.
 
 After transport admission, the publisher acquires one exact operation-bound
 remote lease. Crash residue is never aged out or adopted. While holding that

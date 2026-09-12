@@ -52,10 +52,73 @@ for (const [name, description] of [
   ["rollback-order", "bounds the transaction journal and rolls paths back in exact reverse order"],
   ["lease-ownership", "binds deployment lease cleanup to one exact operation owner"],
   ["published-materialization", "materializes published records without rewriting prepared source facts"],
-  ["sealed-snapshot", "keeps uploads bound after mutable source changes and cleans the snapshot"],
 ]) {
   test(description, () => runHarness(name));
 }
+
+test("exercises bounded input, transfer and rollback using canonical functions without source copies", () => {
+  assert.equal(repositoryRoot.toLowerCase(), "e:\\source\\rust\\minimodel.org");
+  function assertPlainAncestors(target) {
+    let current = target;
+    for (;;) {
+      assert.equal(fs.lstatSync(current).isSymbolicLink(), false, `reparse ancestor: ${current}`);
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+  assertPlainAncestors(repositoryRoot);
+  const parent = path.join(repositoryRoot, "artifacts", "tests");
+  assertPlainAncestors(path.dirname(parent));
+  fs.mkdirSync(parent, { recursive: true });
+  assertPlainAncestors(parent);
+  const operation = crypto.randomUUID();
+  const owned = path.join(parent, `publication-custody-${operation}`);
+  fs.mkdirSync(owned);
+  const marker = path.join(owned, "owner.json");
+  const markerBytes = Buffer.from(JSON.stringify({ operation, suite: "publication-custody" }) + "\n");
+  fs.writeFileSync(marker, markerBytes, { flag: "wx" });
+  try {
+    const command = [
+      "$ErrorActionPreference='Stop'",
+      "$result=Invoke-Pester -Script './tests/MiniModel.DeploymentCustody_test.ps1' -CodeCoverage './tools/MiniModel.DeploymentCustody.psm1' -PassThru -Quiet",
+      "$coverage=$result.CodeCoverage",
+      "$result.TestResult | Where-Object { -not $_.Passed } | Select-Object Name,FailureMessage | ConvertTo-Json -Compress | Write-Output",
+      "[pscustomobject]@{total=$result.TotalCount;passed=$result.PassedCount;failed=$result.FailedCount;hit=$coverage.NumberOfCommandsExecuted;analyzed=$coverage.NumberOfCommandsAnalyzed} | ConvertTo-Json -Compress | Write-Output",
+      "if ($result.FailedCount -ne 0) { exit 1 }",
+    ].join("\n");
+    const result = spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command], {
+      cwd: repositoryRoot, encoding: "utf8", windowsHide: true, timeout: 120_000,
+      maxBuffer: 2 * 1024 * 1024, env: { ...process.env, TEMP: owned, TMP: owned },
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const summary = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+    assert.equal(summary.failed, 0);
+    assert.ok(summary.total > 0);
+    assert.equal(summary.passed, summary.total);
+    assert.ok(summary.hit > 0);
+    console.log(`Publication custody Pester: ${JSON.stringify(summary)}`);
+  } finally {
+    assertPlainAncestors(owned);
+    assert.deepEqual(fs.readFileSync(marker), markerBytes, "test output ownership changed");
+    let entries = 0;
+    function verifyEmptyOutput(directory, depth = 0) {
+      assert.ok(depth <= 4, "test output depth exceeded");
+      for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
+        assert.ok(++entries <= 128, "test output entry bound exceeded");
+        const full = path.join(directory, item.name);
+        assert.equal(fs.lstatSync(full).isSymbolicLink(), false, "test output contains a reparse point");
+        if (full === marker) continue;
+        assert.ok(item.isDirectory(), "unexpected test output file; preserving it for review");
+        verifyEmptyOutput(full, depth + 1);
+      }
+    }
+    verifyEmptyOutput(owned);
+    fs.rmSync(owned, { recursive: true });
+    assert.equal(fs.existsSync(owned), false);
+  }
+});
 
 test("binds the immutable 1.1.1 receipt without editing it", () => {
   const receipt = fs.readFileSync(
@@ -100,19 +163,19 @@ test("keeps workstation paths out of public-safe authority and deployment docs",
   assert.doesNotMatch(publicSafe, /[A-Z]:\\Source\\Rust\\MiniModel\.org/i);
 });
 
-test("performs exact public admission before snapshot creation or credential access", () => {
+test("performs exact public admission before input creation or credential access", () => {
   const publisher = read("tools/deploy-site.ps1");
   const publicAdmission = publisher.indexOf("Assert-CustodyPublicPredecessor -Authority $authority");
   const phaseAdvance = publisher.indexOf('$script:phase = "public-admitted"');
   const transportBinding = publisher.indexOf('if ($authority.transport.status -cne "bound")', phaseAdvance);
-  const snapshot = publisher.indexOf("$snapshot = New-CustodySealedSnapshot", transportBinding);
-  const credentialAccess = publisher.indexOf("$profile = Get-CredentialProfile", snapshot);
+  const input = publisher.indexOf("$script:publicationInput = New-CustodyPublicationInput", transportBinding);
+  const credentialAccess = publisher.indexOf("$profile = Get-CredentialProfile", input);
 
   assert.ok(publicAdmission >= 0);
   assert.ok(publicAdmission < phaseAdvance);
   assert.ok(phaseAdvance < transportBinding);
-  assert.ok(transportBinding < snapshot);
-  assert.ok(snapshot < credentialAccess);
+  assert.ok(transportBinding < input);
+  assert.ok(input < credentialAccess);
   assert.match(publisher, /New-FtpRequest[\s\S]*Assert-CustodyMutationAllowed -Phase \$script:phase -MutationKind remote/);
 });
 
@@ -135,13 +198,13 @@ test("runs the fixed-root source-authority gate before every transport-capable a
   const moduleImport = publisher.indexOf("Import-Module -Name $modulePath -Force");
   const remoteHead = publisher.indexOf("$repositoryObservation = Get-RepositoryObservation");
   const publicRead = publisher.indexOf("$publicReleaseBytes = Get-PublicBytes");
-  const snapshot = publisher.indexOf("$snapshot = New-CustodySealedSnapshot");
+  const input = publisher.indexOf("$script:publicationInput = New-CustodyPublicationInput");
   const credential = publisher.indexOf("$profile = Get-CredentialProfile");
   const ftpUse = publisher.indexOf("$script:lease = New-RemoteDeploymentLease");
 
   assert.ok(gateCall >= 0);
   assert.ok(moduleImport > gateCall, "editable custody module import preceded source-authority gate");
-  for (const later of [remoteHead, publicRead, snapshot, credential, ftpUse]) {
+  for (const later of [remoteHead, publicRead, input, credential, ftpUse]) {
     assert.ok(later > gateCall, `transport-capable action at ${later} preceded source-authority gate`);
   }
   assert.match(
@@ -152,66 +215,6 @@ test("runs the fixed-root source-authority gate before every transport-capable a
   assert.match(publisher, /TinyRustLM\.com\\tinyrustlm/);
   assert.match(publisher, /New-FtpRequest[\s\S]*if \(-not \$script:sourceAuthorityAdmitted\)/);
   assert.doesNotMatch(publisher, /E:\\Source\\Rust\\MiniModel\.org/);
-});
-
-test("fails a hostile source-authority gate before profile, snapshot, receipt, or FTP effects", () => {
-  const fixtureRoot = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "minimodel-gate-order-"));
-  const gateMarker = path.join(fixtureRoot, "gate-invoked.txt");
-  const gateArguments = path.join(fixtureRoot, "gate-arguments.txt");
-  const fakeNode = path.join(fixtureRoot, "node.cmd");
-  const reportPath = path.join(
-    repositoryRoot,
-    "deploy",
-    "receipts",
-    "site-deployment-20991231T235959Z.json",
-  );
-  try {
-    fs.writeFileSync(
-      fakeNode,
-      "@echo off\r\necho invoked>\"%MINIMODEL_GATE_MARKER%\"\r\necho %*>\"%MINIMODEL_GATE_ARGUMENTS%\"\r\nexit /b 23\r\n",
-      "ascii",
-    );
-    assert.equal(fs.existsSync(reportPath), false, "hostile test receipt path must begin absent");
-    const result = spawnSync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        path.join(repositoryRoot, "tools", "deploy-site.ps1"),
-        "-Publish",
-        "-FileZillaProfilePath",
-        path.join(fixtureRoot, "must-not-be-read.xml"),
-        "-ReportPath",
-        reportPath,
-      ],
-      {
-        cwd: repositoryRoot,
-        encoding: "utf8",
-        timeout: 30_000,
-        windowsHide: true,
-        env: {
-          ...process.env,
-          PATH: `${fixtureRoot};${process.env.PATH}`,
-          MINIMODEL_GATE_ARGUMENTS: gateArguments,
-          MINIMODEL_GATE_MARKER: gateMarker,
-        },
-      },
-    );
-    assert.notEqual(result.status, 0);
-    assert.match(`${result.stdout}\n${result.stderr}`, /source-authority gate failed closed/i);
-    assert.equal(fs.readFileSync(gateMarker, "utf8").trim(), "invoked");
-    assert.match(
-      fs.readFileSync(gateArguments, "utf8").trim(),
-      /verify-single-source-authority\.js --require-clean --require-remote-exact$/i,
-    );
-    assert.equal(fs.existsSync(reportPath), false);
-    assert.equal(fs.existsSync(path.join(fixtureRoot, "must-not-be-read.xml")), false);
-  } finally {
-    fs.rmSync(fixtureRoot, { recursive: true, force: true });
-  }
 });
 
 test("holds an exact lease across predecessor proof and keeps backups through final gates", () => {
@@ -249,6 +252,7 @@ test("never converts FTP 550 or SIZE failure into remote absence", () => {
 test("verifies the manifest without reconstructing mutable repo-local staging", () => {
   const builder = read("tools/build-site-deployment-manifest.js");
   const publisher = read("tools/deploy-site.ps1");
+  const custody = read("tools/MiniModel.DeploymentCustody.psm1");
   const ignore = read(".gitignore");
   assert.doesNotMatch(builder, /stagingRoot|deploy[\\/]staging/);
   assert.doesNotMatch(publisher, /deploy[\\/]staging/);
@@ -256,7 +260,10 @@ test("verifies the manifest without reconstructing mutable repo-local staging", 
   assert.equal(fs.existsSync(path.join(repositoryRoot, "deploy/staging")), false);
   assert.match(builder, /--verify/);
   assert.match(publisher, /Get-CustodyGitBlobBytes/);
-  assert.match(publisher, /New-CustodySealedSnapshot/);
+  assert.match(publisher, /New-CustodyPublicationInput/);
+  assert.doesNotMatch(publisher + custody, /SealedSnapshot|snapshotRoot|snapshotParent|GetTempPath|BlobReader|Custody\.NativeMethods/);
+  assert.doesNotMatch(custody, /WriteAllBytes|WriteAllText|Copy-Item|CreateDirectory/);
+  assert.match(publisher, /publication_input_sha256 = \$script:publicationInputSha256/);
 
   const manifestPath = path.join(repositoryRoot, "deploy/site-deployment-manifest.v1.json");
   const before = fs.statSync(manifestPath);

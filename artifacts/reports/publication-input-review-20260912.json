@@ -1,0 +1,190 @@
+{
+  "schema": "minimodel.publication_input_cleanup_review.v1",
+  "reviewed_utc": "2026-09-12T23:12:19Z",
+  "repository": "MiniModel.org",
+  "baseline_commit": "10820ca733cd8b8b70390c44e5a8929bd0a8b471",
+  "purpose": "Retire copied publication snapshots and preserve tested custody behavior using bounded memory in the canonical publisher.",
+  "baseline_git_files": {
+    "tools/MiniModel.DeploymentCustody.psm1": {
+      "bytes": 51492,
+      "sha256": "67de8cde02adacc6894c3b94c930243357055feeec8c67392fec92f718af1355"
+    },
+    "tools/deploy-site.ps1": {
+      "bytes": 75732,
+      "sha256": "f526467af93e429a8897f3de6f45c726fb0ccbcd7e15f2302a74eff9b0f90887"
+    },
+    "tests/deployment-custody.harness.ps1": {
+      "bytes": 23410,
+      "sha256": "360a8aafc0f4a80ced6026c8ba76a371fd040dc4d3b2be54521a2dbe07c3ede0"
+    },
+    "tests/deployment-custody.test.js": {
+      "bytes": 13561,
+      "sha256": "88a6b2adc2df4c0cc76fe2e0f35660eb33d480564cb11f7051dcc48779749eed"
+    },
+    "deploy/README.md": {
+      "bytes": 3032,
+      "sha256": "836507ba34c6da50d53bf7139bac17a7bcaf03aca34eab7ac30843a77cbc2c7e"
+    },
+    ".uai/short-term-memory.uai": {
+      "bytes": 5437,
+      "sha256": "917f4f677f0307be712e38a70714200558eca2c1230db5d31dd4e9f7fd85820b"
+    },
+    ".uai/taboo.uai": {
+      "bytes": 12778,
+      "sha256": "b73e75e731ef97049d918ccde608e7d551bb6220ca0c9a0f8bd7f1a015d7cfe4"
+    },
+    ".gitattributes": {
+      "bytes": 277,
+      "sha256": "0b89f23cab83d7f245e781d3f8f4f14eac73eea2ba1203ef1b2947a78342b453"
+    }
+  },
+  "current_worktree_files": {
+    "tools/MiniModel.DeploymentCustody.psm1": {
+      "bytes": 45644,
+      "sha256": "1ff66dbec7ef8026811b542d2862491804caf4fb964d4c4dc703861ff7af6c6d"
+    },
+    "tools/deploy-site.ps1": {
+      "bytes": 73596,
+      "sha256": "d2a6863b155a7ebf9deea88c3794650afbad0cf7bf45388d282e4e055fcf60cd"
+    },
+    "tests/deployment-custody.harness.ps1": {
+      "bytes": 15350,
+      "sha256": "2ad570c6bce41de909e95aa1594ec2437a55e396c398263e5b672ab1d4fae5ef"
+    },
+    "tests/deployment-custody.test.js": {
+      "bytes": 15115,
+      "sha256": "2fafb4fe97010fd0af56ee71af5756187eb695f5667eb615ce85124d9e799156"
+    },
+    "tests/MiniModel.DeploymentCustody_test.ps1": {
+      "bytes": 24779,
+      "sha256": "7456e30d51e4359d351345bd4514abd91aac7ed7c23e2b61c11e4cc63c42d2a0"
+    },
+    "deploy/README.md": {
+      "bytes": 3665,
+      "sha256": "0617621e0840b97c7b49a8b6f130b4912d466340e095fa25f027c70d90b7a9fa"
+    },
+    ".uai/short-term-memory.uai": {
+      "bytes": 7850,
+      "sha256": "b6008f51bad40783bae63f22443b1c5d65835121ade67832c30f12dfd2f2c8a5"
+    },
+    ".uai/taboo.uai": {
+      "bytes": 13433,
+      "sha256": "8b4516b51e8e68e4518e71834c7363d5c0e47a5f53f63e4eb67a1a655002fd9f"
+    },
+    ".gitattributes": {
+      "bytes": 675,
+      "sha256": "c82244fb2430a70501737c34649eebf7bad6cf6f05af3f4341a692378fb80f38"
+    }
+  },
+  "removed_module_functions": [
+    "Assert-CustodySealedSnapshot",
+    "Get-CustodyPathIdentity",
+    "New-CustodySealedSnapshot",
+    "Remove-CustodySealedSnapshot"
+  ],
+  "removed_other_code": [
+    "Win32 snapshot directory NativeMethods binding",
+    "optional BlobReader production test hook",
+    "sealed-snapshot harness with source/site copies, replacement directory and junction fixtures",
+    "OS-temp fake node.cmd source-gate test"
+  ],
+  "input_contract": {
+    "schema": "minimodel.publication_input.v1",
+    "max_files": 500,
+    "max_member_bytes": 16777216,
+    "max_payload_bytes": 67108864,
+    "git_timeout_ms": 30000,
+    "git_stderr_limit_bytes": 65536,
+    "binding": [
+      "operation_id",
+      "manifest_sha256",
+      "source_commit",
+      "source_tree",
+      "ordered file path/length/sha256"
+    ],
+    "current_source_required": true,
+    "local_site_copies_created": false,
+    "receipt_field": "publication_input_sha256"
+  },
+  "verification": {
+    "node_command": "node --test tests/catalog.test.js tests/catalog-contract.test.js tests/deployment-custody.test.js",
+    "node": {
+      "total": 53,
+      "passed": 53,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    "nested_pester": {
+      "total": 24,
+      "passed": 24,
+      "failed": 0,
+      "module_commands_executed": 238,
+      "module_commands_analyzed": 545,
+      "coverage_scope": "Whole custody module commands; not branch or complete publisher transaction coverage."
+    },
+    "actual_reads": [
+      "current canonical catalog Git blob and working bytes",
+      "current one-member publication input admission",
+      "superseded manifest catalog refused at current-file byte bound",
+      "unchanged historical manifest verify-only CLI"
+    ],
+    "simulations": [
+      "exact chunks and empty writes",
+      "remote offset drift and failed writes",
+      "payload/operation/manifest corruption",
+      "bounded identities and duplicate/case-colliding paths",
+      "prepared-to-published record materialization in memory",
+      "actual file publisher with predecessor backup retained",
+      "already-current predecessor without writes",
+      "authenticated partial-stage rollback",
+      "source gate positive/negative verdicts through in-memory command mock"
+    ],
+    "source_authority_gate": {
+      "verdict": "pass",
+      "coverage": "registered-governed-roots-only",
+      "whole_volume_scan": false
+    },
+    "test_output": "Operation-owned owner marker and Pester directories inside canonical artifacts/tests physically removed; parent is empty."
+  },
+  "experiment_lessons": [
+    "An operation-owned snapshot can still violate the single-source requirement; bounded payload custody does not require a second filesystem source tree.",
+    "Hash committed and current canonical source before materialization; an older valid Git manifest is not current publishable input.",
+    "Keep byte arrays typed, preserve empty members and authenticate exact partial prefixes before rollback deletion.",
+    "Drain Git output and errors concurrently with byte budgets and a deadline; synchronous unbounded pipe reads can hang or consume arbitrary memory.",
+    "Exercise actual canonical definitions using in-memory boundary observations; retain meaningful mutation and rollback rejection cases without copied source fixtures.",
+    "Pester 3 mock call assertions defaulted to Describe scope; explicit It scope separated independent no-read tests. The initial two failures were accumulated test calls, not a bypass in the publication guard.",
+    "The real old-catalog test rejected earlier than its initial expected hash check because the current file is larger than the old bound. Keep that size rejection and check same-length corruption separately."
+  ],
+  "unchanged_publication_inputs": {
+    "manifest": {
+      "bytes": 6868,
+      "sha256": "84b3a3fcfee576a72c9f0fe21e8aeefa22932cec34bb1ac532ce8597516e1364"
+    },
+    "bound_source_commit": "7e0a6eb6bf292ff69e3030adf1d229c811606ce9",
+    "manifest_catalog": {
+      "bytes": 422,
+      "sha256": "700b510d068934627bb0a308da36d7672c1a4e296c7d984ea33199b903692a42"
+    },
+    "current_catalog": {
+      "bytes": 593,
+      "sha256": "d6396eb9d608e5d0b99cc0466accfb4580ae3a3a922884154d765ccf4550de0b"
+    },
+    "transport_status": "unbound",
+    "predecessor_receipt_sha256": "e38bae2fa85fbdfb9688994cc200e2718e0a9a14751974731b59a9387c315014"
+  },
+  "limits": [
+    "No full production publisher entrypoint or FTPS operation executed in this checkpoint.",
+    "No publication, actual seed, model execution, qualification or new production receipt.",
+    "Input tests do not prove remote atomicity or outside-network reachability.",
+    "Bare Node invocation and metadata generator output/runtime bounds remain separate actionable review.",
+    "Current catalog is empty and expired; model and hosting blockers remain.",
+    "Existing policy-blocked deletion groups are unchanged."
+  ],
+  "storage": {
+    "historical_files_deleted": 0,
+    "model_payloads_deleted": 0,
+    "measured_storage_recovery_bytes": null
+  },
+  "lesson_pointer": "../TinyRustLM.com/wiki/runtime-mirust/reports/ecosystem-experiment-lessons-2026-09-12.md#c23"
+}

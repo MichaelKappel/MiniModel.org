@@ -71,12 +71,12 @@ test("CLI rejects external targets and arbitrary output paths without starting a
 
 test("real Edge verifies current expiry and explicitly historical empty/reload/recovery states with complete cleanup", async () => {
   const parent = path.join(root, "artifacts", "tests");
-  const before = fs.readdirSync(parent).sort();
   const environment = Object.fromEntries(["TMP", "TEMP", "TMPDIR"].map((name) => [name, process.env[name]]));
   const report = await smoke.runBrowserSmoke();
   assert.equal(report.observations.length, 8);
   assert.equal(report.output_absent, true);
-  assert.deepEqual(fs.readdirSync(parent).sort(), before);
+  assert.equal(path.dirname(report.operation_directory), parent);
+  assert.equal(fs.existsSync(report.operation_directory), false);
   assert.deepEqual(Object.fromEntries(Object.keys(environment).map((name) => [name, process.env[name]])), environment);
   process.stdout.write(`Browser verification: ${JSON.stringify(report)}\n`);
 });

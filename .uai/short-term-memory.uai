@@ -1,12 +1,12 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-09-13T00:16:43Z
+updated_utc: 2026-09-13T00:41:39Z
 site: MiniModel.org
 status: prepared_source_1.1.2_not_published
 
 ecosystem_cleanup_2026_09_12:
   - Reconciled current guidance with the owner's authorization for initial MiniModel.org server seeds, stored only in D:\LLMs\TinyRustLM.
   - Preserved pending strict catalog/peer validation, canonical bytes, expiry, Ed25519 signatures, qualification and browser-admission descriptors, lifecycle revocation, and exact MiniModel.org seed-origin admission.
-  - All 32 catalog and cross-project contract tests passed. Test-only signatures and entries are synthetic; they do not establish model qualification or live peer transfer.
+  - All 35 current catalog and cross-project contract tests passed. Test-only signatures and entries are synthetic; they do not establish model qualification or live peer transfer.
   - Current source is a prepared 1.1.2 candidate. The checked-in empty revision-3 catalog expired on 2026-09-09; no freshness, qualified starter, live seed or new deployment is claimed.
   - Production Companion ownership is TinyRustLM.com/dotnet/src/TinyRustLM.Companion, its CompanionHost tool, conversion/P2P projects and current Rust crates. Source acquisition, operation ownership, terminal reconciliation and browser wiring are implemented; real-model qualification and live seed proof remain open. MiniModel.org does not regain its retired pre-SLM2 native workspace.
   - Publication input now stays in bounded memory instead of copied site snapshots. The deployment Node launcher and generator have also been cleaned and exercised; release identities now bind the current public source and planned UTC publication date. Catalog freshness and real model/hosting work remain open. No transport was invoked.
@@ -42,6 +42,17 @@ publication_binding_cleanup_2026_09_12:
   failed_checks: The first run passed 65/67 Node and 26/27 nested Pester checks; one assertion expected expired instead of the contract's stale wording, and one test incorrectly used the refreshed canonical manifest as its historical fixture. The latter now reads exact historical Git bytes without writing a copy.
   current_blockers: Verification rejects the empty revision-3 catalog's expired validity window through the actual browser contract before public admission or credentials. No validity window was renewed. Transport remains unbound. Real qualification and authorized seed hosting remain unresolved. A later publishing day needs reviewed metadata regeneration, not automatic renewal or replay.
   storage: Operation-owned test output was removed. No historical deletion, model acquisition, publication receipt or measured storage recovery was produced.
+
+browser_catalog_cleanup_2026_09_12:
+  status: implemented_and_locally_verified_not_published
+  source_commit: d30114cac9326be104d0c441151caf0224425e3d
+  evidence: artifacts/reports/browser-catalog-review-20260912.json
+  lessons: ../TinyRustLM.com/wiki/runtime-mirust/reports/ecosystem-experiment-lessons-2026-09-12.md C26
+  product: Loading or failed catalog authority clears previous actions, counts and filter callbacks. Failure shows a plain unavailable message and disables unusable controls. Verified retry restores the controls; superseded requests cannot overwrite newer ready or error state. CSS is unchanged.
+  browser_tool: Removed system-temp profiles/screenshots, manual debugging-port management, broad command-line process matching and swallowed cleanup failures. Actual Edge uses existing canonical Playwright, a six-input ephemeral loopback server and one bounded owned artifact directory. Screenshots stay in memory; browsers and listeners close before ownership-checked removal. No arbitrary target/output arguments remain.
+  verification: Full affected suite passed 74 Node and 27 nested Pester checks, zero skips/cancellations. Eight real Edge observations cover desktop/mobile current expiry and explicitly historical empty, failed reload and recovered empty states. Node coverage is 90.76 percent lines and 80.82 percent branches for catalog.js; 92.88 percent lines and 88.89 percent branches for the browser helper. This does not instrument JavaScript executed inside Edge.
+  lessons_retained: Refresh the content-bound script URL with public script changes; isolate fixture clocks in fresh browsers; verify the operation's own output rather than a concurrently used artifacts parent; direct the coverage collector's parent process temp environment into owned canonical artifacts.
+  limits: Historical fixture time is not catalog renewal, qualification or seed availability. Actual publication still rejects expired catalog authority before public admission and credentials. Transport is unbound; real model qualification and hosting remain open. No screenshots or browser profiles remain, no historical/model deletion occurred, and no measured storage recovery is claimed.
 
 publication_predecessor:
   authority: deploy/publication-authority.v1.json

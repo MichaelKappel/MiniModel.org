@@ -186,6 +186,7 @@ async function runBrowserSmoke() {
     report.source_inputs = Object.values(inputs).map(({ relative, bytes, sha256 }) => ({ path: relative, bytes: bytes.length, sha256 }));
     report.historical_fixture_time = catalog.generated_at_utc;
     owned = createOwnedOutput();
+    report.operation_directory = owned.directory;
     const temporary = path.join(owned.directory, "temporary");
     fs.mkdirSync(temporary);
     for (const name of Object.keys(previous)) process.env[name] = temporary;

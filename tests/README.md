@@ -41,3 +41,11 @@ when the source ceases to match the declared empty/expired fixture assumptions.
 
 Keep experiment lessons and compact evidence in the existing ecosystem record.
 Do not retain source copies, browser profiles or screenshots as another archive.
+
+Node's experimental coverage collector creates its own temporary directory before
+loading tests. When collecting coverage, launch the test process with TMP, TEMP
+and TMPDIR pointing to an exclusively owned directory under this repository's
+artifacts/tests, and verify removal after the process closes. Do not assume the
+browser helper's scoped environment also contains its parent test runner. Cleanup
+assertions must identify that operation's directory, not require the shared
+artifacts/tests parent to be empty while independent checks run.

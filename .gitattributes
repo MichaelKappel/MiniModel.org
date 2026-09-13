@@ -43,3 +43,4 @@ artifacts/reports/publication-binding-review-20260912.json text eol=lf
 tests/browser-smoke_test.js text eol=lf
 tests/README.md text eol=lf
 tests/catalog-contract.test.js text eol=lf
+artifacts/reports/browser-catalog-review-20260912.json text eol=lf

@@ -1,0 +1,474 @@
+{
+  "schema": "minimodel.browser_catalog_review.v1",
+  "reviewed_utc": "2026-09-13T00:41:39Z",
+  "status": "locally-verified-prepared-not-published",
+  "baseline_commit": "4f6e8cfd5698081ce7fe25b956494ea62988d08f",
+  "public_source_commit": "d30114cac9326be104d0c441151caf0224425e3d",
+  "changes": [
+    "Catalog failure removes misleading loading text and obsolete actions; current controls are disabled until verified recovery.",
+    "Only the latest load can render; replaced callback properties prevent old filter handlers accumulating.",
+    "Browser tool serves six exact canonical public inputs from bounded memory and uses existing installed Edge/Playwright.",
+    "Profiles, temporary data and automation output stay under one owned canonical artifact directory. Broad process matching, manual CDP plumbing, arbitrary targets and swallowed cleanup errors are removed."
+  ],
+  "candidate": {
+    "source_commit": "d30114cac9326be104d0c441151caf0224425e3d",
+    "source_tree": "a4b4bf77a637c7eb3101dab248c177e40978d29f",
+    "manifest": {
+      "bytes": 6900,
+      "sha256": "441119e9bcd3c450cbb7e7f03ab2df68954d0e36ec4acb18bd0943719bc51276"
+    },
+    "authority": {
+      "bytes": 2845,
+      "sha256": "21bf15ce97df4c4670a5261549616a3f24eb08cd77f9768e312f191fcf346307"
+    },
+    "planned_publication_date": "2026-09-13",
+    "public_file_count": 22,
+    "materialized_publication_bytes": 113666
+  },
+  "verification": {
+    "node": {
+      "passed": 74,
+      "total": 74,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 101275.866
+    },
+    "nested_pester": {
+      "passed": 27,
+      "total": 27,
+      "failed": 0,
+      "module_commands_hit": 241,
+      "module_commands_analyzed": 562
+    },
+    "node_coverage": {
+      "catalog.js": {
+        "line_percent": 90.76,
+        "branch_percent": 80.82,
+        "function_percent": 98.77
+      },
+      "tests/browser-smoke.js": {
+        "line_percent": 92.88,
+        "branch_percent": 88.89,
+        "function_percent": 70.83
+      },
+      "scope": "Node processes only; browser-evaluated functions and some separate CLI invocations are not instrumented"
+    },
+    "source_gate": {
+      "verdict": "pass",
+      "coverageClass": "registered-governed-roots-only",
+      "wholeVolumeInventoryPerformed": false
+    },
+    "browser": {
+      "schema": "minimodel.browser_smoke.v2",
+      "started_utc": "2026-09-13T00:39:09.192Z",
+      "observations": [
+        {
+          "label": "desktop:current-expired-source",
+          "width": 1440,
+          "height": 1000,
+          "documentWidth": 1440,
+          "bodyWidth": 1440,
+          "catalogTop": 489.171875,
+          "heading": {
+            "left": 40,
+            "right": 800
+          },
+          "state": "error",
+          "status": "The model catalog is unavailable. Please try again later.",
+          "models": 0,
+          "actions": 0,
+          "list": "The model catalog is unavailable. Please try again later.",
+          "totals": "Unavailable Unavailable Unavailable",
+          "searchDisabled": true,
+          "filterDisabled": true,
+          "filter": "all",
+          "footer": "MiniModel.org Version 1.1.2 Publication history Release JSON",
+          "screenshot": {
+            "bytes": 274697,
+            "sha256": "08ff371b2f5444d65fb1fa186495adb44f55bfcdf8de5aac97c6b641fad75189"
+          }
+        },
+        {
+          "label": "desktop:historical-empty-fixture",
+          "width": 1440,
+          "height": 1000,
+          "documentWidth": 1440,
+          "bodyWidth": 1440,
+          "catalogTop": 489.171875,
+          "heading": {
+            "left": 40,
+            "right": 800
+          },
+          "state": "ready",
+          "status": "Current metadata loaded. Zero compositions are qualified, so no model action is offered.",
+          "models": 0,
+          "actions": 0,
+          "list": "No SLM2 composition is qualified yet. The catalog remains empty until exact current evidence exists.",
+          "totals": "0 qualified compositions 0 with current direct peers 0 pinned conversion routes",
+          "searchDisabled": false,
+          "filterDisabled": false,
+          "filter": "all",
+          "footer": "MiniModel.org Version 1.1.2 Publication history Release JSON",
+          "screenshot": {
+            "bytes": 279010,
+            "sha256": "b488db3fb323840ee68b205ccd6bc88aee55b8fb33302a67625cb2d4009649c4"
+          }
+        },
+        {
+          "label": "desktop:failed-reload-fixture",
+          "width": 1440,
+          "height": 1000,
+          "documentWidth": 1440,
+          "bodyWidth": 1440,
+          "catalogTop": 489.171875,
+          "heading": {
+            "left": 40,
+            "right": 800
+          },
+          "state": "error",
+          "status": "The model catalog is unavailable. Please try again later.",
+          "models": 0,
+          "actions": 0,
+          "list": "The model catalog is unavailable. Please try again later.",
+          "totals": "Unavailable Unavailable Unavailable",
+          "searchDisabled": true,
+          "filterDisabled": true,
+          "filter": "all",
+          "footer": "MiniModel.org Version 1.1.2 Publication history Release JSON",
+          "screenshot": {
+            "bytes": 274697,
+            "sha256": "08ff371b2f5444d65fb1fa186495adb44f55bfcdf8de5aac97c6b641fad75189"
+          }
+        },
+        {
+          "label": "desktop:recovered-empty-fixture",
+          "width": 1440,
+          "height": 1000,
+          "documentWidth": 1440,
+          "bodyWidth": 1440,
+          "catalogTop": 489.171875,
+          "heading": {
+            "left": 40,
+            "right": 800
+          },
+          "state": "ready",
+          "status": "Current metadata loaded. Zero compositions are qualified, so no model action is offered.",
+          "models": 0,
+          "actions": 0,
+          "list": "No SLM2 composition is qualified yet. The catalog remains empty until exact current evidence exists.",
+          "totals": "0 qualified compositions 0 with current direct peers 0 pinned conversion routes",
+          "searchDisabled": false,
+          "filterDisabled": false,
+          "filter": "all",
+          "footer": "MiniModel.org Version 1.1.2 Publication history Release JSON",
+          "screenshot": {
+            "bytes": 279010,
+            "sha256": "b488db3fb323840ee68b205ccd6bc88aee55b8fb33302a67625cb2d4009649c4"
+          }
+        },
+        {
+          "label": "mobile:current-expired-source",
+          "width": 390,
+          "height": 844,
+          "documentWidth": 390,
+          "bodyWidth": 390,
+          "catalogTop": 610.140625,
+          "heading": {
+            "left": 20,
+            "right": 370
+          },
+          "state": "error",
+          "status": "The model catalog is unavailable. Please try again later.",
+          "models": 0,
+          "actions": 0,
+          "list": "The model catalog is unavailable. Please try again later.",
+          "totals": "Unavailable Unavailable Unavailable",
+          "searchDisabled": true,
+          "filterDisabled": true,
+          "filter": "all",
+          "footer": "MiniModel.org Version 1.1.2 Publication history Release JSON",
+          "screenshot": {
+            "bytes": 98003,
+            "sha256": "cba4c347661bd40b5fd4ecf38fabfed8a80c9c2a0bad22e18a4624cecf0e588a"
+          }
+        },
+        {
+          "label": "mobile:historical-empty-fixture",
+          "width": 390,
+          "height": 844,
+          "documentWidth": 390,
+          "bodyWidth": 390,
+          "catalogTop": 610.140625,
+          "heading": {
+            "left": 20,
+            "right": 370
+          },
+          "state": "ready",
+          "status": "Current metadata loaded. Zero compositions are qualified, so no model action is offered.",
+          "models": 0,
+          "actions": 0,
+          "list": "No SLM2 composition is qualified yet. The catalog remains empty until exact current evidence exists.",
+          "totals": "0 qualified compositions 0 with current direct peers 0 pinned conversion routes",
+          "searchDisabled": false,
+          "filterDisabled": false,
+          "filter": "all",
+          "footer": "MiniModel.org Version 1.1.2 Publication history Release JSON",
+          "screenshot": {
+            "bytes": 98003,
+            "sha256": "cba4c347661bd40b5fd4ecf38fabfed8a80c9c2a0bad22e18a4624cecf0e588a"
+          }
+        },
+        {
+          "label": "mobile:failed-reload-fixture",
+          "width": 390,
+          "height": 844,
+          "documentWidth": 390,
+          "bodyWidth": 390,
+          "catalogTop": 610.140625,
+          "heading": {
+            "left": 20,
+            "right": 370
+          },
+          "state": "error",
+          "status": "The model catalog is unavailable. Please try again later.",
+          "models": 0,
+          "actions": 0,
+          "list": "The model catalog is unavailable. Please try again later.",
+          "totals": "Unavailable Unavailable Unavailable",
+          "searchDisabled": true,
+          "filterDisabled": true,
+          "filter": "all",
+          "footer": "MiniModel.org Version 1.1.2 Publication history Release JSON",
+          "screenshot": {
+            "bytes": 98003,
+            "sha256": "cba4c347661bd40b5fd4ecf38fabfed8a80c9c2a0bad22e18a4624cecf0e588a"
+          }
+        },
+        {
+          "label": "mobile:recovered-empty-fixture",
+          "width": 390,
+          "height": 844,
+          "documentWidth": 390,
+          "bodyWidth": 390,
+          "catalogTop": 610.140625,
+          "heading": {
+            "left": 20,
+            "right": 370
+          },
+          "state": "ready",
+          "status": "Current metadata loaded. Zero compositions are qualified, so no model action is offered.",
+          "models": 0,
+          "actions": 0,
+          "list": "No SLM2 composition is qualified yet. The catalog remains empty until exact current evidence exists.",
+          "totals": "0 qualified compositions 0 with current direct peers 0 pinned conversion routes",
+          "searchDisabled": false,
+          "filterDisabled": false,
+          "filter": "all",
+          "footer": "MiniModel.org Version 1.1.2 Publication history Release JSON",
+          "screenshot": {
+            "bytes": 98003,
+            "sha256": "cba4c347661bd40b5fd4ecf38fabfed8a80c9c2a0bad22e18a4624cecf0e588a"
+          }
+        }
+      ],
+      "source_inputs": [
+        {
+          "path": "index.html",
+          "bytes": 8357,
+          "sha256": "59b7a21eefc803218cd28e64dbe0340eacb6b10dc2403e0c40a20298ebe43828"
+        },
+        {
+          "path": "styles.css",
+          "bytes": 12888,
+          "sha256": "3d262ee6f3a565a15f2f7708a50dc0977ec17b013a9d2f42bf70ba38b3a5f369"
+        },
+        {
+          "path": "catalog.js",
+          "bytes": 46600,
+          "sha256": "1154872dcbfbce55f49be824e78a98dc876a85543eb0e0d587a6488d47721742"
+        },
+        {
+          "path": "catalog/compositions.v1.json",
+          "bytes": 593,
+          "sha256": "d6396eb9d608e5d0b99cc0466accfb4580ae3a3a922884154d765ccf4550de0b"
+        },
+        {
+          "path": "catalog/peer-announcements.v1.json",
+          "bytes": 292,
+          "sha256": "b45ff62016fecdeceb44a9906fe2f1efd364fc0c52324a49500841884d4d3773"
+        },
+        {
+          "path": "updates/index.html",
+          "bytes": 4253,
+          "sha256": "131799814a3ed671e866cbac2d8a5b93cf20932a2bc46fbf11e5d8cab50468e7"
+        }
+      ],
+      "historical_fixture_time": "2026-09-08T02:40:00Z",
+      "operation_directory": "E:\\Source\\Rust\\MiniModel.org\\artifacts\\tests\\minimodel-browser-EbfL1y",
+      "playwright_version": "1.61.1",
+      "browser_version": "153.0.4234.32",
+      "cleaned_output": {
+        "files": 446,
+        "bytes": 21470913
+      },
+      "output_absent": true
+    },
+    "coverage_output": {
+      "contained_run": true,
+      "wrapper_removed": true,
+      "residual_files": 0
+    },
+    "layout": "CSS bytes unchanged; desktop 1440x1000 and mobile 390x844 show no horizontal overflow and the catalog begins within the initial viewport. No pixel comparison or manual screenshot inspection is claimed."
+  },
+  "initial_findings": [
+    {
+      "finding": "The first catalog run rejected a stale content-bound script cache identity after the script changed.",
+      "correction": "Updated the index script query hash; retained the assertion."
+    },
+    {
+      "finding": "The first real browser run saw the historical fixture clock affect the next viewport current-time case.",
+      "correction": "Use a fresh browser for each viewport; historical fixtures are explicitly labeled."
+    },
+    {
+      "finding": "The first full run passed 73/74 Node checks; browser cleanup assertion included another live Pester output directory in the shared parent.",
+      "correction": "Independently verify the exact browser operation directory is absent; do not own the shared parent."
+    },
+    {
+      "finding": "Node experimental coverage creates a temporary directory before test helpers run. Its initial default-temp directory was removed by Node; no node-coverage directory remained in the service account temp listing.",
+      "correction": "The corrected full-run parent TMP/TEMP/TMPDIR points into an exclusively owned canonical artifact directory, removed after the child closes."
+    }
+  ],
+  "limits": [
+    "Screenshots were generated and hashed in memory; raster payloads are not retained.",
+    "Historical issuance-time fixtures do not renew authority, qualify a model or establish a peer/seed.",
+    "Catalog and peer feed remain empty and expired since 2026-09-09.",
+    "The actual publisher still refuses catalog expiry before public admission or credentials; no deployment occurred.",
+    "Transport is unbound; model qualification, seed hosting and broader ecosystem cleanup remain incomplete."
+  ],
+  "effects": {
+    "new_source_copies": 0,
+    "historical_files_deleted": 0,
+    "models_acquired_or_deleted": 0,
+    "publications": 0,
+    "owned_output_remaining": 0,
+    "measured_storage_recovery_bytes": null
+  },
+  "files": [
+    {
+      "path": ".gitattributes",
+      "before": {
+        "bytes": 1636,
+        "sha256": "0f4939e42d084ec4f75be3523225da5cc0b01991a0b780a1c2a7108277f3f285"
+      },
+      "after": {
+        "bytes": 1814,
+        "sha256": "f22e66d2dc99e58ea28bdd0cad52b6adcb75b06db1db69e81fab8d675c998451"
+      }
+    },
+    {
+      "path": ".uai/short-term-memory.uai",
+      "before": {
+        "bytes": 11932,
+        "sha256": "b3577d3697d8295ce666ca834ed0b2adaae6678f288374a877bba937481f5aa3"
+      },
+      "after": {
+        "bytes": 14138,
+        "sha256": "3360883220ef313d60a209d5cda5e316e02e96663228ce0cd30b8614f399509b"
+      }
+    },
+    {
+      "path": ".well-known/site-release-history.json",
+      "before": {
+        "bytes": 3531,
+        "sha256": "a2d29d863f4e9f23ebc6c71c88e220b323a3a0f8c829e42dd8f949e55f6187ea"
+      },
+      "after": {
+        "bytes": 3650,
+        "sha256": "70d9a21412bdfe0a414f0477e7ed47778c9855186d5663f5151f53fff5d086cf"
+      }
+    },
+    {
+      "path": "catalog.js",
+      "before": {
+        "bytes": 44937,
+        "sha256": "4a1df0995f040c806ccb5a8b956859e815b03ed56be6c2509e71593211b557d0"
+      },
+      "after": {
+        "bytes": 46600,
+        "sha256": "1154872dcbfbce55f49be824e78a98dc876a85543eb0e0d587a6488d47721742"
+      }
+    },
+    {
+      "path": "deploy/publication-authority.v1.json",
+      "before": {
+        "bytes": 2845,
+        "sha256": "350e2c316451df9db4bef470350f3cf8d7d2c37f32ec3164c3f437efa3d216eb"
+      },
+      "after": {
+        "bytes": 2845,
+        "sha256": "21bf15ce97df4c4670a5261549616a3f24eb08cd77f9768e312f191fcf346307"
+      }
+    },
+    {
+      "path": "deploy/site-deployment-manifest.v1.json",
+      "before": {
+        "bytes": 6900,
+        "sha256": "f76720cc635854c749de76cbfabafd0f4289cab07b56673590f2cea1c61e44a2"
+      },
+      "after": {
+        "bytes": 6900,
+        "sha256": "441119e9bcd3c450cbb7e7f03ab2df68954d0e36ec4acb18bd0943719bc51276"
+      }
+    },
+    {
+      "path": "index.html",
+      "before": {
+        "bytes": 8357,
+        "sha256": "e6bb0e3f7b77f62b4b685d3de0957266a80df08c88f8087025c92fedfd5982b7"
+      },
+      "after": {
+        "bytes": 8357,
+        "sha256": "59b7a21eefc803218cd28e64dbe0340eacb6b10dc2403e0c40a20298ebe43828"
+      }
+    },
+    {
+      "path": "tests/README.md",
+      "before": null,
+      "after": {
+        "bytes": 2920,
+        "sha256": "4f6fa156b5cf6dcd703916789b066d77a683d81f6baf6e3018d096f043926fd9"
+      }
+    },
+    {
+      "path": "tests/browser-smoke.js",
+      "before": {
+        "bytes": 13230,
+        "sha256": "f6443e18106cc34b1f53341c9f17af1e01b5c6b230b7f4709b4fa71e835e94c6"
+      },
+      "after": {
+        "bytes": 14247,
+        "sha256": "a769c7f3cbf7f73ae1be07c441758cd7acbada81fba4c3fc7c9698f2013e5053"
+      }
+    },
+    {
+      "path": "tests/browser-smoke_test.js",
+      "before": null,
+      "after": {
+        "bytes": 4544,
+        "sha256": "e5af78551cff4bd312f0b94d8705b071c59d2a7ef69701e75900c036a497b3cb"
+      }
+    },
+    {
+      "path": "tests/catalog-contract.test.js",
+      "before": {
+        "bytes": 16870,
+        "sha256": "d9d24d8608e225d430b4f56002dc83e7ddd0daa999a97da0413cf788997e6480"
+      },
+      "after": {
+        "bytes": 20498,
+        "sha256": "5b7f02cd3c8f7fc406365284854072eeadd3270cf6e188c8b9c1bfe8d01b4f3f"
+      }
+    }
+  ]
+}

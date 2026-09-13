@@ -1,0 +1,43 @@
+# MiniModel verification
+
+Run the current catalog, cross-project contract, publication and browser checks
+from the canonical MiniModel.org repository:
+
+```powershell
+node --test tests/catalog.test.js tests/catalog-contract.test.js tests/deployment-custody.test.js tests/build-site-deployment-manifest_test.js tests/browser-smoke_test.js
+```
+
+The publication checks require the installed reviewed Node binary, PowerShell
+with Pester, Git, and the unchanged canonical TinyRustLM source-authority gate.
+The service account may need its established process-local Git safe-directory
+settings for the seven canonical repositories. Do not alter the gate or global
+Git settings to make an observation pass.
+
+The browser check uses installed Microsoft Edge and the existing playwright-core
+package under the canonical TinyRustLM.com/tinyrustlm/node_modules directory.
+It downloads no browser or dependency. To emit its standalone observation:
+
+```powershell
+node tests/browser-smoke.js
+```
+
+No target URL or output path is accepted. The tool serves exactly six canonical
+public inputs from bounded memory on its own ephemeral loopback listener. Private
+files, source tools and external origins are excluded. Profiles, browser temporary
+files and automation output stay in one exclusively created operation directory
+under MiniModel.org/artifacts/tests. Screenshots are hashed in memory. The tool
+closes its browsers and listener, validates directory/marker ownership and the
+bounded ordinary output tree, then proves removal. Cleanup failure is an error;
+it is never silently deferred or treated as a passing run. Do not adopt or erase
+an abandoned run through this tool.
+
+Each viewport uses a fresh browser. Current expired-catalog rendering is checked
+with its real current clock. Separately labeled historical fixtures set the
+browser clock to the checked-in catalog's issuance time and exercise its empty
+state, an HTTP 503 reload failure and recovery. That clock and those empty
+metadata fixtures prove UI behavior only. They do not renew catalog authority,
+qualify a model, establish a seed or prove deployment. The tool fails for review
+when the source ceases to match the declared empty/expired fixture assumptions.
+
+Keep experiment lessons and compact evidence in the existing ecosystem record.
+Do not retain source copies, browser profiles or screenshots as another archive.

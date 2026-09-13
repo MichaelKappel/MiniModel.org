@@ -321,5 +321,63 @@ test("page loader awaits signature verification and never renders a tampered fee
   pair.peerFeed.announcements[0].piece_set_sha256 = sha("a");
   const rejectedDocument = documentFixture();
   await assert.rejects(site.loadCatalog(rejectedDocument, fetch, options), /signature/);
-  assert.equal(rejectedDocument.getElementById("modelCatalogList").children.length, 0);
+  assert.equal(rejectedDocument.getElementById("modelCatalogStatus").dataset.state, "error");
+  assert.match(rejectedDocument.getElementById("modelCatalogList").children[0].textContent, /catalog is unavailable/);
+});
+
+test("failed reload clears prior actions and callbacks, and a successful retry restores controls", async () => {
+  const pair = signedFixture();
+  const document = documentFixture();
+  const fetch = async (url) => ({ ok: true, text: async () => canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog) });
+  document.getElementById("modelCatalogAvailability").value = "all";
+  await site.loadCatalog(document, fetch, options);
+  const filter = document.getElementById("modelCatalogAvailability");
+  assert.equal(typeof filter.onchange, "function");
+  assert.equal(filter.disabled, false);
+  await assert.rejects(site.loadCatalog(document, async () => ({ ok: false, status: 503 }), options), /HTTP 503/);
+  assert.equal(filter.disabled, true);
+  assert.equal(filter.onchange, null);
+  assert.equal(document.getElementById("modelCatalogSearch").oninput, null);
+  assert.equal(document.getElementById("modelCatalogStatus").dataset.state, "error");
+  assert.match(document.getElementById("modelCatalogList").children[0].textContent, /catalog is unavailable/);
+  for (const id of ["modelCatalogTotal", "modelCatalogActive", "modelCatalogReady", "modelCatalogVisibleCount"]) {
+    assert.equal(document.getElementById(id).textContent, "Unavailable");
+  }
+  await site.loadCatalog(document, fetch, options);
+  assert.equal(filter.disabled, false);
+  assert.equal(typeof filter.onchange, "function");
+  assert.equal(document.getElementById("modelCatalogStatus").dataset.state, "ready");
+});
+
+test("an older load cannot overwrite the current catalog or its failure state", async () => {
+  const pair = signedFixture();
+  const document = documentFixture();
+  let releaseOld;
+  const waiting = new Promise((resolve) => { releaseOld = resolve; });
+  const fetch = async (url) => ({ ok: true, text: async () => canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog) });
+  const old = site.loadCatalog(document, async (url) => { await waiting; return fetch(url); }, options);
+  const rejection = assert.rejects(old, /superseded/);
+  await assert.rejects(site.loadCatalog(document, async () => ({ ok: false, status: 503 }), options), /HTTP 503/);
+  releaseOld();
+  await rejection;
+  assert.equal(document.getElementById("modelCatalogStatus").dataset.state, "error");
+  assert.equal(document.getElementById("modelCatalogAvailability").disabled, true);
+  assert.match(document.getElementById("modelCatalogList").children[0].textContent, /catalog is unavailable/);
+});
+
+test("an older failed load cannot clear a newer verified catalog", async () => {
+  const pair = signedFixture();
+  const document = documentFixture();
+  let rejectOld;
+  const waiting = new Promise((resolve, reject) => { rejectOld = reject; });
+  const old = site.loadCatalog(document, async () => waiting, options);
+  const rejected = assert.rejects(old, /old request failed/);
+  const fetch = async (url) => ({ ok: true, text: async () => canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog) });
+  document.getElementById("modelCatalogAvailability").value = "all";
+  await site.loadCatalog(document, fetch, options);
+  rejectOld(new Error("old request failed"));
+  await rejected;
+  assert.equal(document.getElementById("modelCatalogStatus").dataset.state, "ready");
+  assert.equal(document.getElementById("modelCatalogAvailability").disabled, false);
+  assert.equal(typeof document.getElementById("modelCatalogAvailability").onchange, "function");
 });

@@ -956,8 +956,10 @@
       }
       count.textContent = `${filtered.length} ${filtered.length === 1 ? "composition" : "compositions"}`;
     };
-    queryInput.addEventListener("input", renderFiltered);
-    filterSelect.addEventListener("change", renderFiltered);
+    queryInput.disabled = false;
+    filterSelect.disabled = false;
+    queryInput.oninput = renderFiltered;
+    filterSelect.onchange = renderFiltered;
     renderFiltered();
   }
 
@@ -995,32 +997,74 @@
     return parseCanonicalJsonText(text);
   }
 
-  async function loadCatalog(documentObject, fetchImplementation = globalObject.fetch, options = {}) {
-    if (typeof fetchImplementation !== "function") {
-      throw new Error("catalog fetch is unavailable");
-    }
-    const base = new URL(globalObject.location ? globalObject.location.href : "https://minimodel.org/");
-    const [catalog, peerFeed] = await Promise.all([
-      fetchJson(new URL("/catalog/compositions.v1.json", base), fetchImplementation),
-      fetchJson(new URL("/catalog/peer-announcements.v1.json", base), fetchImplementation),
-    ]);
-    const views = await buildVerifiedCatalogView(catalog, peerFeed, options);
-    renderCatalog(documentObject, views);
+  const activeCatalogLoads = new WeakMap();
 
-    const total = documentObject.getElementById("modelCatalogTotal");
-    const peers = documentObject.getElementById("modelCatalogActive");
-    const local = documentObject.getElementById("modelCatalogReady");
-    const status = documentObject.getElementById("modelCatalogStatus");
-    if (total) total.textContent = `${views.length} qualified compositions`;
-    if (peers) peers.textContent = `${views.filter((view) => view.availability === "peer").length} with current direct peers`;
-    if (local) local.textContent = `${views.filter((view) => view.availability === "local-conversion").length} pinned conversion routes`;
-    if (status) {
-      status.dataset.state = "ready";
-      status.textContent = views.length
-        ? "Current metadata loaded. Every action still requires local verification."
-        : "Current metadata loaded. Zero compositions are qualified, so no model action is offered.";
+  // Remove old actions and callbacks whenever current catalog authority is unavailable.
+  function renderCatalogState(documentObject, state) {
+    for (const id of ["modelCatalogSearch", "modelCatalogAvailability"]) {
+      const control = documentObject.getElementById(id);
+      if (control) {
+        control.disabled = true;
+        control.oninput = null;
+        control.onchange = null;
+      }
     }
-    return views;
+    const message = state === "error"
+      ? "The model catalog is unavailable. Please try again later."
+      : "Loading current catalog.";
+    const list = documentObject.getElementById("modelCatalogList");
+    if (list) {
+      const empty = documentObject.createElement("li");
+      empty.className = "catalog-empty";
+      empty.textContent = message;
+      list.replaceChildren(empty);
+    }
+    for (const id of ["modelCatalogTotal", "modelCatalogActive", "modelCatalogReady", "modelCatalogVisibleCount"]) {
+      const node = documentObject.getElementById(id);
+      if (node) node.textContent = state === "error" ? "Unavailable" : "Loading";
+    }
+    const status = documentObject.getElementById("modelCatalogStatus");
+    if (status) {
+      status.dataset.state = state;
+      status.textContent = message;
+    }
+  }
+
+  async function loadCatalog(documentObject, fetchImplementation = globalObject.fetch, options = {}) {
+    const operation = Symbol("catalog load");
+    activeCatalogLoads.set(documentObject, operation);
+    renderCatalogState(documentObject, "loading");
+    try {
+      if (typeof fetchImplementation !== "function") {
+        throw new Error("catalog fetch is unavailable");
+      }
+      const base = new URL(globalObject.location ? globalObject.location.href : "https://minimodel.org/");
+      const [catalog, peerFeed] = await Promise.all([
+        fetchJson(new URL("/catalog/compositions.v1.json", base), fetchImplementation),
+        fetchJson(new URL("/catalog/peer-announcements.v1.json", base), fetchImplementation),
+      ]);
+      const views = await buildVerifiedCatalogView(catalog, peerFeed, options);
+      if (activeCatalogLoads.get(documentObject) !== operation) throw new Error("Catalog load was superseded");
+      renderCatalog(documentObject, views);
+
+      const total = documentObject.getElementById("modelCatalogTotal");
+      const peers = documentObject.getElementById("modelCatalogActive");
+      const local = documentObject.getElementById("modelCatalogReady");
+      const status = documentObject.getElementById("modelCatalogStatus");
+      if (total) total.textContent = `${views.length} qualified compositions`;
+      if (peers) peers.textContent = `${views.filter((view) => view.availability === "peer").length} with current direct peers`;
+      if (local) local.textContent = `${views.filter((view) => view.availability === "local-conversion").length} pinned conversion routes`;
+      if (status) {
+        status.dataset.state = "ready";
+        status.textContent = views.length
+          ? "Current metadata loaded. Every action still requires local verification."
+          : "Current metadata loaded. Zero compositions are qualified, so no model action is offered.";
+      }
+      return views;
+    } catch (error) {
+      if (activeCatalogLoads.get(documentObject) === operation) renderCatalogState(documentObject, "error");
+      throw error;
+    }
   }
 
   const api = Object.freeze({
@@ -1045,13 +1089,8 @@
   globalObject.MiniModelCatalog = api;
 
   if (globalObject.document) {
-    const start = () => loadCatalog(globalObject.document).catch((error) => {
-      const status = globalObject.document.getElementById("modelCatalogStatus");
-      if (status) {
-        status.dataset.state = "error";
-        status.textContent = `Catalog unavailable: ${error.message}`;
-      }
-    });
+    // loadCatalog renders failures before rejecting; startup consumes that handled rejection.
+    const start = () => loadCatalog(globalObject.document).catch(() => {});
     if (globalObject.document.readyState === "loading") {
       globalObject.document.addEventListener("DOMContentLoaded", start, { once: true });
     } else {

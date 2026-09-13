@@ -16,7 +16,8 @@
         "Binds canonical catalog and peer metadata to revisions, bounded validity, qualification descriptors, Ed25519 signatures and lifecycle authority.",
         "Permits the owner-authorized MiniModel initial server seed while preserving independent local verification and exact peer-origin admission.",
         "Keeps the qualified composition catalog and peer-announcement feed truthfully empty until current evidence exists.",
-        "Centralizes publication status and dates in the release records; source preparation, qualification, seeding and publication remain separate claims."
+        "Centralizes publication status and dates in the release records; source preparation, qualification, seeding and publication remain separate claims.",
+        "Catalog failures clear previous actions and loading placeholders; only the latest verified load can render."
       ]
     },
     {

@@ -603,6 +603,11 @@ test("binds visible and machine-readable release identity", () => {
   assert.match(talisman, /^release_status_source=\/\.well-known\/site-release\.json$/m);
   assert.match(talisman, /authorized verified SLM2 seeds/);
   assert.doesNotMatch(html + updates + boundary + talisman, /Last published 1\.1\.1|release_status=prepared|server_boundary=no model bytes/);
+  for (const relative of ["llms.txt", "llms-full.txt", "ROADMAP.md"]) {
+    const guide = read(relative);
+    assert.match(guide, /initial verified seeds|initial verified\nseeds/);
+    assert.doesNotMatch(guide, /Current release: 1\.1\.1|Release 1\.1\.1 is dated|does not host|No native SLM2 acquisition companion/);
+  }
   assert.match(manifestBuilder, /const version = "1\.1\.2";/);
   assert.match(manifestBuilder, /release_date: "2026-08-31"/);
   for (const surface of [html, updates, boundary, talisman, JSON.stringify(history)]) {

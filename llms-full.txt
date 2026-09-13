@@ -2,9 +2,12 @@
 
 ## Product Boundary
 
-MiniModel.org is the metadata-only public catalog and direct-peer discovery
-surface for exact qualified SLM2 compositions. Project servers do not receive,
-store, proxy, or execute model members or prompts.
+MiniModel.org is the public catalog and direct-peer discovery surface for exact
+qualified SLM2 compositions. The owner authorizes this server to provide the
+initial verified seeds, with payloads only in D:\LLMs\TinyRustLM. This requires
+real qualification, hosting, transport and browser evidence before availability
+can be claimed. Neither site receives prompts or performs inference; MiniModel
+does not proxy arbitrary model bytes or perform server-side conversion.
 
 One composition contains exactly `model.slm2`, `tokenizer.tokenizer2`,
 `template.template2`, `sampling.sampling2`, `prompt.prompt2`, and
@@ -64,6 +67,6 @@ and noncontradictory. MemoryEndpoints is not a MiniModel transport or authority.
 - `/.well-known/site-release.json`
 - `/.well-known/site-release-history.json`
 
-Release 1.1.1 is dated 2026-08-29. Exact committed source, deployment receipt,
-retired-route checks, and public HTTPS readback remain the publication
-authority.
+Use the release marker and history routes for publication status and dates.
+Exact committed source, deployment receipts, retired-route checks and public
+HTTPS readback establish publication; prepared source alone does not.

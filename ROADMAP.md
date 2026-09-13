@@ -1,33 +1,37 @@
 # MiniModel.org Roadmap
 
-MiniModel.org is the metadata-only catalog for exact qualified SLM2
-compositions. It does not host model members, proxy model bytes, run inference,
-or perform server-side conversion.
+MiniModel.org publishes discovery metadata for exact qualified SLM2
+compositions. The owner authorizes this server to provide the initial verified
+seeds, with payloads only in D:\LLMs\TinyRustLM. It does not proxy arbitrary model
+bytes, run inference, or perform server-side conversion.
 
-## Current Public Release
+## Current Source Requirements
 
 - Publish the strict `minimodel.slm2_catalog.v1` catalog.
 - Publish the strict `minimodel.slm2_peer_announcements.v1` feed.
-- Keep both empty until exact current qualification and outside-peer evidence
+- Keep both empty until exact current qualification and verified seed or consenting-peer evidence
   exists.
 - Present one visible acquisition choice: one exact qualified peer or one
   explicit pinned-source local conversion.
 - Retire every former manifest-v0, peer-offer, instruction-handoff, fixture,
   and single-file model route.
 
-## Required Implementation Sequence
+## Required Integration Evidence
 
-1. Generate language-neutral syntax and semantic vectors for catalog,
+1. Verify the canonical language-neutral syntax and semantic vectors for catalog,
    composition, piece-set, peer-announcement, and acquisition identities.
-2. Implement independent SLM2 validators without retaining the former
+2. Verify the existing independent SLM2 validators without retaining the former
    single-file model reader as a compatibility path.
-3. Implement the secure loopback companion intent/session boundary.
-4. Implement bounded direct-peer import with durable progress, cancellation,
+3. Exercise the canonical secure loopback companion intent/session boundary.
+4. Exercise bounded direct-peer import with durable progress, cancellation,
    piece verification, final whole-member hashing, and atomic activation.
-5. Implement the pinned-source local conversion branch with exact license,
+5. Exercise the Advanced pinned-source local conversion branch with exact license,
    source-lock, resource, registration, and independent-inspection gates.
-6. Prove one real outside peer lane, one real local conversion, browser
-   activation, and local multi-turn chat before adding a catalog entry.
+6. Qualify a real small starter composition, bind an authorized initial server
+   seed or consenting peer, and prove browser activation and local multi-turn
+   chat before adding a catalog entry. Restore a usable cached model or acquire
+   that qualified default; local files, Hugging Face, conversion and manual
+   peer/IP controls remain under Advanced.
 7. Commit, push, deploy, and verify exact public HTTPS bytes and retired routes.
 
 ## Current Implementation Boundary
@@ -37,11 +41,12 @@ and its cross-checkout runtime dependency are deleted from current source.
 They remain available only through Git history and have no executable,
 compatibility, fallback, or test authority.
 
-The current implementation is the strict metadata-only SLM2 catalog, peer-feed
-validator, and browser surface. No native SLM2 acquisition companion is
-claimed or shipped yet. That companion must begin from generated SLM2 vectors
-and current six-member composition contracts, with hostile-input coverage and
-no reuse of the deleted single-file reader.
+This repository owns the strict SLM2 catalog, peer-feed validator and browser
+surface. The acquisition companion and current Rust runtime belong to the
+canonical sibling TinyRustLM.com repository, including its dotnet projects and
+Rust crates. Use that implementation; do not recreate a MiniModel native
+workspace. Source and fixture checks do not prove a deployed companion, a
+qualified starter, a live server seed or a successful end-user acquisition.
 
 No composition, peer, browser round, live MemoryEndpoints round, or catalog
 announcement is claimed. Campaign counters remain `0/20`, `0/50`, `0/25`,

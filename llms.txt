@@ -1,8 +1,10 @@
 # MiniModel.org
 
 MiniModel.org publishes bounded discovery metadata for exact qualified
-six-member SLM2 compositions. It does not host or proxy model bytes, run
-inference, or perform server-side conversion.
+six-member SLM2 compositions. The owner authorizes this server to provide the
+initial verified seeds. Qualified payloads belong only in D:\LLMs\TinyRustLM.
+MiniModel does not proxy arbitrary model bytes, run inference, or perform
+server-side conversion. Seed authorization does not establish a live seed.
 
 Current routes:
 
@@ -26,4 +28,5 @@ MemoryEndpoints.com has two separate authorized uses: direct ecosystem-agent
 coordination, and the TinyRustLM.com Connect user plugin. It is not MiniModel
 catalog, peer, model-byte, conversion, or inference infrastructure.
 
-Current release: 1.1.1, dated 2026-08-29.
+Publication status and dates: /.well-known/site-release.json and
+/.well-known/site-release-history.json. Prepared source is not a deployment.

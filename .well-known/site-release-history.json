@@ -10,12 +10,13 @@
       "release_date": "2026-08-31",
       "last_publish_date": null,
       "status": "prepared",
-      "summary": "Prepares strict direct-peer root-origin URL admission without claiming publication, live peers, or qualified models.",
+      "summary": "Prepares verified MiniModel server seeds for TinyRustLM with current catalog identity, expiry, signature and exact-origin checks; source preparation is not publication or model qualification.",
       "changes": [
         "Public peer URLs require HTTPS and HTTP is loopback-only.",
-        "Requires peer_base_url to be an exact root origin without credentials, endpoint paths, query strings, fragments, or unsafe authority aliases.",
-        "Keeps the qualified composition catalog and current peer-announcement feed at exactly zero entries with no hosted model artifacts.",
-        "Records source preparation only; deployment and public HTTPS readback remain required before publication can be claimed."
+        "Binds canonical catalog and peer metadata to revisions, bounded validity, qualification descriptors, Ed25519 signatures and lifecycle authority.",
+        "Permits the owner-authorized MiniModel initial server seed while preserving independent local verification and exact peer-origin admission.",
+        "Keeps the qualified composition catalog and peer-announcement feed truthfully empty until current evidence exists.",
+        "Centralizes publication status and dates in the release records; source preparation, qualification, seeding and publication remain separate claims."
       ]
     },
     {

@@ -597,10 +597,12 @@ test("binds visible and machine-readable release identity", () => {
   assert.equal(history.releases[1].last_publish_date, "2026-08-29");
   assert.deepEqual(catalog.entries, []);
   assert.deepEqual(peerFeed.announcements, []);
-  assert.match(html, /Version 1\.1\.2 \| Prepared 2026-08-31/);
-  assert.match(updates, /Prepared release - not published/);
-  assert.match(updates, /1\.1\.2 - 2026-08-31/);
-  assert.match(talisman, /^release_status=prepared$/m);
+  assert.match(html, /Version 1\.1\.2<\/span>/);
+  assert.match(updates, /Current source version/);
+  assert.match(updates, /<h2>1\.1\.2<\/h2>/);
+  assert.match(talisman, /^release_status_source=\/\.well-known\/site-release\.json$/m);
+  assert.match(talisman, /authorized verified SLM2 seeds/);
+  assert.doesNotMatch(html + updates + boundary + talisman, /Last published 1\.1\.1|release_status=prepared|server_boundary=no model bytes/);
   assert.match(manifestBuilder, /const version = "1\.1\.2";/);
   assert.match(manifestBuilder, /release_date: "2026-08-31"/);
   for (const surface of [html, updates, boundary, talisman, JSON.stringify(history)]) {

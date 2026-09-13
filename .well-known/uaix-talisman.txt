@@ -1,13 +1,12 @@
 site=MiniModel.org
 release=1.1.2
-release_status=prepared
-updated=2026-08-31
-last_published_release=1.1.1 on 2026-08-29
-role=metadata-only qualified SLM2 catalog and direct-peer discovery
+release_status_source=/.well-known/site-release.json
+release_history_source=/.well-known/site-release-history.json
+role=qualified SLM2 catalog, authorized initial server seeds, and direct-peer discovery
 composition=exact six-member SLM2 graph
 acquisition=one exact qualified peer or one explicit pinned-source local conversion
 peer_url_policy=Public peer URLs require HTTPS and HTTP is loopback-only.
-server_boundary=no model bytes, prompt bytes, conversion, or inference
+server_boundary=only authorized verified SLM2 seeds; no arbitrary model proxy, prompt hosting, server conversion, or inference
 qualification=source, license, structure, numerical, browser, and quality evidence remain separate
 catalog_state=zero qualified compositions until exact current evidence exists
 peer_state=zero current announcements until exact outside proof exists

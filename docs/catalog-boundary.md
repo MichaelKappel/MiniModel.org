@@ -158,9 +158,8 @@ provenance-labeled, and noncontradictory.
 
 ## Publication
 
-- Prepared source release: `1.1.2`, dated 2026-08-31.
-- Prepared status: not published or deployed.
-- Last published: `1.1.1` on 2026-08-29.
+- Source version: `1.1.2`.
+- Publication status and dates are owned by the [current release](../.well-known/site-release.json) and [release history](../.well-known/site-release-history.json), rather than duplicated in site copy.
 - Update: public peer URLs require HTTPS and HTTP is loopback-only; exact
   root-origin and authority checks are fail-closed.
 - Inventory remains exactly zero qualified catalog entries and zero current

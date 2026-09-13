@@ -43,6 +43,7 @@ function runHarness(name) {
 }
 
 for (const [name, description] of [
+  ["publication-bindings", "separates predecessor and candidate discovery and requires real publication dates"],
   ["repository-identity", "rejects a wrong checkout, mirror, branch state, or remote head"],
   ["transport-authority", "rejects an unbound or wrong FTPS host, port, user, profile, or root"],
   ["mutation-order", "forbids local and public mutation before read-only admission"],
@@ -294,7 +295,7 @@ test("actual publisher checks both Node children despite hostile startup setting
   });
   assert.ifError(result.error);
   assert.notEqual(result.status, 0);
-  assert.match(result.stdout + result.stderr, /Deployment manifest regeneration check failed/);
+  assert.match(result.stdout + result.stderr, /Deployment manifest or current catalog admission failed: catalog is stale/);
   assert.doesNotMatch(result.stdout + result.stderr, /Cannot find module|READ-ONLY-ADMISSION-PASS|Get-CredentialProfile/);
   assert.deepEqual(fs.readdirSync(receipts).sort(), before);
   assert.deepEqual(fs.readFileSync(manifestPath), beforeManifest);

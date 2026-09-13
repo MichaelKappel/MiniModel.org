@@ -40,6 +40,26 @@ function Get-GitBytes {
 }
 
 switch ($Case) {
+    "publication-bindings" {
+        Assert-CustodyPublicationAuthority -Authority $authority -RepositoryRoot $repositoryRoot -AuthorityPath $authorityRecord.Path
+        foreach ($date in @('2026-09-13', '2028-02-29')) {
+            $valid = Copy-JsonValue $authority
+            $valid.candidate.publication_date = $date
+            Assert-CustodyPublicationAuthority -Authority $valid -RepositoryRoot $repositoryRoot -AuthorityPath $authorityRecord.Path
+        }
+        foreach ($date in @('2026-09-13`n', '2026-9-13', '2026-02-30', '2026-08-30', '2026-13-01', '2026-09-13T00:00:00Z', 20260913)) {
+            $invalid = Copy-JsonValue $authority
+            $invalid.candidate.publication_date = $date
+            Assert-Throws -Action { Assert-CustodyPublicationAuthority -Authority $invalid -RepositoryRoot $repositoryRoot -AuthorityPath $authorityRecord.Path } -Pattern 'Publication date'
+        }
+        foreach ($group in @('predecessor_discovery','candidate_discovery')) {
+            foreach ($field in @('path','bytes','sha256','array_property')) {
+                $invalid = Copy-JsonValue $authority
+                $invalid.$group.peer_feed.$field = if ($field -ceq 'bytes') { 0 } else { 'invalid' }
+                Assert-Throws -Action { Assert-CustodyPublicationAuthority -Authority $invalid -RepositoryRoot $repositoryRoot -AuthorityPath $authorityRecord.Path } -Pattern 'discovery binding'
+            }
+        }
+    }
     "repository-identity" {
         $head = "a" * 40
         $observed = [pscustomobject]@{
@@ -128,14 +148,24 @@ switch ($Case) {
             Authority = $authority
             PublicReleaseBytes = Get-GitBytes -Commit $publicCommit -Path ([string]$authority.predecessor.release_path)
             PublicHistoryBytes = Get-GitBytes -Commit $publicCommit -Path ([string]$authority.predecessor.history_path)
-            PublicCatalogBytes = Get-GitBytes -Commit $publicCommit -Path ([string]$authority.public_invariants.composition_catalog.path)
-            PublicPeerBytes = Get-GitBytes -Commit $publicCommit -Path ([string]$authority.public_invariants.peer_feed.path)
+            PublicCatalogBytes = Get-GitBytes -Commit $publicCommit -Path ([string]$authority.predecessor_discovery.composition_catalog.path)
+            PublicPeerBytes = Get-GitBytes -Commit $publicCommit -Path ([string]$authority.predecessor_discovery.peer_feed.path)
             CandidateReleaseBytes = Get-GitBytes -Commit $candidateCommit -Path ([string]$authority.predecessor.release_path)
             CandidateHistoryBytes = Get-GitBytes -Commit $candidateCommit -Path ([string]$authority.predecessor.history_path)
-            CandidateCatalogBytes = Get-GitBytes -Commit $candidateCommit -Path ([string]$authority.public_invariants.composition_catalog.path)
-            CandidatePeerBytes = Get-GitBytes -Commit $candidateCommit -Path ([string]$authority.public_invariants.peer_feed.path)
+            CandidateCatalogBytes = Get-GitBytes -Commit $candidateCommit -Path ([string]$authority.candidate_discovery.composition_catalog.path)
+            CandidatePeerBytes = Get-GitBytes -Commit $candidateCommit -Path ([string]$authority.candidate_discovery.peer_feed.path)
         }
         Assert-CustodyPublicPredecessor @arguments
+
+        foreach ($field in @('PublicCatalogBytes','PublicPeerBytes','CandidateCatalogBytes','CandidatePeerBytes')) {
+            $drifted = @{} + $arguments
+            $drifted[$field] = [byte[]]$arguments[$field].Clone()
+            $drifted[$field][10] = $drifted[$field][10] -bxor 1
+            Assert-Throws -Action { Assert-CustodyPublicPredecessor @drifted } -Pattern 'identity is stale or substituted'
+        }
+        $swapped = @{} + $arguments
+        $swapped.CandidateCatalogBytes = $arguments.PublicCatalogBytes
+        Assert-Throws -Action { Assert-CustodyPublicPredecessor @swapped } -Pattern 'candidate composition catalog public identity'
 
         $staleRelease = [byte[]]$arguments.PublicReleaseBytes.Clone()
         $staleRelease[$staleRelease.Length - 2] = $staleRelease[$staleRelease.Length - 2] -bxor 1
@@ -288,6 +318,15 @@ switch ($Case) {
             (Get-CustodyByteSha256 -Bytes $publishedHistory) -cne [string]$historyFile[0].sha256) {
             throw "Runtime materialization does not match the manifest."
         }
+        $publishedValue = ConvertFrom-Json ([Text.Encoding]::UTF8.GetString($publishedRelease))
+        if ($publishedValue.last_publish_date -cne $authority.candidate.publication_date -or
+            $publishedValue.release_date -cne '2026-08-31') { throw 'Publication date was backdated to preparation.' }
+        $backdatedAuthority = Copy-JsonValue $authority
+        $backdatedAuthority.candidate.publication_date = '2026-08-31'
+        $backdated = ConvertTo-CustodyPublishedArtifactBytes -Kind 'prepared-release-to-published-v1' -SourceBytes $preparedRelease -Authority $backdatedAuthority
+        Assert-Throws -Action {
+            Assert-CustodyPublishedReleasePair -Authority $authority -PreparedReleaseBytes $preparedRelease -PreparedHistoryBytes $preparedHistory -PublishedReleaseBytes $backdated -PublishedHistoryBytes $publishedHistory
+        } -Pattern 'not exactly materialized'
         Assert-CustodyPublishedReleasePair `
             -Authority $authority `
             -PreparedReleaseBytes $preparedRelease `

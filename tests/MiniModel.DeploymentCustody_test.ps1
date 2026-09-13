@@ -38,7 +38,8 @@ InModuleScope MiniModel.DeploymentCustody {
             $authority=Get-Content -LiteralPath (Join-Path $root 'deploy/publication-authority.v1.json') -Raw | ConvertFrom-Json
             $record=New-CustodyPublicationInput -Phase 'public-admitted' -RepositoryRoot $root -Manifest $manifest -ManifestSha256 ('e'*64) -OperationId ('1'*32) -Authority $authority
             Assert-CustodyPublicationInput -InputRecord $record -InputSha256 $record.BindingSha256 -ManifestSha256 ('e'*64) -OperationId ('1'*32)
-            $old=Get-Content -LiteralPath (Join-Path $root 'deploy/site-deployment-manifest.v1.json') -Raw | ConvertFrom-Json
+            $oldBytes=Get-CustodyGitBlobBytes -RepositoryRoot $root -Commit '672991ba646cde761ba6a361fc20b5a24aaabbe0' -RelativePath 'deploy/site-deployment-manifest.v1.json'
+            $old=[Text.Encoding]::UTF8.GetString($oldBytes) | ConvertFrom-Json
             $old.files=@($old.files | Where-Object { $_.path -ceq 'catalog/compositions.v1.json' })
             $old.materializations=@()
             $old.files.Count | Should Be 1

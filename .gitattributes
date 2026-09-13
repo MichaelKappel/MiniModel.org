@@ -37,3 +37,6 @@ tools/build-site-deployment-manifest.js text eol=lf
 tests/build-site-deployment-manifest_test.js text eol=lf
 artifacts/reports/publication-command-review-20260912.json text eol=lf
 .gitattributes text eol=lf
+tests/browser-smoke.js text eol=lf
+tests/catalog.test.js text eol=lf
+artifacts/reports/publication-binding-review-20260912.json text eol=lf

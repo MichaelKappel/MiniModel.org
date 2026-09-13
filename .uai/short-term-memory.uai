@@ -1,5 +1,5 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-09-12T23:46:42Z
+updated_utc: 2026-09-13T00:16:43Z
 site: MiniModel.org
 status: prepared_source_1.1.2_not_published
 
@@ -9,7 +9,7 @@ ecosystem_cleanup_2026_09_12:
   - All 32 catalog and cross-project contract tests passed. Test-only signatures and entries are synthetic; they do not establish model qualification or live peer transfer.
   - Current source is a prepared 1.1.2 candidate. The checked-in empty revision-3 catalog expired on 2026-09-09; no freshness, qualified starter, live seed or new deployment is claimed.
   - Production Companion ownership is TinyRustLM.com/dotnet/src/TinyRustLM.Companion, its CompanionHost tool, conversion/P2P projects and current Rust crates. Source acquisition, operation ownership, terminal reconciliation and browser wiring are implemented; real-model qualification and live seed proof remain open. MiniModel.org does not regain its retired pre-SLM2 native workspace.
-  - Publication input now stays in bounded memory instead of copied site snapshots. The deployment Node launcher and generator have also been cleaned and exercised; release-identity preparation and real model/hosting work remain open. No transport was invoked.
+  - Publication input now stays in bounded memory instead of copied site snapshots. The deployment Node launcher and generator have also been cleaned and exercised; release identities now bind the current public source and planned UTC publication date. Catalog freshness and real model/hosting work remain open. No transport was invoked.
 
 publication_input_cleanup_2026_09_12:
   status: implemented_and_locally_verified_not_published
@@ -19,7 +19,7 @@ publication_input_cleanup_2026_09_12:
   change: Removed disk snapshot creation, Win32 snapshot directory identity, snapshot cleanup, BlobReader test hook and copied-source fixture case. Read bounded canonical Git/current bytes, bind exact materialized payloads in memory, and authenticate before upload or partial rollback.
   verification: All 53 Node checks and 24 nested Pester checks pass, zero skipped/cancelled. Actual Git/current catalog admission and stale-manifest rejection pass. Pester whole-module command coverage 238/545; publisher function execution uses actual parsed canonical definitions with transport mocked only in memory. No branch coverage or actual FTPS claim.
   temporary_output: Owned marker and Pester directories under artifacts/tests were physically removed; no copied source, local site stage or production receipt was created.
-  unresolved: The manifest still binds 7e0a6eb6bf292ff69e3030adf1d229c811606ce9 and fails current catalog input admission. Transport is intentionally unbound. The subsequent publication-command checkpoint addresses the Node launcher and metadata generator. The catalog remains empty and expired, and release identity plus real model/hosting decisions remain open.
+  unresolved_at_checkpoint: The manifest still bound 7e0a6eb6bf292ff69e3030adf1d229c811606ce9 and fails current catalog input admission. Transport is intentionally unbound. The subsequent publication-command checkpoint addresses the Node launcher and metadata generator. The catalog remains empty and expired, and release identity plus real model/hosting decisions remain open.
   storage: No historical files or model payloads were deleted in this checkpoint; no measured storage recovery.
 
 publication_command_cleanup_2026_09_12:
@@ -29,7 +29,19 @@ publication_command_cleanup_2026_09_12:
   change: Manifest output is stdout-only with an exact 22-file public closure, current canonical/Git equality, authenticated Git blob bytes, bounded reads and deadlines. Ignored/untracked public extras are rejected. The publisher uses read-leased reviewed Node/gate/generator identities and excludes NODE_* startup settings from every child without changing the caller environment.
   canonical_bytes: Twenty public files had only CRLF differences; all 22 now exactly match existing committed bytes under explicit LF attributes. Public Git content and the 1.1.2 prepared release identity were not changed.
   verification: Complete affected suite has 64 Node and 27 nested Pester checks. Actual CLI metadata output, full 22-file JS/PowerShell materialization, hostile startup settings, owned-child timeout termination, current/old source rejection and no-output-path behavior are exercised. Exact final counts and limits are recorded in the compact review.
-  publication_state: The actual read-only publisher reaches stale-manifest rejection before public admission, credentials or receipt creation. Canonical manifest and unbound transport authority remain unchanged. No publication, real seed, model execution or measured storage recovery is claimed.
+  publication_state_at_checkpoint: The actual read-only publisher reached stale-manifest rejection before public admission, credentials or receipt creation. Canonical manifest and unbound transport authority remain unchanged. No publication, real seed, model execution or measured storage recovery is claimed.
+
+publication_binding_cleanup_2026_09_12:
+  status: implemented_and_locally_verified_not_published
+  public_source_commits: c73e2661eb1a6ba8a428c74c9016195992a1038d, df51ec03a52f4862471dd79a9d989405db5f251f
+  evidence: artifacts/reports/publication-binding-review-20260912.json
+  lessons: ../TinyRustLM.com/wiki/runtime-mirust/reports/ecosystem-experiment-lessons-2026-09-12.md C25
+  change: Predecessor discovery remains bound to the immutable public receipt; candidate discovery has its own current identities. The 22-file manifest binds df51ec03a52f4862471dd79a9d989405db5f251f and planned UTC publication date 2026-09-13. Both JSON materializers use that date, preserve historical ledger entries, and leave source records prepared. Actual publication requires the reviewed date to equal the UTC transaction-start day.
+  guidance: Public status/date claims now point to release JSON. Talisman, LLM guides and roadmap recognize authorized initial seeds and the existing canonical TinyRustLM companion. They do not claim deployed seeding or qualified models.
+  verification: Complete affected suite passed 67 Node checks and 27 nested Pester checks, with no skips or cancellations. Full 22-file JS/PowerShell materialization, real Git predecessor identities, candidate substitution refusals, calendar/date disagreement and actual publisher child-process boundaries were exercised. Whole custody-module command coverage was 241/562; no new branch or generator/bootstrap coverage percentage is claimed.
+  failed_checks: The first run passed 65/67 Node and 26/27 nested Pester checks; one assertion expected expired instead of the contract's stale wording, and one test incorrectly used the refreshed canonical manifest as its historical fixture. The latter now reads exact historical Git bytes without writing a copy.
+  current_blockers: Verification rejects the empty revision-3 catalog's expired validity window through the actual browser contract before public admission or credentials. No validity window was renewed. Transport remains unbound. Real qualification and authorized seed hosting remain unresolved. A later publishing day needs reviewed metadata regeneration, not automatic renewal or replay.
+  storage: Operation-owned test output was removed. No historical deletion, model acquisition, publication receipt or measured storage recovery was produced.
 
 publication_predecessor:
   authority: deploy/publication-authority.v1.json

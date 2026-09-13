@@ -12,8 +12,9 @@
     "version": "1.1.2",
     "release_id": "minimodel.org@1.1.2",
     "manifest_path": "deploy/site-deployment-manifest.v1.json",
-    "source_commit": "7e0a6eb6bf292ff69e3030adf1d229c811606ce9",
-    "source_tree": "d2477347378109af4b8eade0a8208b6f0196eadd"
+    "source_commit": "df51ec03a52f4862471dd79a9d989405db5f251f",
+    "source_tree": "5afe8f1ff7207bce9b42bf53fd0e918efddd34b1",
+    "publication_date": "2026-09-13"
   },
   "predecessor": {
     "version": "1.1.1",
@@ -32,20 +33,6 @@
       "minimodel.org@1.0.0"
     ]
   },
-  "public_invariants": {
-    "composition_catalog": {
-      "path": "catalog/compositions.v1.json",
-      "bytes": 422,
-      "sha256": "700b510d068934627bb0a308da36d7672c1a4e296c7d984ea33199b903692a42",
-      "array_property": "entries"
-    },
-    "peer_feed": {
-      "path": "catalog/peer-announcements.v1.json",
-      "bytes": 263,
-      "sha256": "10bea93b9613f9bbc7ffff0d03d22dbdeeb28abd276dcf6609dd929fdd2643a4",
-      "array_property": "announcements"
-    }
-  },
   "transport": {
     "status": "unbound",
     "profile_name": "MiniModel.org",
@@ -59,5 +46,33 @@
     "root_sentinel_bytes": 165,
     "root_sentinel_sha256": "b11cd954128332e63a44e32be5523ccbb3b1b005cfd23f4d03569f37ef97d1dd",
     "lease_directory_path": ".minimodel-deployment-lease.v1"
+  },
+  "predecessor_discovery": {
+    "composition_catalog": {
+      "path": "catalog/compositions.v1.json",
+      "bytes": 422,
+      "sha256": "700b510d068934627bb0a308da36d7672c1a4e296c7d984ea33199b903692a42",
+      "array_property": "entries"
+    },
+    "peer_feed": {
+      "path": "catalog/peer-announcements.v1.json",
+      "bytes": 263,
+      "sha256": "10bea93b9613f9bbc7ffff0d03d22dbdeeb28abd276dcf6609dd929fdd2643a4",
+      "array_property": "announcements"
+    }
+  },
+  "candidate_discovery": {
+    "composition_catalog": {
+      "path": "catalog/compositions.v1.json",
+      "bytes": 593,
+      "sha256": "d6396eb9d608e5d0b99cc0466accfb4580ae3a3a922884154d765ccf4550de0b",
+      "array_property": "entries"
+    },
+    "peer_feed": {
+      "path": "catalog/peer-announcements.v1.json",
+      "bytes": 292,
+      "sha256": "b45ff62016fecdeceb44a9906fe2f1efd364fc0c52324a49500841884d4d3773",
+      "array_property": "announcements"
+    }
   }
 }

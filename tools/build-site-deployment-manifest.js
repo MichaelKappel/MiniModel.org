@@ -190,7 +190,17 @@ function compactJsonBytes(value) {
   return Buffer.from(`${JSON.stringify(value)}\n`, "utf8");
 }
 
-function materializePublishedArtifact(relativePath, sourceBytes) {
+function assertPublicationDate(value) {
+  if (typeof value !== "string" || value.length !== 10 || !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      !Number.isFinite(Date.parse(value + "T00:00:00Z")) ||
+      new Date(value + "T00:00:00Z").toISOString().slice(0, 10) !== value || value < releaseDate) {
+    throw new Error("Publication date must be an exact UTC calendar date on or after source preparation");
+  }
+  return value;
+}
+
+function materializePublishedArtifact(relativePath, sourceBytes, publicationDate) {
+  assertPublicationDate(publicationDate);
   if (relativePath === releasePath) {
     const release = parseJsonBlob(sourceBytes, "prepared release marker");
     if (release.schema !== "uaix.site_release.v1" ||
@@ -201,7 +211,7 @@ function materializePublishedArtifact(relativePath, sourceBytes) {
         release.status !== "prepared") {
       throw new Error("Prepared release marker does not preserve the truthful pre-publication state");
     }
-    release.last_publish_date = releaseDate;
+    release.last_publish_date = publicationDate;
     release.status = "published";
     return {
       kind: "prepared-release-to-published-v1",
@@ -224,7 +234,7 @@ function materializePublishedArtifact(relativePath, sourceBytes) {
         releases[1]?.last_publish_date !== "2026-08-29") {
       throw new Error("Prepared release history does not preserve the truthful pre-publication ledger");
     }
-    releases[0].last_publish_date = releaseDate;
+    releases[0].last_publish_date = publicationDate;
     releases[0].status = "published";
     return {
       kind: "prepared-history-to-published-v1",
@@ -236,7 +246,8 @@ function materializePublishedArtifact(relativePath, sourceBytes) {
 }
 
 /** Build current publication metadata from verified Git blobs and matching canonical files. */
-function buildManifest(contentCommit) {
+function buildManifest(contentCommit, publicationDate) {
+  assertPublicationDate(publicationDate);
   if (typeof contentCommit !== "string" || contentCommit.length !== 40 || !/^[0-9a-f]{40}$/.test(contentCommit)) throw new Error("Publication source commit must be an exact identity");
   if (git(["cat-file", "-t", contentCommit], 4096).trim() !== "commit") throw new Error("Publication source identity is not a commit");
   git(["merge-base", "--is-ancestor", contentCommit, "HEAD"], 4096);
@@ -252,7 +263,7 @@ function buildManifest(contentCommit) {
     assertGitBlobIdentity(record, committed);
     const working = readBoundedFile(path.join(repositoryRoot, relativePath), maxFileBytes);
     if (!working.equals(committed)) throw new Error(`Canonical public source differs from the content commit: ${relativePath}`);
-    const materialized = materializePublishedArtifact(relativePath, committed);
+    const materialized = materializePublishedArtifact(relativePath, committed, publicationDate);
     const publicationBytes = materialized ? materialized.bytes : committed;
     totalBytes += publicationBytes.length;
     if (publicationBytes.length > maxFileBytes || totalBytes > maxTotalBytes) throw new Error("Publication payload exceeds its byte budget");
@@ -269,6 +280,7 @@ function buildManifest(contentCommit) {
     origin: "https://minimodel.org",
     version,
     release_date: "2026-08-31",
+    publication_date: publicationDate,
     source_commit: contentCommit,
     source_tree: sourceTree,
     transport_profile: "MiniModel.org",
@@ -277,7 +289,7 @@ function buildManifest(contentCommit) {
     retired_paths: retiredPaths,
     route_smokes: [
       { path: "/", contains: "Version 1.1.2" },
-      { path: "/updates/", contains: "1.1.2 - 2026-08-31" },
+      { path: "/updates/", contains: "<h2>1.1.2</h2>" },
       { path: "/catalog/compositions.v1.json", contains: "minimodel.slm2_catalog.v1" },
       { path: "/docs/catalog-boundary.md", contains: "Public peer URLs require HTTPS and HTTP is loopback-only." },
       { path: "/docs/memory-endpoints.md", contains: "exactly two" },
@@ -288,25 +300,46 @@ function buildManifest(contentCommit) {
   return manifest;
 }
 
-/** Validate all inputs before emitting bounded metadata or a read-only verification result. */
-function main(args = process.argv.slice(2)) {
+/** Admit the exact candidate discovery bytes through the same current browser contract. */
+async function verifyCandidateDiscovery(manifest, now = new Date()) {
+  const readVerified = (relativePath) => {
+    const rows = manifest.files.filter((row) => row.path === relativePath);
+    const bytes = readBoundedFile(path.join(repositoryRoot, relativePath), maxFileBytes);
+    if (rows.length !== 1 || rows[0].bytes !== bytes.length || rows[0].sha256 !== sha256(bytes)) {
+      throw new Error("Candidate discovery or validator identity differs from the manifest");
+    }
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  };
+  readVerified("catalog.js");
+  const catalogText = readVerified("catalog/compositions.v1.json");
+  const peersText = readVerified("catalog/peer-announcements.v1.json");
+  const contract = require("../catalog.js");
+  return contract.buildVerifiedCatalogView(contract.parseCanonicalJsonText(catalogText),
+    contract.parseCanonicalJsonText(peersText), { now, crypto: crypto.webcrypto });
+}
+
+/** Preparation emits metadata; verification also requires presently admissible discovery. */
+async function main(args = process.argv.slice(2)) {
   const options = parseArguments(args);
   assertCanonicalRepository();
-  const manifest = buildManifest(options.contentCommit);
+  const existing = options.verify ? readBoundedFile(manifestPath, 2 * 1024 * 1024) : null;
+  const publicationDate = options.verify ? parseJsonBlob(existing, "deployment manifest").publication_date : new Date().toISOString().slice(0, 10);
+  const manifest = buildManifest(options.contentCommit, publicationDate);
   const bytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   if (bytes.length > 2 * 1024 * 1024) throw new Error("Publication manifest exceeds its byte budget");
   if (options.verify) {
-    if (!readBoundedFile(manifestPath, 2 * 1024 * 1024).equals(bytes)) throw new Error("Canonical deployment manifest is stale or differs from current verified source");
+    if (!existing.equals(bytes)) throw new Error("Canonical deployment manifest is stale or differs from current verified source");
+    await verifyCandidateDiscovery(manifest);
     process.stdout.write(`VERIFIED ${manifestPath}\n${manifest.files.length} files\n`);
   } else {
     process.stdout.write(bytes);
   }
 }
 
-module.exports = Object.freeze({ publicFiles, parseArguments, parsePublicTree, assertGitBlobIdentity, materializePublishedArtifact, buildManifest });
+module.exports = Object.freeze({ publicFiles, parseArguments, parsePublicTree, assertGitBlobIdentity, assertPublicationDate, materializePublishedArtifact, buildManifest, verifyCandidateDiscovery });
 if (require.main === module) {
-  try { main(); } catch (error) {
+  main().catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;
-  }
+  });
 }

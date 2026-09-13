@@ -10,6 +10,7 @@ const builder = require("../tools/build-site-deployment-manifest.js");
 const root = path.resolve(__dirname, "..");
 const tool = path.join(root, "tools/build-site-deployment-manifest.js");
 const head = execFileSync("git", ["-c", `safe.directory=${root}`, "-C", root, "rev-parse", "HEAD"], { encoding: "utf8", timeout: 30000, windowsHide: true }).trim();
+const publicationDate = "2026-09-13";
 const sha = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const blobId = (bytes) => crypto.createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
 const tree = (rows = builder.publicFiles.map((name) => `100644 blob ${"a".repeat(40)}\t${name}`)) => Buffer.from(rows.join("\0") + "\0");
@@ -61,14 +62,14 @@ test("builds the entire current canonical closure without mutating source or its
   const manifestPath = path.join(root, "deploy/site-deployment-manifest.v1.json");
   const before = fs.readFileSync(manifestPath);
   const identities = new Map(builder.publicFiles.map((name) => [name, sha(fs.readFileSync(path.join(root, name)))]));
-  const manifest = builder.buildManifest(head);
+  const manifest = builder.buildManifest(head, publicationDate);
   assert.equal(manifest.source_commit, head);
   assert.equal(manifest.files.length, 22);
   assert.equal(manifest.materializations.length, 2);
   assert.ok(manifest.files.reduce((sum, file) => sum + file.bytes, 0) < 64 * 1024 * 1024);
   for (const name of builder.publicFiles) assert.equal(sha(fs.readFileSync(path.join(root, name))), identities.get(name), name);
   assert.deepEqual(fs.readFileSync(manifestPath), before);
-  assert.throws(() => builder.buildManifest("7e0a6eb6bf292ff69e3030adf1d229c811606ce9"), /Canonical public source differs/);
+  assert.throws(() => builder.buildManifest("7e0a6eb6bf292ff69e3030adf1d229c811606ce9", publicationDate), /Canonical public source differs/);
 });
 
 test("includes ignored public extras in its refusal without creating a filesystem fixture", () => {
@@ -81,13 +82,13 @@ test("includes ignored public extras in its refusal without creating a filesyste
     return path.resolve(target) === docs ? [...entries, { name: "untracked-ignored.tmp", isDirectory: () => false, isFile: () => true }] : entries;
   });
   const statMock = mock.method(fs, "lstatSync", (target, ...args) => path.resolve(target) === extra ? { isSymbolicLink: () => false } : lstat(target, ...args));
-  try { assert.throws(() => builder.buildManifest(head), /unreviewed file/); }
+  try { assert.throws(() => builder.buildManifest(head, publicationDate), /unreviewed file/); }
   finally { directoryMock.mock.restore(); statMock.mock.restore(); }
   assert.equal(fs.existsSync(extra), false);
 });
 
 test("current JS metadata materializes identically through the actual PowerShell custody module", () => {
-  const manifest = Buffer.from(JSON.stringify(builder.buildManifest(head)));
+  const manifest = Buffer.from(JSON.stringify(builder.buildManifest(head, publicationDate)));
   const command = [
     "$ErrorActionPreference='Stop'",
     "Import-Module './tools/MiniModel.DeploymentCustody.psm1' -Force",
@@ -127,6 +128,36 @@ test("actual CLI emits only the current verified manifest to stdout", () => {
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
-  assert.deepEqual(JSON.parse(result.stdout), builder.buildManifest(head));
+  const emitted = JSON.parse(result.stdout);
+  assert.deepEqual(emitted, builder.buildManifest(head, emitted.publication_date));
   assert.deepEqual(fs.readFileSync(path.join(root, "deploy/site-deployment-manifest.v1.json")), before);
+});
+
+test("publication dates are real UTC dates and do not backdate publication to preparation", () => {
+  for (const date of [undefined, null, 20260913, "2026-09-13\n", "2026-9-13", "2026-02-30", "2026-08-30", "2026-13-01", "2026-09-13T00:00:00Z"]) {
+    assert.throws(() => builder.assertPublicationDate(date), /Publication date/);
+  }
+  for (const date of [publicationDate, "2028-02-29"]) {
+    const release = JSON.parse(builder.materializePublishedArtifact(".well-known/site-release.json",
+      fs.readFileSync(path.join(root, ".well-known/site-release.json")), date).bytes);
+    const prepared = JSON.parse(fs.readFileSync(path.join(root, ".well-known/site-release-history.json")));
+    const history = JSON.parse(builder.materializePublishedArtifact(".well-known/site-release-history.json",
+      Buffer.from(JSON.stringify(prepared)), date).bytes);
+    assert.equal(release.last_publish_date, date);
+    assert.equal(release.release_date, "2026-08-31");
+    assert.equal(history.releases[0].last_publish_date, date);
+    assert.equal(history.releases[0].status, "published");
+    assert.deepEqual(history.releases.slice(1), prepared.releases.slice(1));
+  }
+});
+
+test("publication admission uses exact candidate identities and current browser expiry rules", async () => {
+  const manifest = builder.buildManifest(head, publicationDate);
+  await builder.verifyCandidateDiscovery(manifest, new Date("2026-09-08T02:40:00Z"));
+  await assert.rejects(builder.verifyCandidateDiscovery(manifest, new Date("2026-09-13T00:00:00Z")), /catalog is stale/);
+  for (const target of ["catalog.js", "catalog/compositions.v1.json", "catalog/peer-announcements.v1.json"]) {
+    const drifted = structuredClone(manifest);
+    drifted.files.find((row) => row.path === target).sha256 = "0".repeat(64);
+    await assert.rejects(builder.verifyCandidateDiscovery(drifted), /identity differs/);
+  }
 });

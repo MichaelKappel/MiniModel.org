@@ -18,10 +18,13 @@ mutate the authenticated target:
   the child without modifying the caller's environment;
 - clean equality among local `HEAD`, `origin/master`, and a fresh read-only
   `ls-remote` observation;
-- the generated 1.1.2 manifest bound to content commit
-  `7e0a6eb6bf292ff69e3030adf1d229c811606ce9`;
+- the generated 1.1.2 manifest bound to the reviewed content commit and planned
+  UTC publication date in `publication-authority.v1.json`;
 - the immutable 1.1.1 receipt and exact cache-bypassed public release marker,
   release ledger, empty composition catalog, and empty peer feed;
+- exact candidate catalog and peer-feed identities, separately bound from the
+  predecessor, admitted through the current browser contract at verification
+  time (including expiry, qualification, lifecycle and Ed25519 signatures);
 - an authorized secret-free FTPS host/port/username-hash/root tuple; and
 - an exact root sentinel plus an exact predecessor directory and file closure
   with no unknown overlay entries.
@@ -39,10 +42,11 @@ The read-only preflight is:
 .\tools\deploy-site.ps1
 ```
 
-The current manifest still names an older content commit. Preflight now rejects
-its disagreement with current public files before any public-site observation.
-Transport also remains unbound. Neither this cleanup nor successful metadata
-generation makes the candidate publishable.
+The current manifest describes the current reviewed public source. The candidate
+catalog and peer feed expired on 2026-09-09; verification rejects that expired
+authority before public-site observation. They contain no qualified model or
+peer entries. Transport remains unbound. Metadata generation is preparation
+only and does not establish catalog freshness or permission to publish.
 
 The manifest generator emits JSON to stdout and accepts no output location:
 
@@ -53,7 +57,13 @@ node tools/build-site-deployment-manifest.js <40-character-content-commit> --ver
 
 Both forms run the reviewed canonical source gate and require all 22 explicitly
 admitted public files to match the chosen ancestor commit. Verification reads
-only the canonical deployment manifest. Untracked and ignored public extras,
+only the canonical deployment manifest and uses its required `publication_date`;
+it also checks candidate discovery against the actual verification time. Generation
+uses the current UTC date. The publisher requires that same reviewed date when
+starting a publication transaction, before credential access. If publishing on a
+later UTC day, regenerate and review the package first. Neither path renews catalog
+authority or backdates publication to the source preparation date. Untracked and
+ignored public extras,
 links, unknown paths, wrong Git object bytes and stale working files are refused.
 The generator writes no files. Reviewed metadata belongs in the single canonical
 manifest with UTF-8/LF bytes; Windows PowerShell's default text redirection must
@@ -74,7 +84,10 @@ Once the authority is legitimately bound, the publication command is:
 The publisher completes every local and public read-only admission check
 first. It then reads the committed publication files into bounded memory and
 requires the current checkout to match those source identities. It materializes
-the two prepared release records in memory as published 1.1.2 records. No local
+the two prepared release records in memory as published 1.1.2 records using
+the reviewed transaction date for `last_publish_date`. Historical ledger entries
+remain unchanged. Public page copy links to these records for status and dates
+instead of duplicating claims that would become stale after publication. No local
 site snapshot or staging tree is created. The tracked records remain truthful
 that 1.1.2 is prepared and the recorded public predecessor is 1.1.1.
 

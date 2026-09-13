@@ -47,8 +47,8 @@ function Invoke-VerifiedNode {
         if ($Arguments.Count -lt 1 -or $Arguments.Count -gt 2 -or $Arguments[0].Length -ne 40 -or $Arguments[0] -cnotmatch '^[0-9a-f]{40}$' -or
             ($Arguments.Count -eq 2 -and $Arguments[1] -cne '--verify')) { throw 'Invalid manifest arguments.' }
         $toolPath = Join-Path $repositoryRoot 'tools\build-site-deployment-manifest.js'
-        $toolBytes = 15664
-        $toolSha256 = '5ea76bd8797903c542bedc4bbd2f595e6ac770083e9cb61ae1dea2b730a2e4bb'
+        $toolBytes = 17615
+        $toolSha256 = '2810f258af0f0d973372144caac6581c4610ec815e285913fcc9000475c973a9'
         $maximumOutput = 2097152
     }
     if (-not [IO.Path]::IsPathRooted($NodeExecutablePath)) { throw 'Node executable path must be absolute.' }
@@ -1216,6 +1216,7 @@ if ($manifest.schema -cne "uaix.static_site_deployment_manifest.v1" -or
     $manifest.site -cne [string]$authority.site -or
     $manifest.origin -cne [string]$authority.origin -or
     $manifest.version -cne [string]$authority.candidate.version -or
+    $manifest.publication_date -cne [string]$authority.candidate.publication_date -or
     $manifest.source_commit -cne [string]$authority.candidate.source_commit -or
     $manifest.source_tree -cne [string]$authority.candidate.source_tree -or
     $manifest.transport_profile -cne [string]$authority.transport.profile_name -or
@@ -1250,7 +1251,9 @@ foreach ($retiredPathValue in @($manifest.retired_paths)) {
 
 $builderResult = Invoke-VerifiedNode -Tool manifest -Arguments @([string]$manifest.source_commit,'--verify')
 if ($builderResult.ExitCode -ne 0 -or $builderResult.Stderr.Length -ne 0 -or $builderResult.Stdout -cne "VERIFIED $canonicalManifestPath`n$(@($manifest.files).Count) files`n") {
-    throw "Deployment manifest regeneration check failed."
+    $reason = $builderResult.Stderr.Trim()
+    if ($reason.Length -gt 512) { $reason = $reason.Substring(0,512) }
+    throw "Deployment manifest or current catalog admission failed: $reason"
 }
 
 $predecessorReceiptPath = [IO.Path]::GetFullPath((Join-Path $repositoryRoot (([string]$authority.predecessor.receipt_path) -replace "/", "\")))
@@ -1269,8 +1272,8 @@ $client.Timeout = [TimeSpan]::FromSeconds(60)
 try {
     $publicReleaseBytes = Get-PublicBytes -Client $client -Origin ([string]$authority.origin) -RelativePath ([string]$authority.predecessor.release_path) -AuditNonce $auditNonce
     $publicHistoryBytes = Get-PublicBytes -Client $client -Origin ([string]$authority.origin) -RelativePath ([string]$authority.predecessor.history_path) -AuditNonce $auditNonce
-    $publicCatalogBytes = Get-PublicBytes -Client $client -Origin ([string]$authority.origin) -RelativePath ([string]$authority.public_invariants.composition_catalog.path) -AuditNonce $auditNonce
-    $publicPeerBytes = Get-PublicBytes -Client $client -Origin ([string]$authority.origin) -RelativePath ([string]$authority.public_invariants.peer_feed.path) -AuditNonce $auditNonce
+    $publicCatalogBytes = Get-PublicBytes -Client $client -Origin ([string]$authority.origin) -RelativePath ([string]$authority.predecessor_discovery.composition_catalog.path) -AuditNonce $auditNonce
+    $publicPeerBytes = Get-PublicBytes -Client $client -Origin ([string]$authority.origin) -RelativePath ([string]$authority.predecessor_discovery.peer_feed.path) -AuditNonce $auditNonce
 }
 finally {
     $client.Dispose()
@@ -1279,8 +1282,8 @@ finally {
 
 $candidateReleaseBytes = Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit ([string]$manifest.source_commit) -RelativePath ([string]$authority.predecessor.release_path)
 $candidateHistoryBytes = Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit ([string]$manifest.source_commit) -RelativePath ([string]$authority.predecessor.history_path)
-$candidateCatalogBytes = Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit ([string]$manifest.source_commit) -RelativePath ([string]$authority.public_invariants.composition_catalog.path)
-$candidatePeerBytes = Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit ([string]$manifest.source_commit) -RelativePath ([string]$authority.public_invariants.peer_feed.path)
+$candidateCatalogBytes = Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit ([string]$manifest.source_commit) -RelativePath ([string]$authority.candidate_discovery.composition_catalog.path)
+$candidatePeerBytes = Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit ([string]$manifest.source_commit) -RelativePath ([string]$authority.candidate_discovery.peer_feed.path)
 Assert-CustodyPublicPredecessor -Authority $authority `
     -PublicReleaseBytes $publicReleaseBytes `
     -PublicHistoryBytes $publicHistoryBytes `
@@ -1310,6 +1313,10 @@ if ($authority.transport.status -cne "bound") {
     throw "Publication transport authority is not bound; credential access is forbidden."
 }
 
+$transactionDate = [DateTime]::UtcNow.ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
+if ($authority.candidate.publication_date -cne $transactionDate) {
+    throw 'Publication date differs from the current UTC transaction date; regenerate and review the canonical package before publishing.'
+}
 $operationNonce = [Guid]::NewGuid().ToString("N")
 $script:publicationInput = New-CustodyPublicationInput `
     -Phase $script:phase -RepositoryRoot $repositoryRoot -Manifest $manifest `
@@ -1394,11 +1401,11 @@ try {
         -LogicalPath ([string]$authority.predecessor.history_path) `
         -MaximumBytes ([int64]$authority.predecessor.history_bytes)
     $leasedCatalogBytes = Get-RemoteBytes `
-        -LogicalPath ([string]$authority.public_invariants.composition_catalog.path) `
-        -MaximumBytes ([int64]$authority.public_invariants.composition_catalog.bytes)
+        -LogicalPath ([string]$authority.predecessor_discovery.composition_catalog.path) `
+        -MaximumBytes ([int64]$authority.predecessor_discovery.composition_catalog.bytes)
     $leasedPeerBytes = Get-RemoteBytes `
-        -LogicalPath ([string]$authority.public_invariants.peer_feed.path) `
-        -MaximumBytes ([int64]$authority.public_invariants.peer_feed.bytes)
+        -LogicalPath ([string]$authority.predecessor_discovery.peer_feed.path) `
+        -MaximumBytes ([int64]$authority.predecessor_discovery.peer_feed.bytes)
     Assert-CustodyPublicPredecessor -Authority $authority `
         -PublicReleaseBytes $leasedReleaseBytes `
         -PublicHistoryBytes $leasedHistoryBytes `

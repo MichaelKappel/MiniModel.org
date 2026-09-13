@@ -114,6 +114,17 @@ function Read-CustodyJsonFile {
     }
 }
 
+# A publication date is a reviewed UTC transaction date, separate from source preparation.
+function Assert-CustodyPublicationDate {
+    param([Parameter(Mandatory)]$Date)
+    $parsed = [DateTime]::MinValue
+    if ($Date -isnot [string] -or $Date.Length -ne 10 -or
+        -not [DateTime]::TryParseExact($Date, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None, [ref]$parsed) -or $Date -clt '2026-08-31') {
+        throw 'Publication date must be an exact UTC calendar date on or after source preparation.'
+    }
+}
+
 function Assert-CustodyPublicationAuthority {
     param(
         [Parameter(Mandatory)]$Authority,
@@ -122,25 +133,32 @@ function Assert-CustodyPublicationAuthority {
     )
 
     Assert-CustodyExactKeys -Value $Authority -Expected @(
-        "schema", "site", "origin", "repository", "candidate", "predecessor", "public_invariants", "transport"
+        "schema", "site", "origin", "repository", "candidate", "predecessor", "predecessor_discovery", "candidate_discovery", "transport"
     ) -Label "publication authority"
     Assert-CustodyExactKeys -Value $Authority.repository -Expected @(
         "root_policy", "branch", "remote_name", "remote_url"
     ) -Label "publication authority repository"
     Assert-CustodyExactKeys -Value $Authority.candidate -Expected @(
-        "version", "release_id", "manifest_path", "source_commit", "source_tree"
+        "version", "release_id", "manifest_path", "source_commit", "source_tree", "publication_date"
     ) -Label "publication authority candidate"
     Assert-CustodyExactKeys -Value $Authority.predecessor -Expected @(
         "version", "release_id", "receipt_path", "receipt_sha256", "release_path", "release_bytes",
         "release_sha256", "history_path", "history_bytes", "history_sha256", "ledger_release_ids"
     ) -Label "publication authority predecessor"
-    Assert-CustodyExactKeys -Value $Authority.public_invariants -Expected @(
-        "composition_catalog", "peer_feed"
-    ) -Label "publication authority public invariants"
-    foreach ($name in @("composition_catalog", "peer_feed")) {
-        Assert-CustodyExactKeys -Value $Authority.public_invariants.$name -Expected @(
-            "path", "bytes", "sha256", "array_property"
-        ) -Label "publication authority $name"
+    Assert-CustodyPublicationDate -Date $Authority.candidate.publication_date
+    foreach ($group in @("predecessor_discovery", "candidate_discovery")) {
+        Assert-CustodyExactKeys -Value $Authority.$group -Expected @("composition_catalog", "peer_feed") -Label "publication authority $group"
+        foreach ($name in @("composition_catalog", "peer_feed")) {
+            $binding = $Authority.$group.$name
+            Assert-CustodyExactKeys -Value $binding -Expected @("path", "bytes", "sha256", "array_property") -Label "publication authority $group $name"
+            $expectedPath = if ($name -ceq 'composition_catalog') { 'catalog/compositions.v1.json' } else { 'catalog/peer-announcements.v1.json' }
+            $expectedArray = if ($name -ceq 'composition_catalog') { 'entries' } else { 'announcements' }
+            if ($binding.path -cne $expectedPath -or $binding.array_property -cne $expectedArray -or
+                $binding.bytes -isnot [int] -or $binding.bytes -lt 1 -or $binding.bytes -gt 16777216 -or
+                $binding.sha256 -isnot [string] -or $binding.sha256.Length -ne 64 -or $binding.sha256 -cnotmatch '^[0-9a-f]{64}$') {
+                throw "Publication discovery binding is invalid."
+            }
+        }
     }
     Assert-CustodyExactKeys -Value $Authority.transport -Expected @(
         "status", "profile_name", "protocol", "host", "port", "username_sha256", "remote_root",
@@ -180,8 +198,8 @@ function Assert-CustodyPublicationAuthority {
         [string]$Authority.predecessor.receipt_path,
         [string]$Authority.predecessor.release_path,
         [string]$Authority.predecessor.history_path,
-        [string]$Authority.public_invariants.composition_catalog.path,
-        [string]$Authority.public_invariants.peer_feed.path,
+        [string]$Authority.predecessor_discovery.composition_catalog.path,
+        [string]$Authority.predecessor_discovery.peer_feed.path,
         [string]$Authority.transport.root_sentinel_path,
         [string]$Authority.transport.root_sentinel_source_path,
         [string]$Authority.transport.lease_directory_path
@@ -368,8 +386,8 @@ function Assert-CustodyPredecessorReceipt {
     foreach ($binding in @(
         $Authority.predecessor.release_path,
         $Authority.predecessor.history_path,
-        $Authority.public_invariants.composition_catalog.path,
-        $Authority.public_invariants.peer_feed.path
+        $Authority.predecessor_discovery.composition_catalog.path,
+        $Authority.predecessor_discovery.peer_feed.path
     )) {
         if (-not $seen.ContainsKey([string]$binding)) {
             throw "Immutable predecessor receipt omits a required public binding."
@@ -378,11 +396,12 @@ function Assert-CustodyPredecessorReceipt {
     return $receipt
 }
 
-function Assert-CustodyEmptyJsonArrayArtifact {
+function Assert-CustodyJsonArrayArtifact {
     param(
         [Parameter(Mandatory)]$Binding,
         [Parameter(Mandatory)][byte[]]$Bytes,
-        [Parameter(Mandatory)][string]$Label
+        [Parameter(Mandatory)][string]$Label,
+        [switch]$RequireEmpty
     )
 
     if ($Bytes.Length -ne [int64]$Binding.bytes -or
@@ -391,8 +410,8 @@ function Assert-CustodyEmptyJsonArrayArtifact {
     }
     $value = ConvertFrom-CustodyJsonBytes -Bytes $Bytes -Label $Label
     $property = $value.PSObject.Properties[[string]$Binding.array_property]
-    if ($null -eq $property -or @($property.Value).Count -ne 0) {
-        throw "$Label must remain truthfully empty."
+    if ($null -eq $property -or $property.Value -isnot [Array] -or ($RequireEmpty -and @($property.Value).Count -ne 0)) {
+        throw "$Label must contain its declared JSON array (empty for the predecessor)."
     }
 }
 
@@ -451,10 +470,10 @@ function Assert-CustodyPublicPredecessor {
         }
     }
 
-    Assert-CustodyEmptyJsonArrayArtifact -Binding $Authority.public_invariants.composition_catalog -Bytes $PublicCatalogBytes -Label "public composition catalog"
-    Assert-CustodyEmptyJsonArrayArtifact -Binding $Authority.public_invariants.peer_feed -Bytes $PublicPeerBytes -Label "public peer feed"
-    Assert-CustodyEmptyJsonArrayArtifact -Binding $Authority.public_invariants.composition_catalog -Bytes $CandidateCatalogBytes -Label "candidate composition catalog"
-    Assert-CustodyEmptyJsonArrayArtifact -Binding $Authority.public_invariants.peer_feed -Bytes $CandidatePeerBytes -Label "candidate peer feed"
+    Assert-CustodyJsonArrayArtifact -Binding $Authority.predecessor_discovery.composition_catalog -Bytes $PublicCatalogBytes -Label "public composition catalog" -RequireEmpty
+    Assert-CustodyJsonArrayArtifact -Binding $Authority.predecessor_discovery.peer_feed -Bytes $PublicPeerBytes -Label "public peer feed" -RequireEmpty
+    Assert-CustodyJsonArrayArtifact -Binding $Authority.candidate_discovery.composition_catalog -Bytes $CandidateCatalogBytes -Label "candidate composition catalog"
+    Assert-CustodyJsonArrayArtifact -Binding $Authority.candidate_discovery.peer_feed -Bytes $CandidatePeerBytes -Label "candidate peer feed"
 }
 
 function ConvertTo-CustodyPublishedArtifactBytes {
@@ -465,6 +484,7 @@ function ConvertTo-CustodyPublishedArtifactBytes {
     )
 
     $value = ConvertFrom-CustodyJsonBytes -Bytes $SourceBytes -Label "prepared publication artifact"
+    Assert-CustodyPublicationDate -Date $Authority.candidate.publication_date
     if ($Kind -ceq "prepared-release-to-published-v1") {
         if ($value.schema -cne "uaix.site_release.v1" -or
             $value.site_id -cne [string]$Authority.site -or
@@ -476,7 +496,7 @@ function ConvertTo-CustodyPublishedArtifactBytes {
             $value.status -cne "prepared") {
             throw "Prepared release marker is not the truthful governed candidate."
         }
-        $value.last_publish_date = [string]$value.release_date
+        $value.last_publish_date = [string]$Authority.candidate.publication_date
         $value.status = "published"
     }
     else {
@@ -498,7 +518,7 @@ function ConvertTo-CustodyPublishedArtifactBytes {
                 throw "Prepared release ledger changed predecessor order."
             }
         }
-        $entries[0].last_publish_date = [string]$entries[0].release_date
+        $entries[0].last_publish_date = [string]$Authority.candidate.publication_date
         $entries[0].status = "published"
     }
 
@@ -534,10 +554,10 @@ function Assert-CustodyPublishedReleasePair {
     $history = ConvertFrom-CustodyJsonBytes -Bytes $PublishedHistoryBytes -Label "published release ledger"
     $entries = @($history.releases)
     if ($release.status -cne "published" -or
-        $release.last_publish_date -cne $release.release_date -or
+        $release.last_publish_date -cne $Authority.candidate.publication_date -or
         $history.current_release_id -cne [string]$Authority.candidate.release_id -or
         $entries[0].status -cne "published" -or
-        $entries[0].last_publish_date -cne $entries[0].release_date) {
+        $entries[0].last_publish_date -cne $Authority.candidate.publication_date) {
         throw "Published release marker or ledger lacks final publication semantics."
     }
 }

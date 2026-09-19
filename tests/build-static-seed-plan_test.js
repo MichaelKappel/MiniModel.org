@@ -7,21 +7,12 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 const { buildStaticSeedPlan } = require("../tools/build-static-seed-plan.js");
+const { descriptorBytes } = require("./helpers/static-seed-fixture.js");
 
 const tinyRoot = path.resolve(__dirname, "../../TinyRustLM.com");
 const tool = path.resolve(__dirname, "../tools/build-static-seed-plan.js");
 const canonical = (value) => Buffer.from(`${JSON.stringify(value)}\n`, "utf8");
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
-
-/** Read the companion's independently asserted wire fixture, never evaluate C# or copy source. */
-function descriptorBytes() {
-  const source = fs.readFileSync(path.join(tinyRoot,
-    "dotnet/tests/TinyRustLM.Companion.Tests/CompanionDirectCompositionSeedDescriptorMaterializerTests.cs"), "utf8");
-  const expression = source.match(/private const string RustAcceptedDescriptor =([\s\S]*?);/)[1];
-  const literal = /"(?:\\.|[^"\\])*"/g;
-  assert.equal(expression.replace(literal, "").replace(/[+\s]/g, ""), "");
-  return Buffer.from(expression.match(literal).map((token) => JSON.parse(token)).join(""), "utf8");
-}
 
 /** Mutate one field of synthetic metadata while keeping its JSON encoding canonical. */
 function changed(mutate) {
@@ -44,6 +35,8 @@ test("companion canonical bytes produce the native descriptor identity and six e
   const plan = buildStaticSeedPlan(bytes);
   assert.deepEqual(buildStaticSeedPlan(bytes), plan);
   assert.equal(plan.publicationAllowed, false);
+  assert.deepEqual(plan.requiredServerConfiguration, { context: "server-or-virtual-host",
+    directives: ["TraceEnable Off"], verified: false });
   assert.equal(plan.status, "prepared-not-verified-or-published");
   assert.equal(plan.pieceSetId, `sha256:${hash(bytes)}`);
   assert.equal(plan.descriptorSha256, hash(bytes));
@@ -75,6 +68,8 @@ test("configuration binds every member without forcing length, hiding encoding o
   assert.ok(config.text.endsWith("\n") && !config.text.includes("\r"));
   assert.equal((config.text.match(/^<Files /gm) || []).length, 6);
   assert.match(config.text, /^Options -Indexes -MultiViews$/m);
+  assert.match(config.text, /^# Requires TraceEnable Off in server\/vhost config/m);
+  assert.doesNotMatch(config.text, /^TraceEnable /m);
   assert.match(config.text, /^RewriteCond %\{QUERY_STRING\} !\^\$$/m);
   assert.match(config.text, /^RewriteCond %\{REQUEST_METHOD\} !\^\(GET\|HEAD\)\$$/m);
   assert.match(config.text, /^SetEnv no-gzip 1$/m);

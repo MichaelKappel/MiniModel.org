@@ -1,10 +1,19 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-09-19T20:20:22Z
+updated_utc: 2026-09-19T20:40:00Z
 site: MiniModel.org
 status: prepared_source_1.1.2_not_published
 
+static_seed_apache_execution_2026_09_19:
+  status: local_http_fixture_execution_passed_not_published
+  evidence: artifacts/reports/static-seed-apache-review-20260919.json
+  change: Real Apache execution found TRACE bypassing directory rules. Preparation now declares unverified server/vhost TraceEnable Off separately from htaccess; publicationAllowed remains false.
+  verification: All 78 affected checks pass with zero skips, including six complete GET/HEAD transfers, exact nonduplicate identity headers, compression suppression and invalid-route/method controls on installed Apache 2.4.58 in OSM-Ubuntu. Generator coverage is 91.03 percent lines and 97.22 percent branches; shared companion-fixture reader is fully covered.
+  environment: Separate owned loopback Apache instance; existing site configuration untouched. No software installation, Docker start, image download or remote mutation. Own PID/config exit was verified before bounded artifact cleanup.
+  limits: Synthetic non-model bytes and local HTTP only. Alias proves URL spelling but not remote colon directory support. Real-browser CORS, TLS, LiteSpeed, qualification, publication authority and live seed remain open; prior source scan/deletion blocks remain unchanged.
+  storage: Final Apache output removed 20 entries with 47439 logical file bytes; coverage output removed 6 entries with 1442889 logical bytes. No model/historical deletion or measured physical storage recovery.
+
 static_seed_preparation_2026_09_19:
-  status: local_configuration_generator_tested_no_host_execution_or_publication
+  status: historical_C33_generator_checkpoint_superseded_by_C34_local_apache_check
   source: tools/build-static-seed-plan.js
   contract: Current canonical Rust/companion six-member seed descriptor; piece-set identity is its exact SHA-256 with the final LF.
   behavior: Bounded stdin-only generator returns immutable member URLs, expected response identities and one hash-bound remote htaccess configuration. No local payload copy, credentials, network, signing, catalog renewal or upload; publicationAllowed stays false.

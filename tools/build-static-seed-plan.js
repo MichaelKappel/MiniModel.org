@@ -72,6 +72,7 @@ function buildStaticSeedPlan(descriptorBytes) {
   const remoteDirectory = `tinyrustlm/direct-composition/v1/compositions/${descriptor.compositionId}/members`;
   const lines = [
     "# Generated preparation only; verify host behavior and qualified bytes before publication.",
+    "# Requires TraceEnable Off in server/vhost config; .htaccess cannot disable core TRACE.",
     "Options -Indexes -MultiViews",
     "DirectoryIndex disabled",
     "RewriteEngine On",
@@ -119,6 +120,8 @@ function buildStaticSeedPlan(descriptorBytes) {
   return { schema: "minimodel.static-seed-preparation.v1", status: "prepared-not-verified-or-published",
     publicationAllowed: false, origin: SEED_ORIGIN, compositionId: descriptor.compositionId,
     descriptorSha256, pieceSetId, remoteDirectory, files,
+    requiredServerConfiguration: { context: "server-or-virtual-host", directives: ["TraceEnable Off"],
+      verified: false },
     configuration: { remotePath: `${remoteDirectory}/.htaccess`, bytes: bytes.length,
       sha256: sha256(bytes), text } };
 }

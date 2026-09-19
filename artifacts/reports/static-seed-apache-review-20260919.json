@@ -1,0 +1,124 @@
+{
+  "schema": "minimodel.static-seed-apache-review.v1",
+  "observedAtUtc": "2026-09-19T20:40:14.781Z",
+  "sourceParent": "b512402cd79f1a8af251d1264645c9b7a8a5f55c",
+  "tinyContractCommit": "136136015d5153fcc8d6559b732c9314a04e8c4e",
+  "status": "local-apache-http-fixtures-passed-not-published",
+  "inputs": [
+    {
+      "path": "tools/build-static-seed-plan.js",
+      "bytes": 7787,
+      "sha256": "7537a31b8ad82cfc013c8a1326c529c04589f00df8e2acbf97ec5f8ef3d584bf"
+    },
+    {
+      "path": "tests/build-static-seed-plan_test.js",
+      "bytes": 10557,
+      "sha256": "f179da456bd1b04c7b333a753c3a2caa10ec623524aad09a84936aae563a11d3"
+    },
+    {
+      "path": "tests/build-static-seed-plan-apache_test.js",
+      "bytes": 11586,
+      "sha256": "73592049ea192977beadfc3745c81bd59038ff6d91f1cbdeaf90bbc57bb27e5d"
+    },
+    {
+      "path": "tests/helpers/static-seed-fixture.js",
+      "bytes": 810,
+      "sha256": "0f8fad60c382aa4c32174edb32192d1c94284008367a1fb20c3ab82d9251036f"
+    },
+    {
+      "path": "tests/browser-smoke.js",
+      "bytes": 14247,
+      "sha256": "a769c7f3cbf7f73ae1be07c441758cd7acbada81fba4c3fc7c9698f2013e5053"
+    }
+  ],
+  "environment": {
+    "node": "v24.14.0",
+    "apache": "Apache/2.4.58 (Ubuntu)",
+    "apacheBuild": "2026-07-06T16:27:55",
+    "distribution": "existing OSM-Ubuntu WSL",
+    "server": "separate loopback listener; existing server configuration unchanged",
+    "softwareInstalled": false,
+    "dockerStarted": false
+  },
+  "finding": {
+    "before": "Directory method rewrite did not prevent core TRACE: observed 200; other 405 responses advertised TRACE.",
+    "after": "Plan explicitly requires unverified server/vhost TraceEnable Off, excluded from htaccess. All tested rejected methods return 405. Core TRACE response precedes directory headers; non-TRACE Allow method lists ignore an appended empty field."
+  },
+  "verification": {
+    "command": "node --test tests/build-static-seed-plan-apache_test.js tests/build-static-seed-plan_test.js tests/catalog.test.js tests/catalog-contract.test.js",
+    "passed": 78,
+    "failed": 0,
+    "skipped": 0,
+    "apacheTests": 9,
+    "configurationSha256": "a3dceefc2f5d04c166f33ff3b2e7e156ea2c6f6d36a2a6cf905361d4b98fcd83",
+    "claims": [
+      "Six GET and HEAD responses: exact length, type, one value per identity header, no Content-Encoding, full GET SHA-256",
+      "Inherited duplicate/wrong origin and piece-set fields replaced; credential access fields removed",
+      "Compression works for a separate control while seed bodies remain unencoded",
+      "Unknown names, directory listing, retired suffix, path-info and nonempty query return 404",
+      "TRACE, POST, PUT, DELETE and OPTIONS return 405 with server prerequisite",
+      "Invalid directive returns 500; ignored overrides fail seed identity",
+      "Foreign Origin request still receives only the fixed TinyRustLM ACAO; no actual browser rejection claim"
+    ]
+  },
+  "coverage": {
+    "generator": {
+      "lines": 91.03,
+      "branches": 97.22,
+      "functions": 83.33
+    },
+    "fixtureReader": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100
+    },
+    "limits": "Node experimental coverage only. CLI subprocesses are tested but not instrumented. No Apache, browser or whole-ecosystem coverage claim."
+  },
+  "priorFailures": [
+    {
+      "stage": "harness listener startup",
+      "result": "0/9 passed; Windows localhost forwarding not ready",
+      "correction": "Bounded wait only for ECONNREFUSED before assertions"
+    },
+    {
+      "stage": "harness isolation",
+      "result": "0/9 passed; parent repository htaccess read outside the test root; diagnostic rerun retained the same failure",
+      "correction": "Explicit AllowOverride None and AllowOverrideList None at filesystem root; admit only own fixture directories"
+    },
+    {
+      "stage": "actual server method behavior",
+      "result": "7/9 passed; Allow advertised TRACE, then explicit TRACE returned 200",
+      "correction": "Declare server-level TraceEnable Off prerequisite"
+    },
+    {
+      "stage": "error-response assertion",
+      "result": "76/78 then 7/9 passed; core TRACE early response had empty Allow, other errors appended an empty field",
+      "correction": "Keep exact 405 requirement; parse allowed-method list on other errors. Exact single identity fields still required for all successful transfers."
+    }
+  ],
+  "cleanup": {
+    "apacheOwnedEntries": 20,
+    "apacheOwnedLogicalBytes": 47439,
+    "coverageOwnedEntries": 6,
+    "coverageOwnedLogicalBytes": 1442889,
+    "ownedPidConfigurationVerified": true,
+    "ownedProcessExitVerified": true,
+    "ownedDirectoriesRemoved": true,
+    "historicalOrModelPayloadsDeleted": false,
+    "physicalStorageRecoveryMeasured": false
+  },
+  "limits": [
+    "Synthetic bytes deliberately do not form a valid model/ACG2 composition",
+    "Local HTTP and Apache only; no TLS, browser Fetch, LiteSpeed, public availability or qualification",
+    "Alias maps colon-bearing URL to a Windows-safe directory; no remote filesystem path proof",
+    "No credentials, upload, catalog renewal, source gate bypass or deletion retry",
+    "Two previously policy-blocked TinyRustLM installer links still leave source scan incomplete; transport authority unbound; catalog empty/expired"
+  ],
+  "sources": [
+    {
+      "url": "https://httpd.apache.org/docs/2.4/mod/core.html#traceenable",
+      "retrieved": "2026-09-19",
+      "version": "living Apache 2.4 documentation"
+    }
+  ]
+}

@@ -49,6 +49,27 @@ URLs/headers, bounded canonical parsing, injection refusal and the real stdin
 CLI. They do not run Apache/LiteSpeed or upload model bytes. Host admission and
 publication requirements are in `deploy/static-seed.md`.
 
+Run the separate installed-server integration check with:
+
+```powershell
+node --test tests/build-static-seed-plan-apache_test.js
+```
+
+This requires the existing OSM-Ubuntu WSL distribution and its installed Apache
+modules; absence is a failure, not a skipped verification. It starts its own
+loopback Apache instance and leaves the existing site configuration untouched.
+Bounded synthetic non-model bytes, generated configuration, PID and logs stay in
+one owned canonical artifact directory. Shutdown binds the PID to that exact
+configuration, proves process exit, then verifies output removal. No package,
+Docker image, source copy, model payload or remote publication is created.
+
+GET/HEAD assertions verify all six complete bodies and response identities;
+method/path/query failures and compression/override controls test enforcement.
+The generated server prerequisite disables TRACE, which bypasses directory rules
+on Apache. This is local HTTP evidence, not browser CORS, TLS, LiteSpeed, public
+availability or model qualification. The Alias used for the colon-bearing URL
+does not establish the actual remote filesystem's path support.
+
 Node's experimental coverage collector creates its own temporary directory before
 loading tests. When collecting coverage, launch the test process with TMP, TEMP
 and TMPDIR pointing to an exclusively owned directory under this repository's

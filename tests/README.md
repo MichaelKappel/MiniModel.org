@@ -5,6 +5,7 @@ from the canonical MiniModel.org repository:
 
 ```powershell
 node --test tests/catalog.test.js tests/catalog-contract.test.js tests/deployment-custody.test.js tests/build-site-deployment-manifest_test.js tests/browser-smoke_test.js
+node --test tests/build-static-seed-plan_test.js
 ```
 
 The publication checks require the installed reviewed Node binary, PowerShell
@@ -41,6 +42,12 @@ when the source ceases to match the declared empty/expired fixture assumptions.
 
 Keep experiment lessons and compact evidence in the existing ecosystem record.
 Do not retain source copies, browser profiles or screenshots as another archive.
+
+The static-seed preparation tests consume the canonical companion's exact wire
+fixture and ACG2 profile bytes in place. They check descriptor identity, all six
+URLs/headers, bounded canonical parsing, injection refusal and the real stdin
+CLI. They do not run Apache/LiteSpeed or upload model bytes. Host admission and
+publication requirements are in `deploy/static-seed.md`.
 
 Node's experimental coverage collector creates its own temporary directory before
 loading tests. When collecting coverage, launch the test process with TMP, TEMP

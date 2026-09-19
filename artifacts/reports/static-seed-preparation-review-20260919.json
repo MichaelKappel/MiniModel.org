@@ -1,0 +1,131 @@
+{
+  "schema": "minimodel.static_seed_preparation_review.v1",
+  "reviewedUtc": "2026-09-19T20:22:10Z",
+  "sourceParent": "b33b1a783e20db23b77971be061388b7e4163285",
+  "branch": "master",
+  "tinyContractCheckpoint": "8515972a7a33198286993544e86f297c8b8e050f",
+  "status": "local-preparation-generator-tested-host-execution-unverified",
+  "ownerDirection": "Continue ecosystem implementation; ternary/Bonsai research remains deferred.",
+  "question": "Can the existing canonical native/companion seed descriptor produce bounded static MiniModel member-route configuration without payload copies or invented availability?",
+  "changes": [
+    "Add bounded Buffer/stdin-only preparation with exact canonical descriptor validation and the current profiles, six-member order and native size limits.",
+    "Derive piece-set ID from exact descriptor bytes including final LF; output six immutable remote URLs, expected headers and hash-bound .htaccess text.",
+    "Use fixed application CORS origin, exposed identities, compression suppression requests, no-store/no-transform, method/name/query restrictions and actual-server content length.",
+    "No file writes, network requests, credentials, source snapshots, model copies, signing, metadata renewal or publication. Output publicationAllowed is always false.",
+    "Document actual host admission requirements and current publisher separation; do not weaken source, qualification or transport gates."
+  ],
+  "inputs": [
+    {
+      "path": "tools/build-static-seed-plan.js",
+      "bytes": 7564,
+      "sha256": "d8a184b549feb6b124ac60832f9f093872088085e6e232bd396f5b4f18da7f88"
+    },
+    {
+      "path": "tests/build-static-seed-plan_test.js",
+      "bytes": 10813,
+      "sha256": "a80e04d3128ca791a49bcf843e5eca1acbbe2e013b1aadd20ddbdbcb9b66789c"
+    },
+    {
+      "path": "deploy/static-seed.md",
+      "bytes": 5999,
+      "sha256": "a658210a2e90bda5d06e8808ff1b61a49c2b7bd52bb2b749baaddb1f5bf43cb8"
+    },
+    {
+      "path": "catalog.js",
+      "bytes": 46600,
+      "sha256": "1154872dcbfbce55f49be824e78a98dc876a85543eb0e0d587a6488d47721742"
+    },
+    {
+      "path": "catalog/compositions.v1.json",
+      "bytes": 593,
+      "sha256": "d6396eb9d608e5d0b99cc0466accfb4580ae3a3a922884154d765ccf4550de0b"
+    },
+    {
+      "path": "catalog/peer-announcements.v1.json",
+      "bytes": 292,
+      "sha256": "b45ff62016fecdeceb44a9906fe2f1efd364fc0c52324a49500841884d4d3773"
+    }
+  ],
+  "crossProjectFixture": {
+    "source": "../TinyRustLM.com/dotnet/tests/TinyRustLM.Companion.Tests/CompanionDirectCompositionSeedDescriptorMaterializerTests.cs",
+    "role": "Read exact RustAcceptedDescriptor string literals without executing C# or copying source.",
+    "pieceSetId": "sha256:309a0e1c2b1ce9633661fbf884b0a2e6761cd629fa8c612c924511c5a4e19bff",
+    "graphId": "sha256:be13acdcbdd3727d7bcebf92b9776f7fa71f18ca04c49772cf84136e76b6bef4",
+    "modelStatus": "tiny synthetic metadata, not a qualified model"
+  },
+  "checks": {
+    "command": "node --test tests/build-static-seed-plan_test.js tests/catalog.test.js tests/catalog-contract.test.js",
+    "passed": 69,
+    "failed": 0,
+    "skipped": 0,
+    "coverageCommand": "node --experimental-test-coverage --test-coverage-include=tools/build-static-seed-plan.js --test tests/build-static-seed-plan_test.js tests/catalog.test.js tests/catalog-contract.test.js",
+    "coverage": {
+      "linePercent": 90.85,
+      "branchPercent": 97.22,
+      "functionPercent": 83.33,
+      "scope": "build-static-seed-plan.js parent process; separate actual CLI subprocess tests pass without contributing coverage"
+    },
+    "diffHygiene": "passed",
+    "intake": "Content and Improvement placeholder-only"
+  },
+  "failedAttempts": [
+    "First focused run passed 32/34; fixture test referenced rust/contracts rather than the owning root contracts path, and an overbroad credential-pattern assertion matched the legitimate tokenizer filename. Both test mistakes were corrected.",
+    "First coverage invocation passed all 69 behavioral checks but exited 1: an explicitly empty NODE_V8_COVERAGE caused the experimental collector cleanup to attempt mkdir(''). Corrected the collector's environment to its owned coverage directory; CLI children continue to explicitly suppress inherited coverage."
+  ],
+  "hostExecution": {
+    "apacheOnPath": false,
+    "dockerClientPresent": true,
+    "dockerLinuxEngine": "unavailable; named pipe absent",
+    "actions": "No service start, image download, remote configuration or payload upload.",
+    "evidenceLimit": "Generator tests and primary documentation do not establish Apache/LiteSpeed execution or actual host override permissions."
+  },
+  "primarySources": [
+    {
+      "url": "https://httpd.apache.org/docs/2.4/mod/mod_headers.html",
+      "retrieved": "2026-09-19",
+      "version": "Apache HTTP Server 2.4 living documentation",
+      "use": "Header tables, .htaccess context and duplicate-header handling"
+    },
+    {
+      "url": "https://httpd.apache.org/docs/2.4/mod/core.html",
+      "retrieved": "2026-09-19",
+      "version": "Apache HTTP Server 2.4 living documentation",
+      "use": "Files, ForceType, SetHandler and override context"
+    },
+    {
+      "url": "https://docs.litespeedtech.com/lsws/configuration/",
+      "retrieved": "2026-09-19",
+      "version": "Living documentation; immutable revision not supplied",
+      "use": "no-brotli and no-gzip environment controls"
+    },
+    {
+      "url": "https://docs.litespeedtech.com/lsws/cp/cpanel/compression/",
+      "retrieved": "2026-09-19",
+      "version": "Living documentation; immutable revision not supplied",
+      "use": "Per-directory gzip suppression"
+    },
+    {
+      "url": "https://docs.litespeedtech.com/lsws/cp/cpanel/switch-apache/",
+      "retrieved": "2026-09-19",
+      "version": "Living documentation; immutable revision not supplied",
+      "use": "LiteSpeed/Apache rewrite L semantics"
+    }
+  ],
+  "retention": {
+    "ownedOutput": "Existing tests/browser-smoke.js owner creates/verifies/removes MiniModel artifacts/tests/minimodel-browser-* roots; final run removed 5 files totaling 1043959 logical bytes.",
+    "parentAfterRun": "artifacts/tests empty",
+    "modelPayloadsCopied": 0,
+    "historicalDeletions": 0,
+    "physicalStorageRecovered": null
+  },
+  "limitations": [
+    "Two previously policy-blocked TinyRustLM installer links still cause source_authority_scan_incomplete; no rejected removal was retried.",
+    "Current site publisher remains limited to its 22-file closure with unbound transport and expired catalog authority; new tool cannot publish.",
+    "Current descriptors are metadata only: graph closure, real bytes, licensing, numerical agreement and quality require their own existing evidence.",
+    "Remote directory colon support, actual directives, GET/HEAD/CORS and exact full-byte readback remain to be verified on the host.",
+    "No real model/default, live seed, independent outside acquisition or release success is claimed."
+  ],
+  "decision": "Retain the tested generator as concrete static-host preparation. Require actual host behavior and qualification before constructing the seed publication route or advertising an exact composition.",
+  "lesson": "Keep configuration compilation separate from host execution and qualification, but bind it to real producer bytes. Empty coverage suppression belongs on non-instrumented children, not the active experimental collector.",
+  "next": "Execute the generated configuration against a controlled Apache/LiteSpeed host or the actual admitted hosting target; then connect exact verified payload streaming and remote readback to publication authority."
+}

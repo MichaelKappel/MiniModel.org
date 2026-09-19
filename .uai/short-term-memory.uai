@@ -1,7 +1,17 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-09-13T00:41:39Z
+updated_utc: 2026-09-19T20:20:22Z
 site: MiniModel.org
 status: prepared_source_1.1.2_not_published
+
+static_seed_preparation_2026_09_19:
+  status: local_configuration_generator_tested_no_host_execution_or_publication
+  source: tools/build-static-seed-plan.js
+  contract: Current canonical Rust/companion six-member seed descriptor; piece-set identity is its exact SHA-256 with the final LF.
+  behavior: Bounded stdin-only generator returns immutable member URLs, expected response identities and one hash-bound remote htaccess configuration. No local payload copy, credentials, network, signing, catalog renewal or upload; publicationAllowed stays false.
+  verification: Cross-project canonical descriptor/profile tests and catalog regression checks; details and coverage are in artifacts/reports/static-seed-preparation-review-20260919.json.
+  host_gate: deploy/static-seed.md requires actual override/module/path acceptance, six exact byte readbacks, real-browser CORS and qualified-model installation before advertising availability.
+  limits: No Apache executable found on PATH; Docker Linux engine unavailable. No service started or image downloaded. C32 metadata readback is not static model-route evidence. Source scan still stops on the two previously policy-blocked TinyRustLM installer links; transport remains unbound and catalog authority expired.
+  storage: Test/coverage output stays in owned MiniModel artifacts and is removed; no model payload or historical deletion and no measured storage recovery.
 
 ecosystem_cleanup_2026_09_12:
   - Reconciled current guidance with the owner's authorization for initial MiniModel.org server seeds, stored only in D:\LLMs\TinyRustLM.

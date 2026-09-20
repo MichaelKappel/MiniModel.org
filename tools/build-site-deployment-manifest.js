@@ -11,7 +11,7 @@ const canonicalRoot = "E:\\Source\\Rust\\MiniModel.org";
 const manifestPath = path.join(repositoryRoot, "deploy/site-deployment-manifest.v1.json");
 const maxFileBytes = 16 * 1024 * 1024;
 const maxTotalBytes = 64 * 1024 * 1024;
-const gateSha256 = "f99083edfe7eae96279acafcb624eb88e1a26e43d5622d498711fe280691647d";
+const gateSha256 = "c3308e10c7cf055767839528ea3605827c6f0c047a2c10d1dabe8907988c03e6";
 const publicFiles = Object.freeze([
   ".htaccess", ".well-known/site-release-history.json", ".well-known/uaix-talisman.txt",
   "catalog.js", "catalog/.htaccess", "catalog/compositions.v1.json", "catalog/peer-announcements.v1.json",

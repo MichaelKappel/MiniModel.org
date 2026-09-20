@@ -63,6 +63,17 @@ authenticates metadata; it does not establish reachability or prove the claims.
 
 ## Empty Metadata Preparation
 
+The page loads catalog and peer metadata under one ten-second deadline, including
+signature verification. An explicit caller may select 1–60,000 milliseconds or
+provide an AbortSignal. Reload cancels the preceding operation; a failed request
+cancels its sibling and cannot leave old model actions visible. Late completion
+cannot overwrite the newer page state. Responses stream through fatal UTF-8
+decoding, with at most one MiB of decoded bytes and 4,096 chunks per document.
+Oversized declared lengths reject before reading the body. No whole-body text
+fallback is used. Cancellation stops observation of uncooperative injected
+dependencies; it does not claim that arbitrary custom promises or Web Crypto
+work can be forcibly terminated. Normal browser Fetch receives the same signal.
+
 `tools/build-empty-catalog.js` is limited to the empty prelaunch inventory.
 It never creates keys, signatures, entries, receipts, or proofs, and refuses to
 erase existing keys, entries, revocations, supersessions, or announcements.

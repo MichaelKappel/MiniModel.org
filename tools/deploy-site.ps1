@@ -40,7 +40,7 @@ function Invoke-VerifiedNode {
             @($Arguments | Select-Object -Unique).Count -ne $Arguments.Count) { throw 'Invalid source-authority arguments.' }
         $toolPath = Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\tools\verify-single-source-authority.js'
         $toolBytes = 141430
-        $toolSha256 = 'f99083edfe7eae96279acafcb624eb88e1a26e43d5622d498711fe280691647d'
+        $toolSha256 = 'c3308e10c7cf055767839528ea3605827c6f0c047a2c10d1dabe8907988c03e6'
         $maximumOutput = 4096
     }
     else {
@@ -48,7 +48,7 @@ function Invoke-VerifiedNode {
             ($Arguments.Count -eq 2 -and $Arguments[1] -cne '--verify')) { throw 'Invalid manifest arguments.' }
         $toolPath = Join-Path $repositoryRoot 'tools\build-site-deployment-manifest.js'
         $toolBytes = 17615
-        $toolSha256 = '2810f258af0f0d973372144caac6581c4610ec815e285913fcc9000475c973a9'
+        $toolSha256 = '09aa7750dc682ab68f7eb4b4e34664d6139d8232d2026a37461b2a5dd5011bb3'
         $maximumOutput = 2097152
     }
     if (-not [IO.Path]::IsPathRooted($NodeExecutablePath)) { throw 'Node executable path must be absolute.' }

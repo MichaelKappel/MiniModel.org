@@ -2,6 +2,9 @@
   "use strict";
 
   const MAX_METADATA_BYTES = 1024 * 1024;
+  const MAX_METADATA_CHUNKS = 4096;
+  const DEFAULT_LOAD_TIMEOUT_MILLISECONDS = 10000;
+  const MAX_LOAD_TIMEOUT_MILLISECONDS = 60000;
   const MAX_BROWSER_ADMISSION_BYTES = 64 * 1024;
   const MAX_QUALIFICATION_RECEIPT_BYTES = 128 * 1024;
   const MAX_SOURCE_AGE_MILLISECONDS = 24 * 60 * 60 * 1000;
@@ -807,6 +810,7 @@
   }
 
   async function buildVerifiedCatalogView(catalogValue, peerFeedValue, options = {}) {
+    throwIfAborted(options.signal);
     // Own the validated inputs across crypto awaits; caller mutations cannot change the view.
     const catalog = parseCanonicalJsonText(`${JSON.stringify(catalogValue)}\n`);
     const peerFeed = parseCanonicalJsonText(`${JSON.stringify(peerFeedValue)}\n`);
@@ -825,14 +829,17 @@
         const bytes = peerAnnouncementSigningBytes({ ...announcement, peer_base_url: peer.peerUrl });
         let valid;
         try {
-          const key = await subtle.importKey("raw", publicKey, { name: "Ed25519" }, false, ["verify"]);
-          valid = await subtle.verify({ name: "Ed25519" }, key, signature, bytes);
+          const key = await waitForCatalog(subtle.importKey("raw", publicKey, { name: "Ed25519" }, false, ["verify"]), options.signal);
+          throwIfAborted(options.signal);
+          valid = await waitForCatalog(subtle.verify({ name: "Ed25519" }, key, signature, bytes), options.signal);
         } catch (_error) {
+          throwIfAborted(options.signal);
           throw new Error("peer announcement signature verification failed");
         }
         if (valid !== true) throw new Error("peer announcement signature is invalid");
       }
     }
+    throwIfAborted(options.signal);
     return projectCatalog(catalog, announcements);
   }
 
@@ -983,18 +990,79 @@
     return parsed;
   }
 
-  async function fetchJson(url, fetchImplementation) {
-    const response = await fetchImplementation(url, {
-      method: "GET",
-      cache: "no-store",
-      credentials: "omit",
-      redirect: "error",
+  // Preserve the shared deadline, explicit cancellation or supersession reason.
+  function throwIfAborted(signal) {
+    if (signal?.aborted) throw signal.reason || new Error("Catalog load was cancelled");
+  }
+
+  // Observe even late rejection, while letting the caller stop waiting for an uncooperative dependency.
+  function waitForCatalog(task, signal) {
+    if (!signal) return Promise.resolve(task);
+    return new Promise((resolve, reject) => {
+      const aborted = () => reject(signal.reason || new Error("Catalog load was cancelled"));
+      signal.addEventListener("abort", aborted, { once: true });
+      Promise.resolve(task).then(value => {
+        signal.removeEventListener("abort", aborted);
+        if (signal.aborted) aborted(); else resolve(value);
+      }, error => {
+        signal.removeEventListener("abort", aborted);
+        reject(error);
+      });
+      if (signal.aborted) aborted();
     });
-    if (!response.ok) {
-      throw new Error(`metadata request failed with HTTP ${response.status}`);
+  }
+
+  // Cancellation is best effort for injected streams; never wait indefinitely for their cleanup.
+  function cancelCatalogBody(body) {
+    try { Promise.resolve(body?.cancel()).catch(() => {}); } catch (_) { /* Already closed/locked. */ }
+  }
+
+  // Bound decoded bytes and chunk count before concatenation; require complete fatal UTF-8 decoding.
+  async function fetchJson(url, fetchImplementation, signal) {
+    throwIfAborted(signal);
+    const request = Promise.resolve().then(() => {
+      throwIfAborted(signal);
+      return fetchImplementation(url, { method: "GET", cache: "no-store", credentials: "omit", redirect: "error", signal });
+    });
+    // A late Response belongs to the cancelled operation and must not retain an unread body.
+    request.then(response => { if (signal.aborted) cancelCatalogBody(response?.body); }, () => {});
+    const response = await waitForCatalog(request, signal);
+    let reader;
+    let complete = false;
+    try {
+      throwIfAborted(signal);
+      if (!response.ok) throw new Error(`metadata request failed with HTTP ${response.status}`);
+      const declared = response.headers?.get("content-length");
+      if (declared !== null && declared !== undefined &&
+          (!/^(0|[1-9][0-9]*)$/.test(declared) || Number(declared) > MAX_METADATA_BYTES)) {
+        throw new Error("metadata response exceeded the byte limit");
+      }
+      if (!response.body || typeof response.body.getReader !== "function") throw new Error("metadata response stream is unavailable");
+      reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+      let text = "";
+      let bytes = 0;
+      let chunks = 0;
+      while (true) {
+        const { done, value } = await waitForCatalog(reader.read(), signal);
+        throwIfAborted(signal);
+        if (done) break;
+        if (!(value instanceof Uint8Array) || ++chunks > MAX_METADATA_CHUNKS || value.byteLength > MAX_METADATA_BYTES - bytes) {
+          throw new Error("metadata response exceeded the byte/chunk limit");
+        }
+        bytes += value.byteLength;
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+      const value = parseCanonicalJsonText(text);
+      complete = true;
+      return value;
+    } finally {
+      if (!complete) cancelCatalogBody(reader || response.body);
+      if (reader) {
+        try { reader.releaseLock(); } catch (_) { /* Underlying abort still owns a pending read. */ }
+      }
     }
-    const text = await response.text();
-    return parseCanonicalJsonText(text);
   }
 
   const activeCatalogLoads = new WeakMap();
@@ -1031,19 +1099,35 @@
   }
 
   async function loadCatalog(documentObject, fetchImplementation = globalObject.fetch, options = {}) {
-    const operation = Symbol("catalog load");
+    const operation = new AbortController();
+    activeCatalogLoads.get(documentObject)?.abort(new Error("Catalog load was superseded"));
     activeCatalogLoads.set(documentObject, operation);
     renderCatalogState(documentObject, "loading");
+    let timer;
+    let callerSignal;
+    const cancelled = () => operation.abort(callerSignal.reason || new Error("Catalog load was cancelled"));
     try {
+      const timeout = options.timeoutMilliseconds === undefined ? DEFAULT_LOAD_TIMEOUT_MILLISECONDS : options.timeoutMilliseconds;
+      if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > MAX_LOAD_TIMEOUT_MILLISECONDS) throw new Error("Catalog timeout is invalid");
+      callerSignal = options.signal;
+      if (callerSignal !== undefined) {
+        if (!callerSignal || typeof callerSignal.aborted !== "boolean" || typeof callerSignal.addEventListener !== "function" ||
+            typeof callerSignal.removeEventListener !== "function") throw new Error("Catalog signal is invalid");
+        callerSignal.addEventListener("abort", cancelled, { once: true });
+        if (callerSignal.aborted) cancelled();
+      }
+      throwIfAborted(operation.signal);
+      timer = setTimeout(() => operation.abort(new Error("Catalog load timed out")), timeout);
       if (typeof fetchImplementation !== "function") {
         throw new Error("catalog fetch is unavailable");
       }
       const base = new URL(globalObject.location ? globalObject.location.href : "https://minimodel.org/");
       const [catalog, peerFeed] = await Promise.all([
-        fetchJson(new URL("/catalog/compositions.v1.json", base), fetchImplementation),
-        fetchJson(new URL("/catalog/peer-announcements.v1.json", base), fetchImplementation),
+        fetchJson(new URL("/catalog/compositions.v1.json", base), fetchImplementation, operation.signal),
+        fetchJson(new URL("/catalog/peer-announcements.v1.json", base), fetchImplementation, operation.signal),
       ]);
-      const views = await buildVerifiedCatalogView(catalog, peerFeed, options);
+      const views = await buildVerifiedCatalogView(catalog, peerFeed, { ...options, signal: operation.signal });
+      throwIfAborted(operation.signal);
       if (activeCatalogLoads.get(documentObject) !== operation) throw new Error("Catalog load was superseded");
       renderCatalog(documentObject, views);
 
@@ -1062,8 +1146,13 @@
       }
       return views;
     } catch (error) {
+      operation.abort(error);
       if (activeCatalogLoads.get(documentObject) === operation) renderCatalogState(documentObject, "error");
       throw error;
+    } finally {
+      clearTimeout(timer);
+      if (callerSignal && typeof callerSignal.removeEventListener === "function") callerSignal.removeEventListener("abort", cancelled);
+      if (activeCatalogLoads.get(documentObject) === operation) activeCatalogLoads.delete(documentObject);
     }
   }
 

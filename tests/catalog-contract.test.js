@@ -311,7 +311,7 @@ test("page loader awaits signature verification and never renders a tampered fee
     assert.equal(settings.credentials, "omit");
     assert.equal(settings.cache, "no-store");
     assert.equal(settings.redirect, "error");
-    return { ok: true, text: async () => canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog) };
+    return new Response(canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog));
   };
   const [view] = await site.loadCatalog(document, fetch, options);
   assert.equal(view.availability, "peer");
@@ -328,7 +328,7 @@ test("page loader awaits signature verification and never renders a tampered fee
 test("failed reload clears prior actions and callbacks, and a successful retry restores controls", async () => {
   const pair = signedFixture();
   const document = documentFixture();
-  const fetch = async (url) => ({ ok: true, text: async () => canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog) });
+  const fetch = async (url) => new Response(canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog));
   document.getElementById("modelCatalogAvailability").value = "all";
   await site.loadCatalog(document, fetch, options);
   const filter = document.getElementById("modelCatalogAvailability");
@@ -354,7 +354,7 @@ test("an older load cannot overwrite the current catalog or its failure state", 
   const document = documentFixture();
   let releaseOld;
   const waiting = new Promise((resolve) => { releaseOld = resolve; });
-  const fetch = async (url) => ({ ok: true, text: async () => canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog) });
+  const fetch = async (url) => new Response(canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog));
   const old = site.loadCatalog(document, async (url) => { await waiting; return fetch(url); }, options);
   const rejection = assert.rejects(old, /superseded/);
   await assert.rejects(site.loadCatalog(document, async () => ({ ok: false, status: 503 }), options), /HTTP 503/);
@@ -371,8 +371,9 @@ test("an older failed load cannot clear a newer verified catalog", async () => {
   let rejectOld;
   const waiting = new Promise((resolve, reject) => { rejectOld = reject; });
   const old = site.loadCatalog(document, async () => waiting, options);
-  const rejected = assert.rejects(old, /old request failed/);
-  const fetch = async (url) => ({ ok: true, text: async () => canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog) });
+  const rejected = assert.rejects(old, /superseded/);
+  const fetch = async (url) => new Response(canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog));
+  await Promise.resolve();
   document.getElementById("modelCatalogAvailability").value = "all";
   await site.loadCatalog(document, fetch, options);
   rejectOld(new Error("old request failed"));
@@ -380,4 +381,144 @@ test("an older failed load cannot clear a newer verified catalog", async () => {
   assert.equal(document.getElementById("modelCatalogStatus").dataset.state, "ready");
   assert.equal(document.getElementById("modelCatalogAvailability").disabled, false);
   assert.equal(typeof document.getElementById("modelCatalogAvailability").onchange, "function");
+});
+
+test("catalog deadline settles even when fetch ignores cancellation", async () => {
+  const document = documentFixture();
+  const pair = emptyPair();
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const operation = site.loadCatalog(document, async url => {
+    await pending;
+    return new Response(canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog));
+  }, { ...options, timeoutMilliseconds: 10 }).then(value => ({ value }), error => ({ error }));
+  let timeout;
+  try {
+    const outcome = await Promise.race([operation, new Promise(resolve => {
+      timeout = setTimeout(() => resolve(null), 250);
+    })]);
+    assert.ok(outcome, "catalog deadline did not settle the original operation");
+    assert.match(outcome.error?.message || "", /timed out/);
+    assert.equal(document.getElementById("modelCatalogStatus").dataset.state, "error");
+  } finally {
+    clearTimeout(timeout);
+    release();
+    await operation;
+  }
+});
+
+test("catalog rejects advertised oversized responses before consuming their body", async () => {
+  const pair = emptyPair();
+  let reads = 0;
+  const response = url => ({ ok: true, status: 200,
+    headers: new Headers({ "content-length": String(site.MAX_METADATA_BYTES + 1) }),
+    body: { getReader() { reads++; throw new Error("body should not be read"); }, cancel: async () => {} },
+    text: async () => { reads++; return canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog); }
+  });
+  await assert.rejects(site.loadCatalog(documentFixture(), async url => response(url), options), /byte limit/);
+  assert.equal(reads, 0);
+});
+
+test("catalog validates deadlines and caller signals before starting requests", async () => {
+  for (const timeoutMilliseconds of [null, 0, -1, 1.5, NaN, Infinity, "10", 60001]) {
+    let requests = 0;
+    await assert.rejects(site.loadCatalog(documentFixture(), () => { requests++; }, { ...options, timeoutMilliseconds }), /timeout/);
+    assert.equal(requests, 0);
+  }
+  for (const signal of [null, {}, { aborted: false }]) {
+    await assert.rejects(site.loadCatalog(documentFixture(), () => assert.fail("request started"), { ...options, signal }), /signal/);
+  }
+  const controller = new AbortController(); const reason = new Error("explicit caller stop");
+  controller.abort(reason);
+  await assert.rejects(site.loadCatalog(documentFixture(), () => assert.fail("request started"),
+    { ...options, signal: controller.signal }), error => error === reason);
+});
+
+test("catalog bounds streamed bytes/chunks and cancels both readers on failure", async t => {
+  for (const mode of ["too-large", "too-many", "invalid-utf8", "missing-stream", "pending-read", "cancel-fails"]) {
+    await t.test(mode, async () => {
+      let reads = 0; let cancels = 0; let releases = 0;
+      const signals = [];
+      const fetch = async (_url, settings) => {
+        signals.push(settings.signal);
+        return { ok: true, status: 200, headers: new Headers(),
+          body: mode === "missing-stream" ? null : { getReader: () => ({
+            read: async () => {
+              reads++;
+              if (mode === "pending-read") return new Promise(() => {});
+              return { done: false, value: mode === "too-many" ? new Uint8Array(0) :
+                mode === "invalid-utf8" ? new Uint8Array([0xff]) : new Uint8Array(site.MAX_METADATA_BYTES + 1) };
+            },
+            cancel: () => { cancels++; if (mode === "cancel-fails") throw new Error("cancel failed"); return Promise.resolve(); },
+            releaseLock: () => { releases++; }
+          }) }
+        };
+      };
+      await assert.rejects(site.loadCatalog(documentFixture(), fetch, { ...options, timeoutMilliseconds: 100 }),
+        /byte\/chunk limit|encoded data|stream is unavailable|timed out/);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.ok(signals.every(signal => signal.aborted));
+      assert.equal(releases, mode === "missing-stream" ? 0 : 2);
+      assert.equal(cancels, mode === "missing-stream" ? 0 : 2);
+      assert.ok(reads <= (mode === "too-many" ? 8194 : 2));
+    });
+  }
+});
+
+test("catalog accepts exact byte limit and split UTF-8, rejecting one byte more", async () => {
+  for (const extra of [0, 1]) {
+    const pair = emptyPair();
+    const document = documentFixture();
+    const baseline = canonical(pair.catalog);
+    // Padding is a rejected schema field, so exact-bound reading is established before validation.
+    const bytes = Buffer.from(baseline.slice(0, -2) + ',"padding":"' + 'x'.repeat(site.MAX_METADATA_BYTES - Buffer.byteLength(baseline) - 13 + extra) + '"}\n');
+    assert.equal(bytes.length, site.MAX_METADATA_BYTES + extra);
+    await assert.rejects(site.loadCatalog(document, async url => new Response(
+      url.pathname.includes("peer-announcements") ? canonical(pair.peerFeed) : bytes), options),
+      extra ? /byte\/chunk limit/ : /unknown or missing field/);
+  }
+  const pair = signedFixture();
+  pair.catalog.entries[0].description = "R\u00e9sum\u00e9 \u6f22\u5b57";
+  const views = await site.loadCatalog(documentFixture(), async url => {
+    const bytes = Buffer.from(canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog));
+    let index = 0;
+    return new Response(new ReadableStream({ pull(controller) {
+      if (index === bytes.length) controller.close(); else controller.enqueue(bytes.subarray(index, ++index));
+    } }));
+  }, options);
+  assert.equal(views[0].description, pair.catalog.entries[0].description);
+});
+
+test("cancellation stops crypto observation before later verification or rendering", async () => {
+  for (const stage of ["importKey", "verify"]) {
+    const pair = signedFixture(); const controller = new AbortController(); const reason = new Error("stop crypto");
+    const document = documentFixture(); let verifyCalls = 0; let release;
+    const pending = new Promise(resolve => { release = resolve; });
+    let started;
+    const start = new Promise(resolve => { started = resolve; });
+    const subtle = {
+      importKey: () => { if (stage === "importKey") { started(); return pending; } return Promise.resolve({}); },
+      verify: () => { verifyCalls++; started(); return pending; }
+    };
+    const fetch = async url => new Response(canonical(url.pathname.includes("peer-announcements") ? pair.peerFeed : pair.catalog));
+    const result = site.loadCatalog(document, fetch, { ...options, crypto: { subtle }, signal: controller.signal });
+    const rejection = assert.rejects(result, error => error === reason);
+    await start; controller.abort(reason); await rejection;
+    release(true); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(verifyCalls, stage === "importKey" ? 0 : 1);
+    assert.equal(document.getElementById("modelCatalogStatus").dataset.state, "error");
+  }
+});
+
+test("cancelled fetch disposes late responses and observes failing body cleanup", async () => {
+  const controller = new AbortController(); const reason = new Error("stop waiting for headers");
+  const pending = []; let cancelled = 0;
+  const result = site.loadCatalog(documentFixture(), () => new Promise(resolve => pending.push(resolve)),
+    { ...options, signal: controller.signal });
+  const rejection = assert.rejects(result, error => error === reason);
+  await Promise.resolve(); assert.equal(pending.length, 2);
+  controller.abort(reason); await rejection;
+  for (const release of pending) release({ body: { cancel() { cancelled++; return Promise.reject(new Error("late cleanup failed")); } } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(cancelled, 2);
 });

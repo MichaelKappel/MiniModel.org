@@ -110,7 +110,7 @@ function readSourceInputs() {
 }
 
 function createPreviewServer(inputs) {
-  const state = { rejectMetadata: false };
+  const state = { rejectMetadata: false, stallMetadata: false, oversizedMetadata: false, stalledClosed: 0 };
   const server = http.createServer((request, response) => {
     const host = `127.0.0.1:${server.address().port}`;
     if (request.headers.host !== host) { response.writeHead(403).end(); return; }
@@ -119,6 +119,18 @@ function createPreviewServer(inputs) {
     const input = Object.hasOwn(inputs, target) ? inputs[target] : null;
     if (!input) { response.writeHead(404).end(); return; }
     if (state.rejectMetadata && target.startsWith("/catalog/")) { response.writeHead(503).end(); return; }
+    if (state.stallMetadata && target.startsWith("/catalog/")) {
+      response.once("close", () => { state.stalledClosed++; });
+      response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      response.write("{");
+      return;
+    }
+    if (state.oversizedMetadata && target.startsWith("/catalog/")) {
+      response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      response.write(Buffer.alloc(1024 * 1024 + 1, 32));
+      response.end();
+      return;
+    }
     response.writeHead(200, { "Content-Type": `${input.type}; charset=utf-8`, "Content-Length": input.bytes.length,
       "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
     response.end(request.method === "HEAD" ? undefined : input.bytes);
@@ -225,6 +237,26 @@ async function runBrowserSmoke() {
       preview.state.rejectMetadata = false;
       await page.evaluate(() => window.MiniModelCatalog.loadCatalog(document));
       report.observations.push(await inspectViewport(page, `${label}:recovered-empty-fixture`, "ready"));
+      preview.state.stallMetadata = true;
+      preview.state.stalledClosed = 0;
+      const timeoutMessage = await page.evaluate(() => window.MiniModelCatalog.loadCatalog(document, undefined,
+        { timeoutMilliseconds: 100 }).then(() => "unexpected success", error => error.message));
+      assert.match(timeoutMessage, /timed out/);
+      report.observations.push(await inspectViewport(page, `${label}:stalled-stream-fixture`, "error"));
+      // Observe these two owned server responses closing after the browser aborts Fetch.
+      for (let attempt = 0; preview.state.stalledClosed < 2 && attempt < 40; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      assert.equal(preview.state.stalledClosed, 2, `${label}: stalled requests remained open`);
+      preview.state.stallMetadata = false;
+      await page.evaluate(() => window.MiniModelCatalog.loadCatalog(document));
+      report.observations.push(await inspectViewport(page, `${label}:stream-recovered-fixture`, "ready"));
+      preview.state.oversizedMetadata = true;
+      const oversizedMessage = await page.evaluate(() => window.MiniModelCatalog.loadCatalog(document)
+        .then(() => "unexpected success", error => error.message));
+      assert.match(oversizedMessage, /byte\/chunk limit/);
+      report.observations.push(await inspectViewport(page, `${label}:oversized-stream-fixture`, "error"));
+      preview.state.oversizedMetadata = false;
       assert.deepEqual(errors, [], `${label}: unhandled page errors`);
       await page.close();
       await context.close();

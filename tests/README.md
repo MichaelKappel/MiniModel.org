@@ -14,6 +14,13 @@ The service account may need its established process-local Git safe-directory
 settings for the seven canonical repositories. Do not alter the gate or global
 Git settings to make an observation pass.
 
+Manifest closure checks compare public worktree bytes with the exact local HEAD.
+Run them after committing the tested public change; dirty public bytes correctly
+fail admission. Pinned helper identities must follow a reviewed canonical change,
+including the manifest helper's dependent pin in the PowerShell publisher. The
+September 19 source-gate change updated only its canonical workspace-policy
+identity; MiniModel now binds that committed gate without changing its behavior.
+
 The browser check uses installed Microsoft Edge and the existing playwright-core
 package under the canonical TinyRustLM.com/tinyrustlm/node_modules directory.
 It downloads no browser or dependency. To emit its standalone observation:
@@ -42,6 +49,16 @@ when the source ceases to match the declared empty/expired fixture assumptions.
 
 Keep experiment lessons and compact evidence in the existing ecosystem record.
 Do not retain source copies, browser profiles or screenshots as another archive.
+
+Catalog lifetime checks in `catalog-contract.test.js` cover stalled headers/body
+reads, late responses, caller cancellation, supersession, stalled crypto, invalid
+deadline options, byte/chunk ceilings and split UTF-8. They use real Response
+streams alongside deliberately uncooperative dependencies. The Edge smoke adds
+real loopback stalled and oversized responses at both viewports, observes both
+stalled server responses closing after timeout, and verifies recovery. Its
+fourteen observations remain local fixtures, not current catalog authority or
+public seed evidence. Existing screenshot identities may be compared before and
+after a change under the same browser/viewports; no visual mask is applied.
 
 The static-seed preparation tests consume the canonical companion's exact wire
 fixture and ACG2 profile bytes in place. They check descriptor identity, all six

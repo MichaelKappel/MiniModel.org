@@ -1,0 +1,273 @@
+{
+  "schema": "minimodel.catalog-lifetime-review.v1",
+  "reviewId": "C73",
+  "observedAtUtc": "2026-09-20T17:52:00Z",
+  "sourceParent": "4b815cbb877a709e8d3060c2039c13e993c334eb",
+  "sourceCommit": "81f0b4c2bdee23abde6abd36d751e533b2425554",
+  "tinyContractCommit": "f2875551ca695abe9f16767f315623e2bdcb0976",
+  "status": "catalog-tested-publication-gates-blocked-not-published",
+  "priorTurnClassification": "C72 made source progress. The intervening credential-location confirmation made no ecosystem progress; this continuation resumes unfinished C73 source work.",
+  "question": "Can catalog loading stop within one deadline and reject excessive data before buffering the whole response?",
+  "baseline": {
+    "failed": 2,
+    "passed": 0,
+    "observations": [
+      "An ignored fetch cancellation exceeded the 250ms observation window despite a requested 10ms deadline; the original operation was released and observed in test cleanup.",
+      "A declared response larger than 1 MiB was accepted through response.text(); the bounded parser ran only after the whole body was allocated."
+    ]
+  },
+  "change": {
+    "defaultDeadlineMilliseconds": 10000,
+    "admittedDeadlineMilliseconds": [
+      1,
+      60000
+    ],
+    "metadataBytesPerResponse": 1048576,
+    "chunksPerResponse": 4096,
+    "behavior": [
+      "Stream both responses with fatal UTF-8 decoding and limits before accumulation.",
+      "One AbortController and deadline cover both fetches, reads and signature-verification observation.",
+      "Failure aborts siblings; caller cancellation and supersession prevent stale rendering and later verification.",
+      "Late responses are cancelled and late task/cleanup rejections are observed.",
+      "Existing visual strings/styles remain; index script query follows exact catalog.js SHA-256."
+    ]
+  },
+  "toolBinding": {
+    "reviewedCommit": "1114003d35e52f4fdb9a2f1b76a4f3bd53ecd8db",
+    "reviewedChange": "Only source gate's canonical ecosystem workspace-policy byte length/hash changed. Updated its two MiniModel pins and the dependent manifest-tool pin; did not alter gate behavior.",
+    "gateSha256": "c3308e10c7cf055767839528ea3605827c6f0c047a2c10d1dabe8907988c03e6",
+    "manifestSha256": "09aa7750dc682ab68f7eb4b4e34664d6139d8232d2026a37461b2a5dd5011bb3"
+  },
+  "validation": {
+    "focused": {
+      "passed": 86,
+      "failed": 0,
+      "skipped": 0,
+      "command": "node --test --experimental-test-coverage --test-coverage-include=catalog.js tests/catalog.test.js tests/catalog-contract.test.js tests/browser-smoke_test.js tests/build-static-seed-plan_test.js"
+    },
+    "broader": {
+      "passed": 117,
+      "failed": 4,
+      "skipped": 0,
+      "command": "Focused command plus tests/deployment-custody.test.js tests/build-site-deployment-manifest_test.js",
+      "nestedPester": {
+        "passed": 26,
+        "failed": 1,
+        "total": 27
+      },
+      "failure": "Actual manifest/publisher execution encounters source_authority_scan_incomplete on the two known policy-blocked installer links; assertions expecting later manifest/catalog admission cannot run. Gates were not weakened or reclassified as passes."
+    },
+    "coverage": {
+      "file": "catalog.js",
+      "linePercent": 91.95,
+      "branchPercent": 82.54,
+      "functionPercent": 98.94,
+      "tool": "Node 24.14.0 experimental test coverage"
+    },
+    "browser": {
+      "browser": "153.0.4234.48",
+      "playwright": "1.61.1",
+      "before": 8,
+      "after": 14,
+      "comparison": [
+        {
+          "label": "desktop:current-expired-source",
+          "identical": true,
+          "screenshotSha256": "08ff371b2f5444d65fb1fa186495adb44f55bfcdf8de5aac97c6b641fad75189"
+        },
+        {
+          "label": "desktop:historical-empty-fixture",
+          "identical": true,
+          "screenshotSha256": "b488db3fb323840ee68b205ccd6bc88aee55b8fb33302a67625cb2d4009649c4"
+        },
+        {
+          "label": "desktop:failed-reload-fixture",
+          "identical": true,
+          "screenshotSha256": "08ff371b2f5444d65fb1fa186495adb44f55bfcdf8de5aac97c6b641fad75189"
+        },
+        {
+          "label": "desktop:recovered-empty-fixture",
+          "identical": true,
+          "screenshotSha256": "422d6762607c16c8a421cb21e2972d42ebccd841605d08c91709377c857cb545"
+        },
+        {
+          "label": "mobile:current-expired-source",
+          "identical": true,
+          "screenshotSha256": "cba4c347661bd40b5fd4ecf38fabfed8a80c9c2a0bad22e18a4624cecf0e588a"
+        },
+        {
+          "label": "mobile:historical-empty-fixture",
+          "identical": true,
+          "screenshotSha256": "cba4c347661bd40b5fd4ecf38fabfed8a80c9c2a0bad22e18a4624cecf0e588a"
+        },
+        {
+          "label": "mobile:failed-reload-fixture",
+          "identical": true,
+          "screenshotSha256": "cba4c347661bd40b5fd4ecf38fabfed8a80c9c2a0bad22e18a4624cecf0e588a"
+        },
+        {
+          "label": "mobile:recovered-empty-fixture",
+          "identical": true,
+          "screenshotSha256": "cba4c347661bd40b5fd4ecf38fabfed8a80c9c2a0bad22e18a4624cecf0e588a"
+        }
+      ],
+      "other": {
+        "schema": "minimodel.browser_smoke.v2",
+        "started_utc": "2026-09-20T17:48:58.576Z",
+        "source_inputs": [
+          {
+            "path": "index.html",
+            "bytes": 8357,
+            "sha256": "d4d947a61f0d6f4bd1095d8bde2c47b9c8bca20cf545be26f5d88daed12cf86b"
+          },
+          {
+            "path": "styles.css",
+            "bytes": 12888,
+            "sha256": "3d262ee6f3a565a15f2f7708a50dc0977ec17b013a9d2f42bf70ba38b3a5f369"
+          },
+          {
+            "path": "catalog.js",
+            "bytes": 51512,
+            "sha256": "a89c6a1b6563a0606e170884562eaf22e2db998075a36290fbd90b2e02dceafa"
+          },
+          {
+            "path": "catalog/compositions.v1.json",
+            "bytes": 593,
+            "sha256": "d6396eb9d608e5d0b99cc0466accfb4580ae3a3a922884154d765ccf4550de0b"
+          },
+          {
+            "path": "catalog/peer-announcements.v1.json",
+            "bytes": 292,
+            "sha256": "b45ff62016fecdeceb44a9906fe2f1efd364fc0c52324a49500841884d4d3773"
+          },
+          {
+            "path": "updates/index.html",
+            "bytes": 4253,
+            "sha256": "131799814a3ed671e866cbac2d8a5b93cf20932a2bc46fbf11e5d8cab50468e7"
+          }
+        ],
+        "historical_fixture_time": "2026-09-08T02:40:00Z",
+        "operation_directory": "E:\\Source\\Rust\\MiniModel.org\\artifacts\\tests\\minimodel-browser-eTicYM",
+        "playwright_version": "1.61.1",
+        "browser_version": "153.0.4234.48",
+        "cleaned_output": {
+          "files": 446,
+          "bytes": 21471985
+        },
+        "output_absent": true
+      }
+    },
+    "earlierRuns": [
+      {
+        "passed": 85,
+        "failed": 1,
+        "reason": "Script cache query was stale; bound index.html to the new catalog.js hash."
+      },
+      {
+        "passed": 114,
+        "failed": 7,
+        "reason": "Four exact-HEAD public-byte checks ran before the source commit; other checks exposed stale shared source-gate pins. Original failures retained by summary and log hashes."
+      }
+    ],
+    "secretScan": {
+      "status": "pass",
+      "files": 9,
+      "findings": 0,
+      "scopeComplete": false
+    }
+  },
+  "limits": [
+    "Real Edge loopback fixtures and fixed historical empty catalog only; no real qualified model, outside-network transfer, public seed, or publication evidence.",
+    "Timers bound observation while JavaScript runs; they do not preempt synchronous code or force WebCrypto/uncooperative injected promises to terminate.",
+    "Screenshot equality covers eight initial-viewport observations at 1440x1000 and 390x844; mobile catalog also checked through DOM state, not full-page visual coverage.",
+    "Publication manifest must be regenerated for exact committed public bytes after source/qualification/hosting gates pass; existing catalog remains empty and expired.",
+    "No NuGet key read or publication; real ARM64 and release gates remain open. No blocked deletion was retried."
+  ],
+  "inputs": [
+    {
+      "path": "catalog.js",
+      "bytes": 51512,
+      "sha256": "a89c6a1b6563a0606e170884562eaf22e2db998075a36290fbd90b2e02dceafa"
+    },
+    {
+      "path": "docs/catalog-boundary.md",
+      "bytes": 10030,
+      "sha256": "26fb57488a471e17ca44b6a8f49093e0a2ca11c1bbba6e47ddf3c18cd9e8f7f1"
+    },
+    {
+      "path": "index.html",
+      "bytes": 8357,
+      "sha256": "d4d947a61f0d6f4bd1095d8bde2c47b9c8bca20cf545be26f5d88daed12cf86b"
+    },
+    {
+      "path": "tests/README.md",
+      "bytes": 6294,
+      "sha256": "a975fc5fd7551888108ab8b8c16f38b3ec6d77b4d523eafffa4ec34dd5d4c2fc"
+    },
+    {
+      "path": "tests/browser-smoke.js",
+      "bytes": 16308,
+      "sha256": "92d343c24806db3047acc1f8be12a4370a04514867f8bcd43e32e543c0d659d5"
+    },
+    {
+      "path": "tests/browser-smoke_test.js",
+      "bytes": 4527,
+      "sha256": "8f5ed0c770105fc371399de97ccf501159505b08d4c379d04cdf05cf1fb57125"
+    },
+    {
+      "path": "tests/catalog-contract.test.js",
+      "bytes": 28107,
+      "sha256": "bf873cd97a530414edbe952877f834f6de53822f3a60cae41deb2ba6f75718c4"
+    },
+    {
+      "path": "tools/build-site-deployment-manifest.js",
+      "bytes": 17615,
+      "sha256": "09aa7750dc682ab68f7eb4b4e34664d6139d8232d2026a37461b2a5dd5011bb3"
+    },
+    {
+      "path": "tools/deploy-site.ps1",
+      "bytes": 79851,
+      "sha256": "c80169cc82c9818384b2cb95a090180fb9418d8e1d302df18728f3c64c1ea3e5"
+    }
+  ],
+  "retiredLogIdentities": [
+    {
+      "name": "baseline.log",
+      "bytes": 3056,
+      "sha256": "af01f87a40f553857a7b1e2783abb312835f4f993552e1168bafab4d543b044a"
+    },
+    {
+      "name": "baseline-browser.json",
+      "bytes": 8762,
+      "sha256": "be024fd01a34c0b937bdf197b4ef7f8dd53e75538cb3144bbec213822bf75df8"
+    },
+    {
+      "name": "node-tests.log",
+      "bytes": 39726,
+      "sha256": "1531db1cb2dbd643e066da37d6ff56453cfd3eaa00251dc7ad599bce2145af0b"
+    },
+    {
+      "name": "final-node-tests.log",
+      "bytes": 60700,
+      "sha256": "024bd230b79f9ff5c420b1e42aefd167fdb205325be4be22b5abe278a7306a20"
+    },
+    {
+      "name": "catalog-final-tests.log",
+      "bytes": 37320,
+      "sha256": "a43b20943367a03c0f14f8c4003c3f540721c59c8d4f93bf1316ea8af4a394bc"
+    },
+    {
+      "name": "committed-tests.log",
+      "bytes": 55696,
+      "sha256": "ac9692ed7b6a266ee737d61c77be36022fbb94375d1279ae6d4eb1cd1c7e0abe"
+    }
+  ],
+  "cleanup": {
+    "ownedRoot": "E:\\Source\\Rust\\MiniModel.org\\artifacts\\tests\\minimodel-browser-6IFEcc",
+    "entriesRemoved": 8,
+    "logicalFileBytes": 215850,
+    "rootAbsent": true,
+    "processes": "Original test sessions 56392 and 17937 are terminal; browser helper reported closed contexts/server and removed its own profile.",
+    "physicalStorageRecoveryMeasured": false
+  }
+}

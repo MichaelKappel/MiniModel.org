@@ -1,7 +1,17 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-09-20T02:13:27Z
+updated_utc: 2026-09-20T17:52:00Z
 site: MiniModel.org
 status: prepared_source_1.1.2_not_published
+
+catalog_lifetime_2026_09_20:
+  status: implemented_catalog_tested_publication_gate_blocked
+  source_commit: 81f0b4c2bdee23abde6abd36d751e533b2425554
+  evidence: artifacts/reports/catalog-lifetime-review-20260920.json
+  behavior: One ten-second deadline covers both metadata streams and crypto observation; enforce one MiB and 4096 chunks before accumulation. Failure/cancellation stops sibling and stale work; late responses are disposed.
+  verification: All 86 focused checks pass, including fourteen Edge observations. Eight existing desktop/mobile observations and screenshot identities exactly match the pre-edit baseline. Catalog line coverage is 91.95 percent.
+  broader_gate: Committed-source run passes 117 of 121 checks; four publication checks stop at the known source_authority_scan_incomplete installer-link blocker. Nested Pester is 26 of 27. No test or gate was weakened.
+  identity: Updated MiniModel pins for the reviewed September 19 canonical workspace-policy identity change; gate implementation is unchanged.
+  boundary: Empty historical fixtures only; no real model, live seed, publication or full-page visual proof. WebCrypto and uncooperative tasks may finish after observation ends. Exact manifest regeneration and all publication gates remain required; preserve blocked cleanup.
 
 static_seed_browser_execution_2026_09_19:
   status: local_apache_and_edge_cors_passed_not_published

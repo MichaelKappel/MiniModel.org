@@ -1,0 +1,41 @@
+{
+  "schema": "minimodel.static-seed-browser-review.v1",
+  "observedAtUtc": "2026-09-20T02:13:27Z",
+  "sourceParent": "01063a02e591de7ecf4469ac45efed0b660a514b",
+  "tinyContractCommit": "21af5c356395ae43dce8c3e6242fa0124f1286ce",
+  "status": "local-apache-and-edge-cors-passed-not-published",
+  "inputs": [
+    { "path": "tests/build-static-seed-plan-apache_test.js", "bytes": 17185, "sha256": "b61cee1a9cd8a09fad373d719a47bb81f0f53420ea2ec904466e97d7bfdde79b" },
+    { "path": "tools/build-static-seed-plan.js", "bytes": 7787, "sha256": "7537a31b8ad82cfc013c8a1326c529c04589f00df8e2acbf97ec5f8ef3d584bf" },
+    { "path": "tests/helpers/static-seed-fixture.js", "bytes": 810, "sha256": "0f8fad60c382aa4c32174edb32192d1c94284008367a1fb20c3ab82d9251036f" },
+    { "path": "tests/browser-smoke.js", "bytes": 14247, "sha256": "a769c7f3cbf7f73ae1be07c441758cd7acbada81fba4c3fc7c9698f2013e5053" }
+  ],
+  "environment": { "node": "24.14.0", "edge": "153.0.4234.48", "playwright": "1.61.1", "apache": "2.4.58", "distribution": "existing OSM-Ubuntu WSL" },
+  "verification": {
+    "command": "node --test tests/build-static-seed-plan-apache_test.js tests/build-static-seed-plan_test.js tests/catalog.test.js tests/catalog-contract.test.js",
+    "passed": 79, "failed": 0, "skipped": 0,
+    "browserTransfers": 6,
+    "browserNegativeControls": ["HTTP 200 without header exposure hides member and piece-set identities", "Invalid query returns readable HTTP 404", "Foreign origin Fetch rejects with TypeError"],
+    "configurationSha256": "a3dceefc2f5d04c166f33ff3b2e7e156ea2c6f6d36a2a6cf905361d4b98fcd83",
+    "sourceNote": "The final diagnostic scope string was corrected after the passing run; executable assertions and generated configuration are unchanged.",
+    "coverage": "Only the integration test changed; all six browser transfers and three negative controls executed. No new product-code or browser-engine coverage percentage is claimed."
+  },
+  "priorFailure": {
+    "passed": 8, "failed": 2,
+    "observation": "First browser assertion incorrectly expected JavaScript to read Access-Control-Allow-Origin. Actual Fetch/body/hash and exposed identities matched; ACAO was correctly hidden.",
+    "correction": "Expect the internally consumed ACAO header to remain null in page code. Node raw-header checks still require its exact value. Product validation and generated configuration were unchanged."
+  },
+  "cleanup": {
+    "failedRun": { "entriesRemoved": 248, "logicalFileBytes": 5327361 },
+    "passingRun": { "entriesRemoved": 251, "logicalFileBytes": 5330694 },
+    "scratchParentVerifiedEmpty": true,
+    "physicalStorageRecoveryMeasured": false,
+    "scope": "Only operation-owned browser profiles, synthetic non-model fixtures and Apache output; browser close and exact PID/config server shutdown precede removal."
+  },
+  "limits": [
+    "Only two synthetic HTML document navigations were intercepted. Seed responses came from the real loopback Apache server unchanged.",
+    "Explicit local-network permission admitted the loopback fixture; CORS remained enabled. This is not a public-network browser permission result.",
+    "Synthetic bytes are not valid models or qualified compositions. No actual installer, inference, TLS, LiteSpeed, remote colon-directory support or publication is established.",
+    "Source-authority scan still reports the same two previously policy-blocked installer links. Their deletion was not retried; no gate pass is claimed."
+  ]
+}

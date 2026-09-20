@@ -69,6 +69,97 @@ async function waitForListener(port) {
   }
 }
 
+/** Exercise browser CORS against real Apache; only synthetic document navigations are fulfilled. */
+async function checkBrowserCors(t, owned, port, plan) {
+  const playwrightRoot = path.resolve(__dirname,
+    "../../TinyRustLM.com/tinyrustlm/node_modules/playwright-core");
+  const { chromium } = require(playwrightRoot);
+  const temporary = path.join(owned.directory, "browser-temporary");
+  fs.mkdirSync(temporary);
+  const previous = Object.fromEntries(["TEMP", "TMP", "TMPDIR"].map((key) => [key, process.env[key]]));
+  let context;
+  try {
+    for (const key of Object.keys(previous)) process.env[key] = temporary;
+    const childEnv = Object.fromEntries(Object.entries(process.env)
+      .filter(([key]) => !key.toUpperCase().startsWith("NODE_")));
+    context = await chromium.launchPersistentContext(path.join(owned.directory, "browser-profile"), {
+      channel: "msedge", headless: true, timeout: 15000, env: childEnv,
+      downloadsPath: temporary, artifactsDir: temporary, acceptDownloads: false,
+      serviceWorkers: "block",
+    });
+    const seedOrigin = `http://127.0.0.1:${port}`;
+    const appOrigins = ["https://tinyrustlm.com", "https://foreign.invalid"];
+    // This permission admits the loopback fixture only. CORS itself remains enabled.
+    for (const origin of appOrigins) await context.grantPermissions(["local-network-access"], { origin });
+    const network = [];
+    await context.route("**/*", (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (appOrigins.includes(url.origin) && url.pathname === "/" &&
+          request.isNavigationRequest() && request.method() === "GET") {
+        return route.fulfill({ status: 200, contentType: "text/html",
+          body: "<!doctype html><title>Synthetic seed CORS probe</title>" });
+      }
+      if (url.origin === seedOrigin && request.method() === "GET") {
+        network.push({ path: url.pathname + url.search, method: request.method() });
+        return route.continue();
+      }
+      return route.abort();
+    });
+    const page = await context.newPage();
+    await page.goto(appOrigins[0], { waitUntil: "load", timeout: 15000 });
+    const headers = Object.keys(plan.files[0].expectedHeaders);
+    // Match the production downloader's Fetch options without manufacturing a response.
+    const observe = ({ url, headers }) => (async () => {
+      try {
+        const response = await fetch(url, { method: "GET", mode: "cors", credentials: "omit",
+          cache: "no-store", redirect: "error", referrerPolicy: "no-referrer",
+          signal: AbortSignal.timeout(5000) });
+        const bytes = await response.arrayBuffer();
+        const digest = await crypto.subtle.digest("SHA-256", bytes);
+        return { status: response.status, type: response.type, url: response.url,
+          redirected: response.redirected,
+          headers: Object.fromEntries(headers.map((name) => [name, response.headers.get(name)])),
+          bytes: bytes.byteLength,
+          sha256: Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("") };
+      } catch (error) { return { error: error.name }; }
+    })();
+    for (const file of plan.files) {
+      const url = `${seedOrigin}/${file.remotePath}`;
+      const result = await page.evaluate(observe, { url, headers });
+      // The browser consumes ACAO internally; it is deliberately not exposed to page code.
+      assert.deepEqual(result, { status: 200, type: "cors", url, redirected: false,
+        headers: { ...file.expectedHeaders, "access-control-allow-origin": null },
+        bytes: file.bytes, sha256: file.sha256 }, file.name);
+    }
+    // Successful HTTP/body delivery alone cannot establish browser identity admission.
+    const hidden = await page.evaluate(observe, { url: `${seedOrigin}/no-exposure/model.slm2`, headers });
+    assert.equal(hidden.status, 200);
+    assert.equal(hidden.headers["content-type"], "application/octet-stream");
+    assert.equal(hidden.headers["x-tinyrustlm-member-id"], null);
+    assert.equal(hidden.headers["x-tinyrustlm-piece-set-id"], null);
+    const invalid = await page.evaluate(observe,
+      { url: `${seedOrigin}/${plan.files[0].remotePath}?invalid=1`, headers });
+    assert.equal(invalid.status, 404);
+    await page.goto(appOrigins[1], { waitUntil: "load", timeout: 15000 });
+    const foreign = await page.evaluate(observe, { url: `${seedOrigin}/${plan.files[0].remotePath}`, headers });
+    assert.deepEqual(foreign, { error: "TypeError" });
+    assert.equal(network.length, 9, "Every probe must reach the real local server exactly once");
+    t.diagnostic(JSON.stringify({ browser: context.browser().version(),
+      playwright: require(path.join(playwrightRoot, "package.json")).version,
+      corsTransfers: 6, negativeControls: 3,
+      scope: "real Edge Fetch and Apache HTTP; synthetic intercepted documents; loopback permission granted; no TLS/public model claim" }));
+  } finally {
+    try { if (context) await context.close(); }
+    finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+}
+
 /** Materialize small invalid-model fixtures solely to exercise HTTP; no ACG2 acceptance is claimed. */
 function fixture(owned) {
   const descriptor = JSON.parse(descriptorBytes());
@@ -103,6 +194,7 @@ function configuration(linuxRoot, port, plan) {
     `Alias /${plan.remoteDirectory}/ "${linuxRoot}/members/"`,
     `Alias /invalid-directive/ "${linuxRoot}/invalid-directive/"`,
     `Alias /no-overrides/ "${linuxRoot}/no-overrides/"`,
+    `Alias /no-exposure/ "${linuxRoot}/no-exposure/"`,
     `Alias /control/ "${linuxRoot}/control/"`,
     `Header onsuccess set Access-Control-Allow-Origin "https://wrong.invalid"`,
     `Header always set Access-Control-Allow-Origin "https://also-wrong.invalid"`,
@@ -111,7 +203,7 @@ function configuration(linuxRoot, port, plan) {
     `Header onsuccess set X-TinyRustLM-Piece-Set-Id "wrong"`,
     `Header always set X-TinyRustLM-Piece-Set-Id "also-wrong"`,
     "AddOutputFilterByType DEFLATE application/octet-stream",
-    ...["members", "control", "invalid-directive", "no-overrides"].flatMap((name) => [
+    ...["members", "control", "invalid-directive", "no-overrides", "no-exposure"].flatMap((name) => [
       `<Directory "${linuxRoot}/${name}">`, "Require all granted",
       `AllowOverride ${name === "no-overrides" ? "None" : "All"}`, "</Directory>",
     ]),
@@ -150,13 +242,15 @@ test("generated seed configuration serves exact members on installed Apache", as
     const port = await freePort();
     fs.writeFileSync(path.join(owned.directory, "httpd.conf"), configuration(linuxRoot, port, plan), { flag: "wx" });
     // Controls prove compression is available and ignored/missing directives do not pass admission.
-    for (const name of ["control", "invalid-directive", "no-overrides"]) {
+    for (const name of ["control", "invalid-directive", "no-overrides", "no-exposure"]) {
       fs.mkdirSync(path.join(owned.directory, name));
       fs.writeFileSync(path.join(owned.directory, name, "model.slm2"), "compressible control\n".repeat(300));
     }
     fs.writeFileSync(path.join(owned.directory, "control", ".htaccess"), "ForceType application/octet-stream\n");
     fs.writeFileSync(path.join(owned.directory, "no-overrides", ".htaccess"), plan.configuration.text);
     fs.writeFileSync(path.join(owned.directory, "invalid-directive", ".htaccess"), "MissingRequiredDirective on\n");
+    fs.writeFileSync(path.join(owned.directory, "no-exposure", ".htaccess"),
+      `${plan.configuration.text}Header always unset Access-Control-Expose-Headers\n`);
     wsl(["/usr/sbin/apache2", "-f", config, "-t"]);
     wsl(["/usr/sbin/apache2", "-f", config, "-k", "start"]);
     await waitForListener(port);
@@ -200,8 +294,10 @@ test("generated seed configuration serves exact members on installed Apache", as
       const foreign = await request(port, `/${plan.files[0].remotePath}`, "GET", { Origin: "https://foreign.invalid" });
       assert.equal(foreign.headers["access-control-allow-origin"], "https://tinyrustlm.com");
     });
+    await t.test("Edge reads exact exposed identities and rejects foreign-origin access", () =>
+      checkBrowserCors(t, owned, port, plan));
     t.diagnostic(JSON.stringify({ version, configurationSha256: plan.configuration.sha256,
-      scope: "local HTTP on Apache; synthetic non-model bytes; no browser/TLS/LiteSpeed/publication claim" }));
+      scope: "local HTTP on Apache and Edge CORS; synthetic non-model bytes; no TLS/LiteSpeed/publication claim" }));
   } finally {
     if (config) await stopApache(owned, config);
     const log = path.join(owned.directory, "error.log");

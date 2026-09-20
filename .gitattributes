@@ -51,3 +51,4 @@ artifacts/reports/static-seed-preparation-review-20260919.json text eol=lf
 tests/helpers/static-seed-fixture.js text eol=lf
 tests/build-static-seed-plan-apache_test.js text eol=lf
 artifacts/reports/static-seed-apache-review-20260919.json text eol=lf
+artifacts/reports/static-seed-browser-review-20260919.json text eol=lf

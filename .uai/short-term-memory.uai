@@ -1,7 +1,15 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-09-19T20:40:00Z
+updated_utc: 2026-09-20T02:13:27Z
 site: MiniModel.org
 status: prepared_source_1.1.2_not_published
+
+static_seed_browser_execution_2026_09_19:
+  status: local_apache_and_edge_cors_passed_not_published
+  evidence: artifacts/reports/static-seed-browser-review-20260919.json
+  verification: All 79 affected checks pass, including real Edge Fetch of six Apache bodies with exact exposed identity headers and SHA-256. Hidden-header, invalid-query and foreign-origin controls pass.
+  lesson: HTTP header visibility differs from JavaScript visibility. ACAO is consumed internally and need not be exposed; the first test assumption was corrected without changing product validation or generated configuration.
+  bounds: Only synthetic document navigations are intercepted; seed responses come from the separate real loopback Apache listener. Local-network permission is scoped to the two fixture origins, CORS remains enabled, and all owned browser/server output was removed after shutdown.
+  limits: No public TLS, LiteSpeed, real composition installation, qualification, live seed or publication result. Existing source-scan and deletion blocks remain unchanged.
 
 static_seed_apache_execution_2026_09_19:
   status: local_http_fixture_execution_passed_not_published

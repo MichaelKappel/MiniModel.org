@@ -66,9 +66,18 @@ Docker image, source copy, model payload or remote publication is created.
 GET/HEAD assertions verify all six complete bodies and response identities;
 method/path/query failures and compression/override controls test enforcement.
 The generated server prerequisite disables TRACE, which bypasses directory rules
-on Apache. This is local HTTP evidence, not browser CORS, TLS, LiteSpeed, public
+on Apache. These Node HTTP checks do not establish TLS, LiteSpeed, public
 availability or model qualification. The Alias used for the colon-bearing URL
 does not establish the actual remote filesystem's path support.
+
+The same check now launches installed Edge and verifies six real cross-origin
+Apache responses from a synthetic TinyRustLM-origin page. The page navigation
+is intercepted; model-route Fetch responses are not. A deliberately unexposed
+header control and a foreign-origin rejection prove browser enforcement. The
+fixture grants local-network access for loopback without disabling CORS.
+Browser profiles and temporary output share the owned directory and are removed
+after the browser and server close. These additional checks establish local
+browser CORS only; public TLS, actual hosting and model qualification remain open.
 
 Node's experimental coverage collector creates its own temporary directory before
 loading tests. When collecting coverage, launch the test process with TMP, TEMP

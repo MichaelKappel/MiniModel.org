@@ -109,6 +109,18 @@ An Alias mapped the exact colon-bearing URL to a Windows-safe fixture directory;
 this does not prove remote filesystem acceptance of the colon. No TLS, real-browser
 CORS, LiteSpeed, public seed or model qualification result follows. Exact evidence
 and earlier harness failures are in `artifacts/reports/static-seed-apache-review-20260919.json`.
+
+The later C53 check adds installed Edge Fetch against the real Apache listener.
+All six complete bodies match their hashes, and page JavaScript reads the exact
+exposed identity headers. Negative controls establish that omitting exposure
+hides the identity fields despite HTTP 200, invalid queries remain 404, and a
+foreign document origin cannot read the response. The browser consumes the
+allow-origin header internally; it is not itself exposed to page JavaScript.
+Only the two synthetic document navigations are intercepted; seed responses
+come from Apache unchanged. Local-network permission is granted solely for the
+loopback fixture. This closes the local browser CORS gap without establishing
+public TLS, LiteSpeed behavior, real model installation or publication. See
+`artifacts/reports/static-seed-browser-review-20260919.json`.
 Use the already tested native Rust seed behind
 a controlled HTTPS origin if the static host cannot satisfy the current contract;
 that choice still needs proven hosting and publication authority.

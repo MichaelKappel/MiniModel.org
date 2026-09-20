@@ -107,6 +107,33 @@ test("empty generator enforces explicit fresh, bounded, monotonic revision and t
   assert.throws(() => prepareEmptyCatalog(previous.catalog, previous.peerFeed, parameters, options), /newer revision/);
 });
 
+test("both catalog contracts preserve supplementary Unicode from bytes through verified views", async () => {
+  for (const description of ["e\u0301", "\u{10000}", "\u{1f680}", "\u{1f469}\u200d\u{1f4bb}", "\u{20000}", "\u{10ffff}"]) {
+    const pair = signedFixture();
+    pair.catalog.entries[0].description = description;
+    for (const api of [site, browser]) {
+      const text = canonical(pair.catalog);
+      const parsed = api.parseCanonicalJsonText(Buffer.from(text).toString("utf8"));
+      assert.equal(canonical(parsed), text);
+      const views = await api.buildVerifiedCatalogView(parsed, pair.peerFeed, options);
+      assert.equal(views[0].description, description);
+    }
+  }
+});
+
+test("both catalog contracts reject lone Unicode surrogates in nested values and keys", () => {
+  for (const value of ["\ud800", "\udbff", "\udc00", "\udfff", "\ud800x", "\ud800\ud800", "\udc00\ud800"]) {
+    for (const api of [site, browser]) {
+      for (const document of [{ key: [value] }, { [value]: 1 }]) {
+        assert.throws(() => api.parseCanonicalJsonText(canonical(document)));
+      }
+      const pair = signedFixture();
+      pair.catalog.entries[0].display_name = value;
+      assert.throws(() => api.validateCatalog(pair.catalog, options));
+    }
+  }
+});
+
 test("empty generator cannot erase evidence, authorized keys, or lifecycle history", () => {
   const next = { ...parameters, revision: 4, generatedAtUtc: utc(1000) };
   const signed = signedFixture();

@@ -1,7 +1,15 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-09-20T17:52:00Z
+updated_utc: 2026-09-20T18:10:00Z
 site: MiniModel.org
 status: prepared_source_1.1.2_not_published
+
+catalog_unicode_2026_09_20:
+  status: implemented_and_fixture_tested_not_published
+  evidence: ../TinyRustLM.com/artifacts/ecosystem-cleanup-20260912/catalog-unicode-review.json
+  behavior: Canonical keys and values require Unicode scalar text. Reject lone surrogates in direct catalog validation; valid supplementary characters and combining sequences retain exact bytes across both projects. TinyRustLM also preserves BOMs for rejection.
+  verification: All 88 MiniModel and 412 TinyRustLM Node checks pass; four TinyRustLM Edge checks and fourteen MiniModel observations pass with explicit Unicode cases at both viewports.
+  visual: One historical screenshot comparison differed by fifteen select-border pixels. Controlled prior/current source captures match at each of three phases; preserve both outcomes. No style change or mask; no full-page visual claim.
+  limits: Existing source-scan and publication gates remain open; current manifest regeneration and live readback are required. No model qualification, seed, NuGet or site publication; blocked cleanup remains untouched.
 
 catalog_lifetime_2026_09_20:
   status: implemented_catalog_tested_publication_gate_blocked

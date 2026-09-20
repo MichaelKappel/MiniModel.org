@@ -230,6 +230,18 @@ async function runBrowserSmoke() {
       await page.clock.setFixedTime(new Date(catalog.generated_at_utc));
       await page.goto(origin, { waitUntil: "load", timeout: 15000 });
       report.observations.push(await inspectViewport(page, `${label}:historical-empty-fixture`, "ready"));
+      // Exercise the actual browser parser without adding fixture content to the page.
+      const unicode = await page.evaluate(() => {
+        const api = window.MiniModelCatalog;
+        const text = JSON.stringify({ "\u{20000}": ["\u{1f469}\u200d\u{1f4bb}", "e\u0301"] }) + "\n";
+        const roundTrip = JSON.stringify(api.parseCanonicalJsonText(text)) + "\n" === text;
+        const rejected = ['{"x":"\\ud800"}\n', '{"\\udfff":1}\n', '\ufeff{}\n'].map(input => {
+          try { api.parseCanonicalJsonText(input); return false; } catch (_) { return true; }
+        });
+        return { roundTrip, rejected };
+      });
+      assert.deepEqual(unicode, { roundTrip: true, rejected: [true, true, true] });
+      (report.unicode_checks ||= []).push({ viewport: label, ...unicode });
       preview.state.rejectMetadata = true;
       const failed = await page.evaluate(() => window.MiniModelCatalog.loadCatalog(document).then(() => false, () => true));
       assert.equal(failed, true);

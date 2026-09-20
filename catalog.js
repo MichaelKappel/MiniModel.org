@@ -64,7 +64,7 @@
         || value.length < 1
         || value.length > maximum
         || value !== value.trim()
-        || /[\u0000-\u001f\u007f]/u.test(value)) {
+        || /[\u0000-\u001f\u007f\ud800-\udfff]/u.test(value)) {
       throw new Error(`${label} must be a bounded printable string`);
     }
     return value;
@@ -986,6 +986,21 @@
     }
     if (`${JSON.stringify(parsed)}\n` !== text) {
       throw new Error("metadata JSON bytes were not canonical");
+    }
+    // JSON.parse admits escaped lone surrogates; every key and value must be scalar text.
+    // Iterate the already byte-bounded tree without recursive call-stack growth.
+    const pending = [parsed];
+    while (pending.length) {
+      const value = pending.pop();
+      if (typeof value === "string" && /[\ud800-\udfff]/u.test(value)) {
+        throw new Error("metadata JSON contained an unpaired surrogate");
+      }
+      if (value && typeof value === "object") {
+        for (const [key, child] of Object.entries(value)) {
+          if (/[\ud800-\udfff]/u.test(key)) throw new Error("metadata JSON contained an unpaired surrogate");
+          pending.push(child);
+        }
+      }
     }
     return parsed;
   }

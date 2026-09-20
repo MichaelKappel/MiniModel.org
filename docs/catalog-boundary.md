@@ -63,6 +63,13 @@ authenticates metadata; it does not establish reachability or prove the claims.
 
 ## Empty Metadata Preparation
 
+Catalog strings preserve Unicode scalar values, including supplementary
+characters and combining sequences, without normalization or replacement.
+Both direct validators and byte parsers reject lone UTF-16 surrogates. UTF-8
+streams retain a leading BOM for canonical rejection; it must not be silently
+removed. Canonical spelling remains compact JSON.stringify output plus one LF,
+so alternate Unicode escapes and duplicate keys do not acquire another identity.
+
 The page loads catalog and peer metadata under one ten-second deadline, including
 signature verification. An explicit caller may select 1–60,000 milliseconds or
 provide an AbortSignal. Reload cancels the preceding operation; a failed request

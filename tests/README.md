@@ -60,6 +60,13 @@ fourteen observations remain local fixtures, not current catalog authority or
 public seed evidence. Existing screenshot identities may be compared before and
 after a change under the same browser/viewports; no visual mask is applied.
 
+The same cross-project tests require supplementary Unicode to survive canonical
+bytes and verified views unchanged, and reject lone surrogates in nested values,
+keys and direct catalog validation. Edge executes the parser with supplementary
+characters, combining marks, malformed surrogates and a leading BOM. TinyRustLM's
+catalog tests additionally cover every split of a UTF-8 BOM, one-byte Unicode
+stream chunks and the existing code-unit string limits.
+
 The static-seed preparation tests consume the canonical companion's exact wire
 fixture and ACG2 profile bytes in place. They check descriptor identity, all six
 URLs/headers, bounded canonical parsing, injection refusal and the real stdin

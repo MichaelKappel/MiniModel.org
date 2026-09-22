@@ -6,7 +6,8 @@ const catalog = require("../catalog.js");
 const MAX_DESCRIPTOR_BYTES = 8192;
 const PROFILE_ID = "org.minimodel.acg2/2.0";
 const PROFILE_SHA256 = "944ed9b5b0ee2605ebb9ac13f2e5388c181bc857fdbfc082e62e9ae7b07c79be";
-const MAX_MEMBER_BYTES = 68_719_476_736;
+// Fixed descriptor order; each ceiling belongs to the bound ACG2 member profile.
+const MAX_MEMBER_BYTES = Object.freeze([68_719_476_736, 67_108_864, 1_048_576, 65_800, 512, 896]);
 const MAX_COMPOSITION_BYTES = 68_787_701_384;
 const COMPOSITION_BYTES = 896;
 const APP_ORIGIN = "https://tinyrustlm.com";
@@ -42,7 +43,7 @@ function parseDescriptor(bytes) {
   const members = value.members.map((member, index) => {
     requireValue(member !== null && typeof member === "object" && !Array.isArray(member) &&
       member.name === catalog.MEMBER_NAMES[index] && Number.isSafeInteger(member.bytes) &&
-      member.bytes > 0 && member.bytes <= MAX_MEMBER_BYTES &&
+      member.bytes > 0 && member.bytes <= MAX_MEMBER_BYTES[index] &&
       typeof member.sha256 === "string" && /^[a-f0-9]{64}$/.test(member.sha256) &&
       (index !== 5 || member.bytes === COMPOSITION_BYTES), "static-seed-descriptor-member");
     total += member.bytes;

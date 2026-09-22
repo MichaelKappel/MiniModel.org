@@ -23,6 +23,14 @@ license and provenance, qualification claims, runtime requirements, and the
 cryptographic piece/manifests needed for verification. An alias must not point
 to different bytes.
 
+Static seed preparation rejects lengths above each role's existing ACG2 profile
+ceiling: model 68,719,476,736 bytes; tokenizer 67,108,864; template 1,048,576;
+sampling 65,800; and prompt 512. The composition graph is exactly 896 bytes.
+Unused capacity in one role cannot authorize a larger member in another role.
+These checks only reject impossible descriptor sizes before configuration is
+generated; actual file parsing, qualification, browser resource admission and
+public seed verification remain separate requirements.
+
 Every catalog document fixes `browser_admission_schema` to
 `tinyrustlm.browser-composition-admission/1`. Every qualified entry must carry
 one exact `browser_admission` descriptor containing only a safe same-origin

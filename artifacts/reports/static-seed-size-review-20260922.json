@@ -1,0 +1,353 @@
+{
+  "schema": "minimodel.static-seed-size-review/1",
+  "reviewedUtc": "2026-09-22T22:33:27.265Z",
+  "checkpoint": "C89",
+  "sourceParents": {
+    "MiniModel": "015d36818f339a9194f2e09591254f954b71ea96",
+    "TinyRustLM": "31cd8364161d76082e6b3e733190a93f4d318dda"
+  },
+  "purpose": "Reject static seed descriptors exceeding their existing ACG2 member-role ceilings; verify actual startup selection with several peer orders.",
+  "repositoryInventory": [
+    {
+      "name": ".local-secrets",
+      "repository": false
+    },
+    {
+      "name": ".vscode",
+      "repository": false
+    },
+    {
+      "name": "LMComposer.com",
+      "head": "6cbb67c59d2f0a3ef22f736d7b515570746c0e3b",
+      "branch": "main",
+      "statusCount": 0
+    },
+    {
+      "name": "MiniModel.MiRust.com",
+      "head": "b437611c34ad4f80312016f4bf9aa1a08398d07a",
+      "branch": "master",
+      "statusCount": 0
+    },
+    {
+      "name": "MiniModel.org",
+      "head": "015d36818f339a9194f2e09591254f954b71ea96",
+      "branch": "master",
+      "statusCount": 4
+    },
+    {
+      "name": "MiRust.com",
+      "head": "b9420a10feb0819ca6bbf89d92c9199ba89d7c86",
+      "branch": "master",
+      "statusCount": 0
+    },
+    {
+      "name": "Runtime.MiRust.com",
+      "head": "8623dcf5603ab419d02ffd0809e9ae987fb5b2a0",
+      "branch": "master",
+      "statusCount": 15
+    },
+    {
+      "name": "TinyRustLM.com",
+      "head": "31cd8364161d76082e6b3e733190a93f4d318dda",
+      "branch": "codex/model-acquisition-v2",
+      "statusCount": 24
+    },
+    {
+      "name": "TinyRustLM.MiRust.com",
+      "head": "d17f77af652e9ac086482414a5bd0b6eb2250a50",
+      "branch": "master",
+      "statusCount": 1
+    },
+    {
+      "name": "_archive",
+      "repository": false
+    },
+    {
+      "name": "_screenshots",
+      "repository": false
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": "E:/Source/Rust/TinyRustLM.com/tinyrustlm/e2e/model-chooser.spec.js",
+      "byteCount": 85421,
+      "sha256": "bc5891856f527bf1fe1e7abd9c0028097971c1e155f876a0a2af98979ebdd40b"
+    },
+    {
+      "path": "E:/Source/Rust/TinyRustLM.com/docs/ecosystem-cleanup-2026-09-12.md",
+      "byteCount": 169854,
+      "sha256": "09140fbff1918d9a7c2de2f67745ce3256bed62c783a699e5c9c05c48cf512a6"
+    },
+    {
+      "path": "E:/Source/Rust/TinyRustLM.com/wiki/runtime-mirust/reports/ecosystem-experiment-lessons-2026-09-12.md",
+      "byteCount": 201331,
+      "sha256": "c171594ca735ca91da4e177c65cc8ea1d48f919089f31e72a44409cfadc61037"
+    },
+    {
+      "path": "E:/Source/Rust/TinyRustLM.com/wiki/runtime-mirust/reports/tinyrustlm-working-product-memory-2026-09-19.md",
+      "byteCount": 70718,
+      "sha256": "2805ce05cecf58f2d73f3feeeb95bdac6b52efd8f9f11c0a54c5e77cf044758e"
+    },
+    {
+      "path": "E:/Source/Rust/TinyRustLM.com/.uai/startup-packet.uai",
+      "byteCount": 25210,
+      "sha256": "bb6ea732ee60f133e1d6f4ddbb7fa29c00c16bd6a7f47014443b15c719de19b8"
+    },
+    {
+      "path": "E:/Source/Rust/TinyRustLM.com/.uai/operations.uai",
+      "byteCount": 33912,
+      "sha256": "6d1d14afae6d34e2df70a898900f00f6af0a35b178be20088c4145f0ca8a665a"
+    },
+    {
+      "path": "E:/Source/Rust/TinyRustLM.com/.uai/short-term-memory.uai",
+      "byteCount": 28758,
+      "sha256": "9fdf641fcb1e20468b649eb1482909329d702caa13e6b0d732b5085085ca8d41"
+    },
+    {
+      "path": "E:/Source/Rust/TinyRustLM.com/.uai/long-term-memory.uai",
+      "byteCount": 8753,
+      "sha256": "74dffee93666d84d7c6e3a5c92ee72088db6ee57e9d29654e340f7d114dfb203"
+    },
+    {
+      "path": "E:/Source/Rust/MiniModel.org/tools/build-static-seed-plan.js",
+      "byteCount": 7934,
+      "sha256": "47821c9a826be9f0cf0ee0f44ec6aaf4fe24863dc912dc1a5f6a0ac08f47048d"
+    },
+    {
+      "path": "E:/Source/Rust/MiniModel.org/tests/build-static-seed-plan_test.js",
+      "byteCount": 11459,
+      "sha256": "ef02930f5242db4ae3dff16280dc7580a6515854541a6c3634499ffde4ad07ae"
+    },
+    {
+      "path": "E:/Source/Rust/MiniModel.org/docs/catalog-boundary.md",
+      "byteCount": 11017,
+      "sha256": "eced8ce1a710acbd5b51c5e1a31bfd01578386c6f3e54cdd11517629d7ff52b6"
+    },
+    {
+      "path": "E:/Source/Rust/MiniModel.org/.uai/short-term-memory.uai",
+      "byteCount": 21406,
+      "sha256": "0cda6cae0a906c78a86b66fc2b907f307de79885cd6870f003e3cea4d8c90efc"
+    }
+  ],
+  "contract": {
+    "path": "E:/Source/Rust/TinyRustLM.com/contracts/vnext/acg2-format-profile.v1.json",
+    "byteCount": 13793,
+    "sha256": "944ed9b5b0ee2605ebb9ac13f2e5388c181bc857fdbfc082e62e9ae7b07c79be"
+  },
+  "baseline": {
+    "agentFocused": {
+      "pass": 2,
+      "fail": 5,
+      "meaning": "Four missing exceptions for oversized tokenizer/template/sampling/prompt plus failed parent subtest; model/graph already rejected.",
+      "rawLogRetained": false
+    },
+    "independentComparison": {
+      "method": "Evaluate previous committed planner in an isolated VM with only crypto and its unchanged catalog dependency; no copied source or external I/O. Compare synthetic metadata with current implementation.",
+      "oldCommit": "015d36818f339a9194f2e09591254f954b71ea96",
+      "oldSourceSha256": "7537a31b8ad82cfc013c8a1326c529c04589f00df8e2acbf97ec5f8ef3d584bf",
+      "observations": [
+        {
+          "name": "model.slm2",
+          "bytes": 68719476737,
+          "old": "static-seed-descriptor-member",
+          "current": "static-seed-descriptor-member"
+        },
+        {
+          "name": "tokenizer.tokenizer2",
+          "bytes": 67108865,
+          "old": "accepted",
+          "current": "static-seed-descriptor-member"
+        },
+        {
+          "name": "template.template2",
+          "bytes": 1048577,
+          "old": "accepted",
+          "current": "static-seed-descriptor-member"
+        },
+        {
+          "name": "sampling.sampling2",
+          "bytes": 65801,
+          "old": "accepted",
+          "current": "static-seed-descriptor-member"
+        },
+        {
+          "name": "prompt.prompt2",
+          "bytes": 513,
+          "old": "accepted",
+          "current": "static-seed-descriptor-member"
+        },
+        {
+          "name": "composition.acg2",
+          "bytes": 897,
+          "old": "static-seed-descriptor-member",
+          "current": "static-seed-descriptor-member"
+        }
+      ],
+      "validPlans": [
+        {
+          "descriptorSha256": "309a0e1c2b1ce9633661fbf884b0a2e6761cd629fa8c612c924511c5a4e19bff",
+          "planSha256": "835828a52b63d2ff6c52e2883560f238fda867a88805c653a003b9203adc1dd3",
+          "identical": true
+        },
+        {
+          "descriptorSha256": "f17f6b9eadd99f381d6d17ac07e365d92ccb41dbe772926e001748b12b11dcae",
+          "planSha256": "6af0646a18c66f982062f855b3d57ab66f67e107ef677f1ec36c5d80bae6f09b",
+          "identical": true
+        }
+      ]
+    }
+  },
+  "tests": {
+    "miniModel": {
+      "command": "node --test --test-reporter=tap --experimental-test-coverage tests/build-static-seed-plan_test.js tests/catalog-contract.test.js",
+      "pass": 70,
+      "fail": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "plannerCoverage": {
+        "line": 91.1,
+        "branch": 97.22,
+        "functions": 83.33
+      },
+      "coverageLimit": "CLI child coverage intentionally disabled by existing test; actual CLI behavior is tested. This is whole planner coverage, not whole-site coverage.",
+      "log": "minimodel-combined.txt"
+    },
+    "agentFocused": {
+      "pass": 41,
+      "fail": 0,
+      "skipped": 0,
+      "log": "minimodel-plan-final.txt"
+    },
+    "browser": {
+      "command": "node node_modules/@playwright/test/cli.js test e2e/model-chooser.spec.js --grep \"bootstrap starts and cancels\" --workers=1 --retries=0 --reporter=line --output <owned-root>/browser",
+      "channel": "msedge",
+      "pass": 12,
+      "fail": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "durationSeconds": 10.5,
+      "viewports": [
+        "1365x768",
+        "1024x768",
+        "390x844 touch/mobile emulation",
+        "1365x768 reduced motion"
+      ],
+      "peerOrders": [
+        "only",
+        "first",
+        "last"
+      ],
+      "assertions": [
+        "No chooser click before one admission request",
+        "Explicit cancel completes",
+        "Generate remains disabled",
+        "No competitor peer request"
+      ],
+      "boundary": "Synthetic signed catalog/admission metadata; paused before admission response, no model member transfer or inference.",
+      "log": "browser-final.txt"
+    },
+    "pointerChecks": 17,
+    "diffChecks": 2
+  },
+  "rejectedHypothesis": {
+    "claim": "Bootstrap fails if the seed is not the first input announcement.",
+    "resolution": "False: current catalog projectEntry sorts MiniModel.org before other peers. Only tests were extended; no browser implementation change."
+  },
+  "secretScan": {
+    "status": "pass",
+    "scopeComplete": false,
+    "scope": "12 changed implementation/test/documentation/UAI files across two repositories; generated receipt excluded.",
+    "artifactCount": 12,
+    "findingCount": 0,
+    "scannerSourceClosureSha256": "05cefc2bb03b448c3c54d688e7f10b05b1eaf21befa5cb602334c11aae68c5ac",
+    "scopeManifestSha256": "d0721ff8207a2c468a73bd21fc3cdca124cc3e16f9921ceddd0019c391484ee5"
+  },
+  "sourceAuthority": {
+    "status": "source_authority_scan_incomplete",
+    "exitCode": 1,
+    "paths": [
+      "E:/Source/Rust/TinyRustLM.com/artifacts/verification/qwen3-environment-install/tinyrustlm-operation-C3ZUt9/install-temp/TmP6xn2evdh-b",
+      "E:/Source/Rust/TinyRustLM.com/artifacts/verification/qwen3-environment-install/tinyrustlm-operation-C3ZUt9/install-temp/TmPeq63_hr7-b"
+    ],
+    "action": "Existing blocked links preserved; no retry or bypass."
+  },
+  "review": {
+    "agent": "/root/candidate_runtime_boundary",
+    "scope": "Read-only native/browser contract mapping, three MiniModel implementation/test/doc files, focused baseline and final tests.",
+    "parent": "Independent diff, committed/current comparison, combined cross-project tests, actual Edge startup tests and evidence custody.",
+    "independenceLimit": "Not an independent human qualification review."
+  },
+  "scratch": {
+    "rootPath": "E:\\Source\\Rust\\TinyRustLM.com\\artifacts\\tests\\initial-seed-handoff\\tinyrustlm-operation-vdi2CV",
+    "rootOriginalIdentity": {
+      "dev": "2767432419",
+      "ino": "32932572281685024"
+    },
+    "markerPath": "E:\\Source\\Rust\\TinyRustLM.com\\artifacts\\tests\\initial-seed-handoff\\tinyrustlm-operation-vdi2CV.owner.v2",
+    "markerOriginalIdentity": {
+      "dev": "2767432419",
+      "ino": "30680772467999777"
+    },
+    "markerByteCount": 65,
+    "markerSha256": "92b482d5ff665845a1f361cea862b3f8e826b928beac1890ec5fedb42c25bab8",
+    "fileCount": 20,
+    "directoryCountIncludingRoot": 14,
+    "logicalBytes": 2440958,
+    "inventorySha256": "4094a85ac4e41c530a01b68c25913c62f980fd5a84c38cb0a814abddf7a53455",
+    "evidenceFiles": [
+      {
+        "path": "browser/.last-run.json",
+        "byteCount": 45,
+        "sha256": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903"
+      },
+      {
+        "path": "browser-final.txt",
+        "byteCount": 5602,
+        "sha256": "42b146e821ca071f2f5d7303c3f90c094cda3845fbd779fac1bbc4675a352f3d"
+      },
+      {
+        "path": "cv_debug.log",
+        "byteCount": 246,
+        "sha256": "2c81ecee5edfe0ae5390162cbdf7a2fad7ba7965a0f2e646a85f1a84861a79f6"
+      },
+      {
+        "path": "minimodel-combined.txt",
+        "byteCount": 35040,
+        "sha256": "9c9a7c34bf3b4f39d030fbed7a1a2dfcc086524021fd3dfe58706cdb6397ed37"
+      },
+      {
+        "path": "minimodel-plan-final.txt",
+        "byteCount": 9274,
+        "sha256": "32ed2f9a48a805a29e8bdbc07cddb9e20f7fb03825c4a2d471736018328f8def"
+      },
+      {
+        "path": "planner-comparison.json",
+        "byteCount": 1756,
+        "sha256": "376bd8669632a03c89284b485a1f826080f347b8e8087b17a0eec045821d8358"
+      },
+      {
+        "path": "repository-inventory.json",
+        "byteCount": 1252,
+        "sha256": "46565412a2f9355e4ce1dd518fe48ba92ed49104d4677bc7c2b08d4b60c1c721"
+      },
+      {
+        "path": "scan-report.json",
+        "byteCount": 6541,
+        "sha256": "227c11fbb681f8efe71e4d52d0010a7045a02ceefff7d609adc502fd4ada72e6"
+      }
+    ],
+    "status": "removed_and_verified_absent",
+    "quiescence": "All test handles terminal; CIM found no matching node/dotnet/msedge operation process.",
+    "physicalStorageReclaimed": "unmeasured",
+    "removedUtc": "2026-09-22T22:33:56.477Z"
+  },
+  "setup": "Initial scratch creation supplied repository root where the helper expects site root; rejected before mutation. Corrected caller to use canonical helper default.",
+  "limits": [
+    "Only planning upper-length admission changed; actual native artifact parsing and tighter browser admission remain required.",
+    "No product UI or style changed; no new screenshot parity claim.",
+    "No model payload generated, downloaded or qualified.",
+    "No seed hosting, NuGet or web publication; no credential contents read.",
+    "Known policy-blocked removals and unrelated edits preserved.",
+    "Source/real-model/browser/initial-seed/release gates remain incomplete."
+  ]
+}

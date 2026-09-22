@@ -1,7 +1,14 @@
 profile: minimodel.short-term-memory.v3
-updated_utc: 2026-09-20T18:10:00Z
+updated_utc: 2026-09-22T22:29:35Z
 site: MiniModel.org
 status: prepared_source_1.1.2_not_published
+
+static_seed_role_limits_2026_09_22:
+  status: implemented_and_tested_not_published
+  evidence: artifacts/reports/static-seed-size-review-20260922.json
+  behavior: Static seed plans enforce existing native ACG2 per-role ceilings; spare aggregate capacity cannot enlarge a tokenizer, template, sampling or prompt member. Canonical descriptor bytes and healthy generated plans remain unchanged.
+  verification: All 70 affected MiniModel checks pass, including cross-project catalog contracts; planner line coverage is 91.10 percent. Independent prior/current comparison reproduces four rejected-overflow fixes and two byte-identical valid plans. TinyRustLM Edge startup/cancellation passes all twelve only/first/last seed-order cases.
+  boundary: Seed ordering was already correct and no product UI changed. Browser tests stop before model transfer. No real model, public seed, credentials or publication; source-authority and release gates remain open.
 
 catalog_unicode_2026_09_20:
   status: implemented_and_fixture_tested_not_published

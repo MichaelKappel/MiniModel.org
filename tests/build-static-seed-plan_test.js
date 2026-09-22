@@ -111,12 +111,27 @@ test("metadata changes produce new content identities and bounded native-compati
     assert.notEqual(result.pieceSetId, original.pieceSetId);
     assert.equal(result.pieceSetId, `sha256:${hash(bytes)}`);
   }
-  // Exact aggregate ceiling: largest model plus bounded additional members and ACG2.
-  const maximum = changed((v) => { v.members[0].bytes = 68_719_476_736;
-    v.members[1].bytes = 68_787_701_384 - 68_719_476_736 - 28 - 28 - 26 - 896; });
-  assert.equal(buildStaticSeedPlan(maximum).files.reduce((sum, file) => sum + file.bytes, 0), 68_787_701_384);
+  // Bind every inclusive role ceiling to the owning profile instead of redistributing its budget.
+  const profile = JSON.parse(fs.readFileSync(path.join(tinyRoot, "contracts/vnext/acg2-format-profile.v1.json")));
+  const maximum = changed((v) => {
+    for (const member of profile.memberProfiles) v.members[member.ordinal].bytes = member.maximumArtifactBytes;
+    v.members[5].bytes = profile.artifactFormat.fileBytes;
+  });
+  assert.equal(buildStaticSeedPlan(maximum).files.reduce((sum, file) => sum + file.bytes, 0),
+    profile.limits.maximumResolvedMemberBytes + profile.artifactFormat.fileBytes);
   const over = JSON.parse(maximum); over.members[1].bytes += 1;
-  assert.throws(() => buildStaticSeedPlan(canonical(over)), /static-seed-descriptor-total/);
+  assert.throws(() => buildStaticSeedPlan(canonical(over)), /static-seed-descriptor-member/);
+});
+
+test("seed preparation rejects every native role ceiling overflow before generating a plan", async (t) => {
+  const profile = JSON.parse(fs.readFileSync(path.join(tinyRoot, "contracts/vnext/acg2-format-profile.v1.json")));
+  const limits = [...profile.memberProfiles.map((member) => member.maximumArtifactBytes), profile.artifactFormat.fileBytes];
+  for (const [index, maximum] of limits.entries()) {
+    await t.test(JSON.parse(descriptorBytes()).members[index].name, () => {
+      assert.throws(() => buildStaticSeedPlan(changed((value) => { value.members[index].bytes = maximum + 1; })),
+        /static-seed-descriptor-member/);
+    });
+  }
 });
 
 test("rejects unknown, injected, reordered and unsupported metadata before generating configuration", async (t) => {

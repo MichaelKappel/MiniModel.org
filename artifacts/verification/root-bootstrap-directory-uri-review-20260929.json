@@ -1,0 +1,59 @@
+{
+  "schema": "minimodel.implementation-review.v1",
+  "recorded_utc": "2026-09-29T22:19:07Z",
+  "status": "implemented-and-locally-tested-no-publication",
+  "question": "Why did the corrected sentinel bootstrap fail before creating its deployment lease?",
+  "closed_attempt": {
+    "receipt": "deploy/receipts/site-deployment-20260929T220545Z.json",
+    "sha256": "a55aeeeef47d69c15d0534af780bfca20cc6918735c0a37f6010ea2d7b801fc1",
+    "publisher_commit": "9e1115e93df06628be76b1da479777a769b1a483",
+    "status": "failed",
+    "lease_attempted": false,
+    "remote_writes": 0,
+    "interpretation": "The source gate, public hash checks and credentials/target admission completed. Failure occurred during the read-only FTP correspondence checks, before lease creation. The original failed receipt is unchanged."
+  },
+  "read_only_diagnosis": {
+    "method": "Use the actual canonical publisher functions after their source and credential/target gates. No mutation phase was admitted. Observe exact root inventory, index hash and bounded catalog NLST bytes. Compare the same logical directory with an explicit trailing slash in the FTP URI.",
+    "source_commit": "4677a2a1d4eb860dea32dd875f5cd97f49dd28bc",
+    "remote_writes": 0,
+    "sentinel": "absent",
+    "root_entries": 20,
+    "root_missing": [],
+    "root_additional": [],
+    "index_html": {
+      "bytes": 8284,
+      "sha256": "cfeb89175271f321e981fcc3c441c1d6cdfe18e9f78076aca7f10946fc0cb89f",
+      "matches_admitted_identity": true
+    },
+    "file_shaped_directory_uri": {
+      "path": "/catalog",
+      "bytes": 170,
+      "sha256": "9f33db08b34ae0a91238b52b867dd4a9df7cbdb8272bce2b71832ed4330d59c1",
+      "rows": ["catalog/peer-announcements.v1.json", "catalog/.htaccess", "catalog/models.v0.json.pre-catalog-home-20260713T174046Z.bak", "catalog/..", "catalog/compositions.v1.json", "catalog/."],
+      "result": "Rejected by the strict leaf-name parser before any catalog body read."
+    },
+    "explicit_directory_uri": {
+      "path": "/catalog/",
+      "bytes": 122,
+      "sha256": "89bd5f5cb00668c043ab8e20e0443c062e7c32518a732d01edf7fbd55a771e41",
+      "accepted_entries": ["peer-announcements.v1.json", ".htaccess", "models.v0.json.pre-catalog-home-20260713T174046Z.bak", "compositions.v1.json"],
+      "result": "Accepted by the unchanged strict parser."
+    },
+    "tool_outputs": ["41d092", "5cc29f", "443511"],
+    "lost_output": "An earlier identical bounded read-only diagnostic completed while conversation output was truncated. Its output is not used as evidence; no mutating operation was available in that diagnostic."
+  },
+  "decision": "Append a directory slash only for NLST requests. Preserve exact file/mutation targets, strict path and listing validation, TLS validation, account identity and phase gates.",
+  "files": [
+    {"path": "tools/deploy-site.ps1", "sha256": "47069a193bc4ed4cfe86b03ad91c3a026314ec2a40c89ee863632c6b5a00f08f"},
+    {"path": "tests/MiniModel.DeploymentCustody_test.ps1", "sha256": "701dec3f6952a10c624ba993fafc514325769c9c67b2bc1c51345c89cc643776"}
+  ],
+  "validation": {
+    "baseline": {"total": 3, "passed": 2, "failed": 1, "output": "fb9a57", "failure": "Actual FtpWebRequest URI was /catalog; the required directory URI was /catalog/."},
+    "final": {"total": 57, "passed": 57, "failed": 0, "output": "d342fc", "command": "Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1') -PassThru -Quiet"},
+    "checks": ["Actual FtpWebRequest URI for account root, nested catalog and lease directory", "Non-root transport root encoding", "Unchanged SIZE, RETR, STOR, APPE, DELE, RENAME, MKD and RMD targets", "Existing TLS and no-keepalive properties", "Source and mutation phase rejection", "Existing custody, bootstrap recovery and streaming tests", "git diff --check"],
+    "coverage": "All outcomes of the new NLST/root/nonempty condition exercised through actual request construction. Existing AST-imported publisher tests do not supply reliable source-line coverage; no whole-script coverage percentage is claimed.",
+    "scratch": "The focused Pester invocation produced no artifacts/tests entries."
+  },
+  "limits": ["No sentinel has been uploaded.", "The successful read-only directory request does not prove server rename, lease exclusion or write capability.", "Catalog body hashes must be rechecked by a fresh admitted bootstrap operation.", "The discovered old catalog backup is preserved; this fix authorizes no deletion.", "No seed qualification, model publication or hosted metadata renewal is established."],
+  "reusable_lesson": "Exercise actual transport request construction in addition to mocked transaction behavior: a slash changes FTP directory command semantics even when the logical path string looks correct."
+}

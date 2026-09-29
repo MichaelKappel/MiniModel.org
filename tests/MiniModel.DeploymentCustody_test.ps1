@@ -236,6 +236,50 @@ Describe 'Bounded actual NLST ingress' {
     }
 }
 
+Describe 'Actual FTP request URI directory semantics without transport' {
+    BeforeEach {
+        $script:sourceAuthorityAdmitted=$true
+        $script:phase='read-only'
+        $script:ftpHost='fixture.invalid'
+        $script:ftpPort=21
+        $script:remoteRoot='.'
+        $script:credential=[Net.NetworkCredential]::new('fixture-user','fixture-password')
+    }
+    AfterEach { $script:credential=$null }
+    It 'names a directory explicitly for root, nested and lease NLST requests' {
+        foreach ($logical in @('','catalog','catalog/nested','.minimodel-deployment-lease.v1')) {
+            $request=New-FtpRequest -LogicalPath $logical -Method ([Net.WebRequestMethods+Ftp]::ListDirectory)
+            try {
+                $expected=if ($logical.Length -eq 0) {'/'} else {"/$logical/"}
+                $request.RequestUri.AbsolutePath | Should Be $expected
+                $request.Method | Should Be ([Net.WebRequestMethods+Ftp]::ListDirectory)
+                $request.EnableSsl | Should Be $true
+                $request.KeepAlive | Should Be $false
+            } finally { $request.Abort() }
+        }
+        $script:remoteRoot='public_html'
+        $request=New-FtpRequest -LogicalPath 'catalog' -Method ([Net.WebRequestMethods+Ftp]::ListDirectory)
+        try { $request.RequestUri.AbsolutePath | Should Be '/public_html/catalog/' }
+        finally { $request.Abort() }
+    }
+    It 'preserves exact file and directory mutation targets for every other used FTP method' {
+        $script:phase='leased'
+        foreach ($method in @('SIZE','RETR','STOR','APPE','DELE','RENAME','MKD','RMD')) {
+            $request=New-FtpRequest -LogicalPath 'catalog/fixture.json' -Method $method -Mutating:($method -notin @('SIZE','RETR'))
+            try {
+                $request.RequestUri.AbsolutePath | Should Be '/catalog/fixture.json'
+                $request.Method | Should Be $method
+            } finally { $request.Abort() }
+        }
+    }
+    It 'preserves source admission and mutation phase gates before request construction' {
+        $script:sourceAuthorityAdmitted=$false
+        {New-FtpRequest -LogicalPath 'catalog' -Method 'NLST'} | Should Throw 'before the ecosystem'
+        $script:sourceAuthorityAdmitted=$true
+        {New-FtpRequest -LogicalPath 'catalog/fixture.json' -Method 'STOR' -Mutating} | Should Throw 'forbidden'
+    }
+}
+
 Describe 'Exact bootstrap manifest admission' {
     BeforeEach {
         $script:manifestAuthority=Get-Content -LiteralPath (Join-Path $repositoryRoot 'deploy/publication-authority.v1.json') -Raw|ConvertFrom-Json

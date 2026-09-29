@@ -422,6 +422,10 @@ function New-FtpRequest {
         Assert-CustodyMutationAllowed -Phase $script:phase -MutationKind remote
     }
     $encoded = Get-EncodedRemotePath -LogicalPath $LogicalPath
+    # NLST must address a directory; a file-shaped URI makes .NET send NLST <path>, yielding prefixed entries.
+    if ($Method -ceq [Net.WebRequestMethods+Ftp]::ListDirectory -and $encoded.Length -gt 0 -and -not $encoded.EndsWith('/')) {
+        $encoded += '/'
+    }
     $uri = [Uri]("ftp://{0}:{1}/{2}" -f $script:ftpHost, $script:ftpPort, $encoded)
     $request = [Net.FtpWebRequest]::Create($uri)
     $request.Method = $Method

@@ -1,0 +1,19 @@
+{
+    "schema":  "minimodel.root_bootstrap_receipt.v1",
+    "operation_id":  "61ab9cf200d14bc8acc4ffec935113ae",
+    "publisher_commit":  "327d321881185cb705a5577332dacc5d3ff2b316",
+    "authority_sha256":  "408346c123906c607a7e411222309a3687dfba073df2bc1f31dbb59b0ebc2070",
+    "manifest_sha256":  "798d675cae759e9c77ec385872f25e7098665298463e590a6ffcb2ce583d2ecc",
+    "started_utc":  "2026-09-29T22:46:33.2986751Z",
+    "status":  "installed-and-readback-verified",
+    "sentinel_path":  ".minimodel-publication-root.v1.json",
+    "sentinel_bytes":  165,
+    "sentinel_sha256":  "b11cd954128332e63a44e32be5523ccbb3b1b005cfd23f4d03569f37ef97d1dd",
+    "stage_path":  ".minimodel-publication-root.v1.deploy-61ab9cf200d14bc8acc4ffec935113ae.json",
+    "sentinel_verified":  true,
+    "recovery":  "not-needed",
+    "website_published":  false,
+    "seed_published":  false,
+    "lease_retained_or_creation_ambiguous":  false,
+    "completed_utc":  "2026-09-29T22:49:22.4926503Z"
+}

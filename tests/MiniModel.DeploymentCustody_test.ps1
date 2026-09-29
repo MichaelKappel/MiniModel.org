@@ -2,6 +2,7 @@
 Add-Type -AssemblyName System.Net.Http
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 Import-Module (Join-Path $repositoryRoot 'tools/MiniModel.DeploymentCustody.psm1') -Force
+Import-Module (Join-Path $repositoryRoot 'tools/MiniModel.StaticSeed.psm1') -Force
 
 InModuleScope MiniModel.DeploymentCustody {
     Describe 'Bounded canonical publication readers' {
@@ -182,6 +183,8 @@ if ($errors) { throw 'Publisher parse failed.' }
 foreach ($definition in $ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] }) {
     . ([scriptblock]::Create($definition.Extent.Text))
 }
+$script:seedFilePaths=@()
+$script:seedOperationId=''
 
 Describe 'Publisher tracked-file observation with real canonical Git bytes' {
     It 'binds working bytes to the observed exact commit and preserves strict revision admission' {
@@ -250,6 +253,8 @@ Describe 'Empty remote directory observation' {
 
 Describe 'Actual FTP request URI directory semantics without transport' {
     BeforeEach {
+        $script:seedFilePaths=@()
+        $script:seedOperationId=''
         $script:sourceAuthorityAdmitted=$true
         $script:phase='read-only'
         $script:ftpHost='fixture.invalid'
@@ -257,7 +262,7 @@ Describe 'Actual FTP request URI directory semantics without transport' {
         $script:remoteRoot='.'
         $script:credential=[Net.NetworkCredential]::new('fixture-user','fixture-password')
     }
-    AfterEach { $script:credential=$null }
+    AfterEach { $script:credential=$null;$script:seedFilePaths=@();$script:seedOperationId='' }
     It 'names a directory explicitly for root, nested and lease NLST requests' {
         foreach ($logical in @('','catalog','catalog/nested','.minimodel-deployment-lease.v1')) {
             $request=New-FtpRequest -LogicalPath $logical -Method ([Net.WebRequestMethods+Ftp]::ListDirectory)
@@ -289,6 +294,141 @@ Describe 'Actual FTP request URI directory semantics without transport' {
         {New-FtpRequest -LogicalPath 'catalog' -Method 'NLST'} | Should Throw 'before the ecosystem'
         $script:sourceAuthorityAdmitted=$true
         {New-FtpRequest -LogicalPath 'catalog/fixture.json' -Method 'STOR' -Mutating} | Should Throw 'forbidden'
+    }
+    It 'restricts colon request and rename targets to the registered members and owned stages' {
+        $directory='tinyrustlm/direct-composition/v1/compositions/sha256:'+('a'*64)+'/members'
+        $script:seedFilePaths=@('model.slm2','tokenizer.tokenizer2','template.template2','sampling.sampling2','prompt.prompt2','composition.acg2','.htaccess')|ForEach-Object {"$directory/$_"}
+        $script:seedOperationId='1'*32
+        $stage="$($script:seedFilePaths[0]).seed-$($script:seedOperationId).tmp"
+        $script:phase='leased'
+        $request=New-FtpRequest -LogicalPath $stage -Method 'STOR' -Mutating
+        try { $request.RequestUri.OriginalString.Contains('sha256%3A') | Should Be $true }
+        finally {$request.Abort()}
+        {New-FtpRequest -LogicalPath "$directory/extra.bin" -Method 'RETR'} | Should Throw 'outside the registered'
+        {New-FtpRequest -LogicalPath ($stage -replace ('1'*32),('2'*32)) -Method 'STOR' -Mutating} | Should Throw 'outside the registered'
+        {Rename-RemoteFile -LogicalPath $stage -NewLeafName 'extra.bin'} | Should Throw 'outside the registered'
+    }
+}
+
+Describe 'Registered seed FTP streaming without model files or network' {
+    BeforeEach {
+        $directory='tinyrustlm/direct-composition/v1/compositions/sha256:'+('a'*64)+'/members'
+        $script:seedFilePaths=@('model.slm2','tokenizer.tokenizer2','template.template2','sampling.sampling2','prompt.prompt2','composition.acg2','.htaccess')|ForEach-Object {"$directory/$_"}
+        $script:seedOperationId='1'*32
+        $script:seedBody=[byte[]]::new(131079)
+        for($index=0;$index -lt $script:seedBody.Length;$index++){$script:seedBody[$index]=[byte]($index % 251)}
+        $hash=Get-CustodyByteSha256 -Bytes $script:seedBody
+        $script:seedTransferFiles=@($script:seedFilePaths|ForEach-Object {[pscustomobject]@{path=$_;bytes=$script:seedBody.Length;sha256=$hash}})
+        $script:seedStage="$($script:seedFilePaths[0]).seed-$($script:seedOperationId).tmp"
+        $script:seedObservation=[pscustomobject]@{State='absent';Size=$null}
+        $script:seedReply=[pscustomobject]@{Stream=[IO.MemoryStream]::new($script:seedBody,$false);Disposed=$false}
+        $script:seedReply|Add-Member ScriptMethod GetResponseStream {return $this.Stream}
+        $script:seedReply|Add-Member ScriptMethod Dispose {$this.Disposed=$true}
+        $script:seedRequest=[pscustomobject]@{ContentLength=[int64]0;Output=[IO.MemoryStream]::new();Reply=$script:seedReply;Aborted=$false;ResponseRequested=$false}
+        $script:seedRequest|Add-Member ScriptMethod GetRequestStream {return $this.Output}
+        $script:seedRequest|Add-Member ScriptMethod GetResponse {$this.ResponseRequested=$true;return $this.Reply}
+        $script:seedRequest|Add-Member ScriptMethod Abort {$this.Aborted=$true}
+        Mock Assert-RemoteLeaseOwned {}
+        Mock Get-RemoteFileObservation {return $script:seedObservation}
+        Mock New-FtpRequest {return $script:seedRequest}
+    }
+    AfterEach {
+        $script:seedRequest.Output.Dispose();$script:seedReply.Stream.Dispose()
+        $script:seedFilePaths=@();$script:seedTransferFiles=@();$script:seedOperationId=''
+    }
+    It 'uses one STOR request and the retained source handle to write more than one buffer' {
+        $source=[IO.MemoryStream]::new($script:seedBody,$false)
+        try {
+            $source.Position=7
+            $result=Send-RemoteSeedStream -Source $source -LogicalPath $script:seedStage
+            $result.Bytes | Should Be $script:seedBody.Length
+            $result.Sha256 | Should Be $script:seedTransferFiles[0].sha256
+            (Get-CustodyByteSha256 -Bytes $script:seedRequest.Output.ToArray()) | Should Be $result.Sha256
+            $script:seedRequest.ContentLength | Should Be $script:seedBody.Length
+            $script:seedRequest.Output.CanWrite | Should Be $false
+            $script:seedRequest.ResponseRequested | Should Be $true
+            $script:seedReply.Disposed | Should Be $true
+            $script:seedRequest.Aborted | Should Be $false
+            $source.CanRead | Should Be $true
+            Assert-MockCalled Assert-RemoteLeaseOwned -Times 1 -Exactly -Scope It
+            Assert-MockCalled New-FtpRequest -Times 1 -Exactly -Scope It -ParameterFilter {$Method -ceq 'STOR' -and $Mutating -and $LogicalPath -ceq $script:seedStage}
+        } finally {$source.Dispose()}
+    }
+    It 'rejects occupied staging and unowned source lengths before opening a request' {
+        $source=[IO.MemoryStream]::new([byte[]](1,2,3),$false)
+        try {{Send-RemoteSeedStream -Source $source -LogicalPath $script:seedStage} | Should Throw 'exact retained stream'}
+        finally {$source.Dispose()}
+        $source=[IO.MemoryStream]::new($script:seedBody,$false)
+        try {
+            $script:seedObservation.State='present'
+            {Send-RemoteSeedStream -Source $source -LogicalPath $script:seedStage} | Should Throw 'not exactly absent'
+            {Send-RemoteSeedStream -Source $source -LogicalPath $script:seedFilePaths[0]} | Should Throw 'not admitted'
+            Assert-MockCalled New-FtpRequest -Times 0 -Exactly -Scope It
+        } finally {$source.Dispose()}
+    }
+    It 'aborts a transfer whose consumed bytes changed without disposing the caller source' {
+        $changed=[byte[]]$script:seedBody.Clone();$changed[0]=255
+        $source=[IO.MemoryStream]::new($changed,$false)
+        try {
+            {Send-RemoteSeedStream -Source $source -LogicalPath $script:seedStage} | Should Throw 'hash differs'
+            $script:seedRequest.Aborted | Should Be $true
+            $script:seedRequest.Output.CanWrite | Should Be $false
+            $script:seedRequest.ResponseRequested | Should Be $false
+            $source.CanRead | Should Be $true
+        } finally {$source.Dispose()}
+    }
+    It 'preserves an ambiguous upload response as failure and closes owned transport handles' {
+        $script:seedRequest|Add-Member -Force ScriptMethod GetResponse {$this.ResponseRequested=$true;throw 'Synthetic response lost after write.'}
+        $source=[IO.MemoryStream]::new($script:seedBody,$false)
+        try {
+            {Send-RemoteSeedStream -Source $source -LogicalPath $script:seedStage} | Should Throw 'response lost'
+            $script:seedRequest.Output.CanWrite | Should Be $false
+            $script:seedRequest.Output.ToArray().Length | Should Be $script:seedBody.Length
+            $script:seedRequest.Aborted | Should Be $true
+            $source.CanRead | Should Be $true
+            Assert-MockCalled New-FtpRequest -Times 1 -Exactly -Scope It
+        } finally {$source.Dispose()}
+    }
+    It 'streams exact staged and final readback bodies after SIZE admission' {
+        $script:seedObservation=[pscustomobject]@{State='present';Size=$script:seedBody.Length}
+        foreach($path in @($script:seedStage,$script:seedFilePaths[0])){
+            $script:seedReply.Stream=[IO.MemoryStream]::new($script:seedBody,$false);$script:seedReply.Disposed=$false
+            $result=Assert-RemoteSeedStreamIdentity -LogicalPath $path
+            $result.Bytes | Should Be $script:seedBody.Length
+            $result.Sha256 | Should Be $script:seedTransferFiles[0].sha256
+            $script:seedReply.Stream.CanRead | Should Be $false
+            $script:seedReply.Disposed | Should Be $true
+        }
+        Assert-MockCalled New-FtpRequest -Times 2 -Exactly -Scope It -ParameterFilter {$Method -ceq 'RETR' -and -not $Mutating}
+    }
+    It 'rejects missing or mismatched SIZE before download and detects truncated or changed bodies' {
+        {Assert-RemoteSeedStreamIdentity -LogicalPath $script:seedStage} | Should Throw 'SIZE differs'
+        $script:seedObservation=[pscustomobject]@{State='present';Size=3}
+        {Assert-RemoteSeedStreamIdentity -LogicalPath $script:seedStage} | Should Throw 'SIZE differs'
+        Assert-MockCalled New-FtpRequest -Times 0 -Exactly -Scope It
+        $script:seedObservation.Size=$script:seedBody.Length
+        $script:seedReply.Stream.Dispose();$script:seedReply.Stream=[IO.MemoryStream]::new([byte[]](1,2,3),$false)
+        {Assert-RemoteSeedStreamIdentity -LogicalPath $script:seedStage} | Should Throw 'ended before'
+        $script:seedReply.Stream.CanRead | Should Be $false
+        $script:seedReply.Disposed | Should Be $true
+        $changed=[byte[]]$script:seedBody.Clone();$changed[0]=255
+        $script:seedReply.Stream=[IO.MemoryStream]::new($changed,$false);$script:seedReply.Disposed=$false
+        {Assert-RemoteSeedStreamIdentity -LogicalPath $script:seedStage} | Should Throw 'hash differs'
+        $script:seedReply.Disposed | Should Be $true
+    }
+    It 'rejects another operation, unregistered leaves and missing or malformed transfer identity' {
+        {Get-RegisteredSeedTransferFile -LogicalPath ($script:seedStage -replace ('1'*32),('2'*32))} | Should Throw 'outside the registered'
+        {Get-RegisteredSeedTransferFile -LogicalPath ($script:seedStage+'.extra')} | Should Throw 'outside the registered'
+        $script:seedTransferFiles[0].sha256=('a'*64)+"`n"
+        {Get-RegisteredSeedTransferFile -LogicalPath $script:seedStage} | Should Throw 'not admitted'
+        $script:seedTransferFiles[0].sha256='a'*64
+        foreach($length in @([int64]0,[int64]68719476737)){
+            $script:seedTransferFiles[0].bytes=$length
+            {Get-RegisteredSeedTransferFile -LogicalPath $script:seedStage} | Should Throw 'not admitted'
+        }
+        $script:seedTransferFiles=@()
+        {Get-RegisteredSeedTransferFile -LogicalPath $script:seedStage} | Should Throw 'no admitted member closure'
+        Assert-MockCalled New-FtpRequest -Times 0 -Exactly -Scope It
     }
 }
 

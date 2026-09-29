@@ -64,8 +64,9 @@ retrieved September 19, 2026. Documentation support does not establish the
 actual host's module availability, override permissions or behavior.
 
 The existing site publisher still accepts only its reviewed 22-file web closure.
-This tool does not extend that closure or bypass its unbound transport identity,
-expired catalog. Current registered-root source-authority admission has passed;
+This tool does not extend that closure or bypass target and catalog admission.
+The transport tuple is now bound, but the public catalog remains empty/expired.
+Current registered-root source-authority admission has passed;
 that result does not establish host ownership or seed availability. A seed publication route
 must separately admit exact target ownership and hashes, stream verified bytes
 from the canonical model store, and verify remote readback before advertising
@@ -99,17 +100,36 @@ and unreviewed content untouched; inspect exact ownership and dependencies befor
 any root cleanup. Full hashes and the target tuple are in
 `artifacts/verification/static-seed-core-review-20260929.json`.
 
-The bounded NLST reader now handles the two literal structural listing entries
-without admitting arbitrary paths. A separate tested bootstrap mode prepares
-installation of the exact sentinel under the existing shared lease; it has not
-been run against production. The next seed checkpoint must wire the registry and
-streaming operation into the existing admitted transport and shared lease.
+The bounded NLST reader handles the two literal structural listing entries
+without admitting arbitrary paths. Its request uses an explicit directory URI:
+the actual host returns prefixed paths for a file-shaped `/catalog` request and
+leaf names for `/catalog/`. The strict leaf parser remains unchanged. Empty
+directories are valid observations, requiring two LISTs before absence is
+established. Two bootstrap attempts stopped before remote mutation; their failed
+outcomes are retained, and no installed sentinel is yet established.
+
+The publisher now has single-request STOR and streaming RETR primitives using
+the same 64 KiB identity checker. They resolve only the six registered members
+and `.htaccess`, or the seven exact `name.seed-{operationId}.tmp` stages for one
+operation. Another operation, unknown leaf or rename destination is rejected.
+Uploads require a retained readable/seekable source of exact length, an owned
+lease and proven stage absence. A lost upload response remains a failure; it
+does not authorize an automatic retry or deletion. Source handles belong to the
+caller; transport handles are closed. Existing website file/total byte budgets
+are unchanged. These primitives do not yet enable a seed publication entrypoint.
+
+The next checkpoint must wire the registry, immutable metadata and source-file
+admission, complete staged transaction and HTTPS readback into that entrypoint.
 Absent-or-complete seed admission must fail on partial uploads or unknown leaves.
 A subsequent search located the canonical receipt implementation in TinyRust's
 `app/catalog-admission-loader.js`, outside the earlier converter/runtime search.
 It binds the receipt to the parsed browser admission and catalog identities.
-Reuse that implementation with `browser-model-admission.js` when wiring the
-publisher; do not invent another receipt schema. Real reviewed passing evidence
+`tools/admit-static-seed-publication.js` now reuses that implementation with
+`browser-model-admission.js` and the actual signed catalog validator. It owns five
+bounded input byte arrays and uses a closed two-document in-memory fetch map.
+It validates exact operator seed identity, member/piece-set identities and actual
+receipt binding. Its result still sets `publicationAllowed` to false because it
+has not read payloads or verified the host. Real reviewed passing evidence
 is still required before seed upload. Registration or passing metadata strings
 alone do not establish that the underlying experiments succeeded.
 

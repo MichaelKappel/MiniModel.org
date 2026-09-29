@@ -568,9 +568,14 @@ function Assert-CustodyRemotePath {
     param(
         [Parameter(Mandatory)][string]$Path,
         [AllowEmptyCollection()][string[]]$SeedFilePaths = @(),
+        [string]$SeedOperationId = '',
         [switch]$AllowAncestor
     )
 
+    if ($SeedOperationId.Length -gt 0 -and
+        ($SeedOperationId.Length -ne 32 -or $SeedOperationId -cnotmatch '^[0-9a-f]{32}$' -or $SeedFilePaths.Count -ne 7)) {
+        throw 'Static seed staging operation identity is invalid.'
+    }
     $allowed = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     if ($SeedFilePaths.Count -ne 0) {
         if ($SeedFilePaths.Count -ne 7 -or
@@ -584,6 +589,9 @@ function Assert-CustodyRemotePath {
                 throw 'Registered static seed namespace is not the exact member closure.'
             }
             $null = $allowed.Add($SeedFilePaths[$index])
+            if ($SeedOperationId.Length -gt 0) {
+                $null = $allowed.Add("$($SeedFilePaths[$index]).seed-$SeedOperationId.tmp")
+            }
         }
         if ($AllowAncestor) {
             $ancestor = $directory
@@ -604,13 +612,14 @@ function Assert-CustodyRemotePath {
 function Get-CustodyExpectedDirectoryTree {
     param(
         [Parameter(Mandatory)][string[]]$FilePaths,
-        [AllowEmptyCollection()][string[]]$SeedFilePaths = @()
+        [AllowEmptyCollection()][string[]]$SeedFilePaths = @(),
+        [string]$SeedOperationId = ''
     )
 
     $tree = @{}
     $tree[""] = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($filePathValue in $FilePaths) {
-        $filePath = Assert-CustodyRemotePath -Path ([string]$filePathValue) -SeedFilePaths $SeedFilePaths
+        $filePath = Assert-CustodyRemotePath -Path ([string]$filePathValue) -SeedFilePaths $SeedFilePaths -SeedOperationId $SeedOperationId
         $parts = $filePath -split "/"
         $parent = ""
         for ($index = 0; $index -lt $parts.Count; $index++) {
@@ -631,11 +640,12 @@ function ConvertFrom-CustodyDirectoryListing {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes,
         [string]$DirectoryPath = '',
-        [AllowEmptyCollection()][string[]]$SeedFilePaths = @()
+        [AllowEmptyCollection()][string[]]$SeedFilePaths = @(),
+        [string]$SeedOperationId = ''
     )
     if ($Bytes.Length -gt 65536) { throw 'Remote directory listing exceeds its byte bound.' }
     if ($DirectoryPath.Length -gt 0) {
-        $null = Assert-CustodyRemotePath -Path $DirectoryPath -SeedFilePaths $SeedFilePaths -AllowAncestor
+        $null = Assert-CustodyRemotePath -Path $DirectoryPath -SeedFilePaths $SeedFilePaths -SeedOperationId $SeedOperationId -AllowAncestor
     }
     try { $text = [Text.UTF8Encoding]::new($false,$true).GetString($Bytes) }
     catch { throw 'Remote directory listing is not UTF-8.' }
@@ -647,7 +657,7 @@ function ConvertFrom-CustodyDirectoryListing {
             throw 'Remote directory listing contains an unsafe entry.'
         }
         $logical = if ($DirectoryPath.Length -eq 0) { $entry } else { "$DirectoryPath/$entry" }
-        $null = Assert-CustodyRemotePath -Path $logical -SeedFilePaths $SeedFilePaths -AllowAncestor
+        $null = Assert-CustodyRemotePath -Path $logical -SeedFilePaths $SeedFilePaths -SeedOperationId $SeedOperationId -AllowAncestor
         if (-not $seen.Add($entry)) { throw 'Remote directory listing contains a duplicate or case alias.' }
         $entries.Add($entry)
         if ($entries.Count -gt 500) { throw 'Remote directory listing exceeds its entry bound.' }
@@ -687,10 +697,11 @@ function Assert-CustodyRemoteDirectoryTree {
     param(
         [Parameter(Mandatory)][string[]]$ExpectedFilePaths,
         [Parameter(Mandatory)][Collections.IDictionary]$ObservedTree,
-        [AllowEmptyCollection()][string[]]$SeedFilePaths = @()
+        [AllowEmptyCollection()][string[]]$SeedFilePaths = @(),
+        [string]$SeedOperationId = ''
     )
 
-    $expectedTree = Get-CustodyExpectedDirectoryTree -FilePaths $ExpectedFilePaths -SeedFilePaths $SeedFilePaths
+    $expectedTree = Get-CustodyExpectedDirectoryTree -FilePaths $ExpectedFilePaths -SeedFilePaths $SeedFilePaths -SeedOperationId $SeedOperationId
     $expectedDirectories = @($expectedTree.Keys | Sort-Object -CaseSensitive)
     $observedDirectories = @($ObservedTree.Keys | ForEach-Object { [string]$_ } | Sort-Object -CaseSensitive)
     if ($expectedDirectories.Count -ne $observedDirectories.Count) {

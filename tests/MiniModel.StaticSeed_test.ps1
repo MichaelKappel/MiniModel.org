@@ -88,4 +88,24 @@ Describe 'Exact static seed remote namespace' {
         $null=$tree[$directory].Add('model.slm2');$null=$tree[$directory].Add('extra.bin')
         {Assert-CustodyRemoteDirectoryTree -ExpectedFilePaths $paths -ObservedTree $tree -SeedFilePaths $seedPaths} | Should Throw 'overlay or missing'
     }
+    It 'admits only the seven exact staging leaves belonging to one operation' {
+        $operation='1'*32
+        $stages=@($seedPaths | ForEach-Object {"$_.seed-$operation.tmp"})
+        foreach($stage in $stages){
+            (Assert-CustodyRemotePath -Path $stage -SeedFilePaths $seedPaths -SeedOperationId $operation) | Should Be $stage
+            {Assert-CustodyRemotePath -Path $stage -SeedFilePaths $seedPaths} | Should Throw 'outside the registered'
+            {Assert-CustodyRemotePath -Path $stage -SeedFilePaths $seedPaths -SeedOperationId ('2'*32)} | Should Throw 'outside the registered'
+        }
+        foreach($bad in @(('1'*31),('G'*32),'../operation')){
+            {Assert-CustodyRemotePath -Path $seedPaths[0] -SeedFilePaths $seedPaths -SeedOperationId $bad} | Should Throw 'operation identity'
+        }
+        {Assert-CustodyRemotePath -Path 'index.html' -SeedOperationId $operation} | Should Throw 'operation identity'
+        {Assert-CustodyRemotePath -Path ($stages[0]+'.extra') -SeedFilePaths $seedPaths -SeedOperationId $operation} | Should Throw 'outside the registered'
+        $tree=Get-CustodyExpectedDirectoryTree -FilePaths ($seedPaths+$stages) -SeedFilePaths $seedPaths -SeedOperationId $operation
+        {Assert-CustodyRemoteDirectoryTree -ExpectedFilePaths ($seedPaths+$stages) -ObservedTree $tree -SeedFilePaths $seedPaths -SeedOperationId $operation} | Should Not Throw
+        {Get-CustodyExpectedDirectoryTree -FilePaths $stages -SeedFilePaths $seedPaths} | Should Throw 'outside the registered'
+        $listing=[Text.Encoding]::UTF8.GetBytes(($stages | ForEach-Object {($_ -split '/')[-1]}) -join "`n")
+        @(ConvertFrom-CustodyDirectoryListing -Bytes $listing -DirectoryPath $directory -SeedFilePaths $seedPaths -SeedOperationId $operation).Count | Should Be 7
+        {ConvertFrom-CustodyDirectoryListing -Bytes $listing -DirectoryPath $directory -SeedFilePaths $seedPaths} | Should Throw 'outside the registered'
+    }
 }

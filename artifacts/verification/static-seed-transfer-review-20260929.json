@@ -1,0 +1,32 @@
+{
+  "schema": "minimodel.implementation-review.v1",
+  "recorded_utc": "2026-09-29T22:33:21Z",
+  "status": "transport-primitives-tested-entrypoint-not-enabled",
+  "question": "Can the existing publisher stream a registered model member without large byte arrays, generic colon-path exceptions or FTP append loops?",
+  "decision": "Use the existing 64 KiB identity checker with one STOR request and full streamed RETR readback. Admit only the six descriptor-derived member paths, .htaccess and their seven exact current-operation stages. Apply the same path authority to request construction, listings and rename destinations.",
+  "files": [
+    {"path": "tools/deploy-site.ps1", "sha256": "451f3e91863048884a8bfb5237c6a332024314befd94ae66f143a01f140c9941"},
+    {"path": "tools/MiniModel.DeploymentCustody.psm1", "sha256": "7f832c4d48d4cc76dec23416fff4e163b76258b050e26ee6e242213a92b4b58c"},
+    {"path": "tests/MiniModel.DeploymentCustody_test.ps1", "sha256": "fee1e2b0e623f4b9ea63f12df2e9a1e8e33af135d0d0a3c5474b4f53cc87f39a"},
+    {"path": "tests/MiniModel.StaticSeed_test.ps1", "sha256": "cb034fa614638da1976a91d624ceb99d8b33ba8e881074f62308054902007ab7"},
+    {"path": "deploy/static-seed.md", "sha256": "3b8b83bb2748dbdfff31bdfa8772ae47659db91e69f4baf0fc413bf33a78436c"}
+  ],
+  "validation": {
+    "focused": {"passed": 14, "failed": 0, "output": "5c6f72"},
+    "final": {"total": 67, "passed": 67, "failed": 0, "output": "fc6426", "command": "Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1') -CodeCoverage @('./tools/MiniModel.DeploymentCustody.psm1','./tools/MiniModel.StaticSeed.psm1') -PassThru -Quiet"},
+    "covered_behaviors": ["Current-operation stages admitted; other operations, extra leaves and malformed identities rejected", "Exact directory tree and NLST validation with staged leaves", "Registered colon URL encoding and rename destination rejection", "Single STOR transfers more than one buffer from the same retained source stream", "Source length, occupied stage and final-path upload rejection before opening a request", "Changed consumed bytes and lost response after complete write remain failures", "Caller source remains open; owned transport streams/responses close", "Final and staged RETR use exact SIZE and full streamed identity", "Missing, truncated and changed download bodies reject", "Existing website request methods, TLS, source and phase guards remain tested"],
+    "module_command_coverage": [
+      {"function": "Assert-CustodyRemotePath", "hit": 30, "analyzed": 31},
+      {"function": "Get-CustodyExpectedDirectoryTree", "hit": 20, "analyzed": 20},
+      {"function": "ConvertFrom-CustodyDirectoryListing", "hit": 23, "analyzed": 23},
+      {"function": "Assert-CustodyRemoteDirectoryTree", "hit": 29, "analyzed": 32},
+      {"function": "Copy-StaticSeedVerifiedStream", "hit": 30, "analyzed": 30}
+    ],
+    "coverage_limit": "Publisher functions are imported from their actual AST into the isolated test scope. Their meaningful behavior tests pass, but no reliable source-line coverage percentage is claimed for those functions.",
+    "diff_check": "passed",
+    "scratch": "No artifacts/tests entries or model fixtures were created."
+  },
+  "review": {"reviewer": "root parent agent", "method": "Read-only publisher and custody diff review", "result": "No material issue found in bounded streaming, exact closure, operation binding or rename validation."},
+  "limits": ["No seed publication entrypoint is enabled by this checkpoint.", "The registered namespace remains empty, and no model files were read or uploaded.", "A transaction must first bind actual qualified metadata, retained canonical source handles, target identity and the shared remote lease.", "FTP and HTTPS live readback, full transaction recovery and hosted renewal remain to be integrated and tested.", "Website per-file and total byte limits remain unchanged.", "No production sentinel, seed or website publication was performed."],
+  "reusable_lesson": "Separate bounded immutable model streaming from the small-file website transfer path while sharing source, credential, namespace and lease authority. An ambiguous final response is failed evidence, not permission to repeat the write."
+}

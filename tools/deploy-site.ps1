@@ -174,6 +174,7 @@ function Assert-EcosystemSingleSourceAuthority {
 Assert-EcosystemSingleSourceAuthority
 $script:sourceAuthorityAdmitted = $true
 Import-Module -Name $modulePath -Force
+Import-Module -Name (Join-Path $PSScriptRoot 'MiniModel.StaticSeed.psm1') -Force
 
 $script:phase = "read-only"
 $script:credential = $null
@@ -185,6 +186,8 @@ $script:publicationInputSha256 = $null
 $script:publicationOperationId = $null
 $script:lease = $null
 $script:seedFilePaths = @()
+$script:seedOperationId = ''
+$script:seedTransferFiles = @()
 $script:transactionJournal = [Collections.Generic.List[object]]::new()
 $script:commitCleanupStarted = $false
 
@@ -421,6 +424,9 @@ function New-FtpRequest {
     if ($Mutating) {
         Assert-CustodyMutationAllowed -Phase $script:phase -MutationKind remote
     }
+    if (-not [string]::IsNullOrEmpty($LogicalPath)) {
+        $null = Assert-CustodyRemotePath -Path $LogicalPath -SeedFilePaths $script:seedFilePaths -SeedOperationId $script:seedOperationId -AllowAncestor
+    }
     $encoded = Get-EncodedRemotePath -LogicalPath $LogicalPath
     # NLST must address a directory; a file-shaped URI makes .NET send NLST <path>, yielding prefixed entries.
     if ($Method -ceq [Net.WebRequestMethods+Ftp]::ListDirectory -and $encoded.Length -gt 0 -and -not $encoded.EndsWith('/')) {
@@ -506,7 +512,7 @@ function Get-RemoteDirectoryEntries {
             if ($memory.Length+$count -gt 65536) { throw 'Remote directory listing exceeds its byte bound.' }
             $memory.Write($buffer,0,$count)
         }
-        return ConvertFrom-CustodyDirectoryListing -Bytes $memory.ToArray() -DirectoryPath $LogicalPath -SeedFilePaths $script:seedFilePaths
+        return ConvertFrom-CustodyDirectoryListing -Bytes $memory.ToArray() -DirectoryPath $LogicalPath -SeedFilePaths $script:seedFilePaths -SeedOperationId $script:seedOperationId
     }
     finally {
         $memory.Dispose()
@@ -518,7 +524,7 @@ function Get-RemoteDirectoryEntries {
 function Get-RemoteParentAndLeaf {
     param([Parameter(Mandatory)][string]$LogicalPath)
 
-    $relative = Assert-RelativePath -Path $LogicalPath
+    $relative = Assert-CustodyRemotePath -Path $LogicalPath -SeedFilePaths $script:seedFilePaths -SeedOperationId $script:seedOperationId -AllowAncestor
     $lastSlash = $relative.LastIndexOf("/")
     return [pscustomobject]@{
         Parent = if ($lastSlash -ge 0) { $relative.Substring(0, $lastSlash) } else { "" }
@@ -612,6 +618,9 @@ function Rename-RemoteFile {
     param([string]$LogicalPath, [string]$NewLeafName)
 
     if ($NewLeafName -notmatch "^[A-Za-z0-9._-]+$") { throw "Unsafe remote rename leaf." }
+    $parts = Get-RemoteParentAndLeaf -LogicalPath $LogicalPath
+    $target = if ($parts.Parent.Length -eq 0) { $NewLeafName } else { "$($parts.Parent)/$NewLeafName" }
+    $null = Assert-CustodyRemotePath -Path $target -SeedFilePaths $script:seedFilePaths -SeedOperationId $script:seedOperationId
     $request = New-FtpRequest -LogicalPath $LogicalPath -Method ([Net.WebRequestMethods+Ftp]::Rename) -Mutating
     $request.RenameTo = $NewLeafName
     $response = $request.GetResponse()
@@ -674,6 +683,76 @@ function Send-RemoteFile {
             throw "Remote staging offset drifted from the intended chunk boundary."
         }
         $offset = $intendedSize
+    }
+}
+
+# Resolve only one of the seven admitted immutable members or its current operation's exact stage.
+function Get-RegisteredSeedTransferFile {
+    param([Parameter(Mandatory)][string]$LogicalPath,[switch]$RequireStage)
+    $null = Assert-CustodyRemotePath -Path $LogicalPath -SeedFilePaths $script:seedFilePaths -SeedOperationId $script:seedOperationId
+    if ($script:seedTransferFiles.Count -ne 7 -or $script:seedOperationId -cnotmatch '^[0-9a-f]{32}$') {
+        throw 'Static seed transfer has no admitted member closure.'
+    }
+    $found = @($script:seedTransferFiles | Where-Object {
+        $LogicalPath -ceq "$($_.path).seed-$($script:seedOperationId).tmp" -or
+        (-not $RequireStage -and $LogicalPath -ceq [string]$_.path)
+    })
+    if ($found.Count -ne 1 -or [int64]$found[0].bytes -lt 1 -or [int64]$found[0].bytes -gt 68719476736 -or
+        ([string]$found[0].sha256).Length -ne 64 -or [string]$found[0].sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        [string]$found[0].path -cnotin $script:seedFilePaths) {
+        throw 'Static seed transfer path or identity is not admitted.'
+    }
+    return $found[0]
+}
+
+# Stream from a retained read-only source handle; no model-sized byte array or FTP append loop is used.
+function Send-RemoteSeedStream {
+    param([Parameter(Mandatory)][IO.Stream]$Source,[Parameter(Mandatory)][string]$LogicalPath)
+    $file = Get-RegisteredSeedTransferFile -LogicalPath $LogicalPath -RequireStage
+    if (-not $Source.CanRead -or -not $Source.CanSeek -or $Source.Length -ne [int64]$file.bytes) {
+        throw 'Static seed upload source is not the exact retained stream.'
+    }
+    Assert-RemoteLeaseOwned
+    if ((Get-RemoteFileObservation -LogicalPath $LogicalPath).State -cne 'absent') {
+        throw 'Static seed staging path was not exactly absent.'
+    }
+    $Source.Position = 0
+    $request = New-FtpRequest -LogicalPath $LogicalPath -Method ([Net.WebRequestMethods+Ftp]::UploadFile) -Mutating
+    $request.ContentLength = [int64]$file.bytes
+    $output = $null
+    $completed = $false
+    try {
+        $output = $request.GetRequestStream()
+        $identity = Copy-StaticSeedVerifiedStream -Source $Source -Destination $output -ExpectedBytes ([int64]$file.bytes) -ExpectedSha256 ([string]$file.sha256)
+        $output.Dispose(); $output = $null
+        $response = $request.GetResponse()
+        try { $completed = $true } finally { $response.Dispose() }
+        return $identity
+    }
+    finally {
+        if ($output) { try { $output.Dispose() } catch { } }
+        if (-not $completed) { $request.Abort() }
+    }
+}
+
+# Verify the complete remote seed body in a 64 KiB buffer after exact LIST/SIZE admission.
+function Assert-RemoteSeedStreamIdentity {
+    param([Parameter(Mandatory)][string]$LogicalPath)
+    $file = Get-RegisteredSeedTransferFile -LogicalPath $LogicalPath
+    $observation = Get-RemoteFileObservation -LogicalPath $LogicalPath
+    if ($observation.State -cne 'present' -or [int64]$observation.Size -ne [int64]$file.bytes) {
+        throw 'Remote seed SIZE differs from its admitted identity.'
+    }
+    $request = New-FtpRequest -LogicalPath $LogicalPath -Method ([Net.WebRequestMethods+Ftp]::DownloadFile)
+    $response = $request.GetResponse()
+    $stream = $null
+    try {
+        $stream = $response.GetResponseStream()
+        return Copy-StaticSeedVerifiedStream -Source $stream -ExpectedBytes ([int64]$file.bytes) -ExpectedSha256 ([string]$file.sha256)
+    }
+    finally {
+        if ($stream) { $stream.Dispose() }
+        $response.Dispose()
     }
 }
 

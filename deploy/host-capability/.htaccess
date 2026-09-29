@@ -1,0 +1,6 @@
+Options -Indexes
+RewriteEngine On
+RewriteRule ^probe\.json$ probe.php [L]
+<Files "probe-core.php">
+    Require all denied
+</Files>

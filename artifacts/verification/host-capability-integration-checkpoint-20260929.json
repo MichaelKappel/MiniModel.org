@@ -1,0 +1,76 @@
+{
+    "schema":  "minimodel.implementation-review.v1",
+    "recorded_utc":  "2026-09-29T23:53:00Z",
+    "status":  "in-progress-host-capability-publisher-focused-tests-passed",
+    "base_commit":  "33e91b4a36dfc697753ef089d6a31a6b9519369d",
+    "question":  "Can the existing admitted host be checked for PHP, denied private storage and durable atomic renewal primitives without any production signing key or model publication?",
+    "decision":  "Checkpoint the bounded nonsecret probe and publisher integration to permit independent candidate source admission. Full integration validation and independent publisher review remain pending; this checkpoint is not authorization evidence to run the live probe.",
+    "files":  [
+                  {
+                      "path":  ".gitattributes",
+                      "bytes":  3092,
+                      "sha256":  "9153074ae1e67bea2bf50285ca836d5622a20be068016b419dbae925586c533d"
+                  },
+                  {
+                      "path":  "tools/deploy-site.ps1",
+                      "bytes":  132123,
+                      "sha256":  "573dd045703154a18df17ec84edfa55e4313c364269b50738e7123aecf857e79"
+                  },
+                  {
+                      "path":  "tests/deployment-custody.test.js",
+                      "bytes":  18192,
+                      "sha256":  "c342e146079baac6b1b410c3b2e2db6acac09bf9fb400fe6502f70fbe968ace5"
+                  },
+                  {
+                      "path":  "tests/MiniModel.HostCapability_test.ps1",
+                      "bytes":  16775,
+                      "sha256":  "6b987724d4b7e3ac5eaf68b90c26bbc2e3d8ab8d96249ed8b093312f8e88bc83"
+                  },
+                  {
+                      "path":  "artifacts/verification/host-capability-local-review-20260929.json",
+                      "bytes":  3617,
+                      "sha256":  "819189ef5a9d146aa52e7c0cc983a3b842b7a63f236c5906aea32c6fb2361a4e"
+                  }
+              ],
+    "validation":  {
+                       "focused_pester":  {
+                                              "total":  14,
+                                              "passed":  14,
+                                              "failed":  0,
+                                              "output":  "45ec75",
+                                              "command":  "Invoke-Pester -Script \u0027./tests/MiniModel.HostCapability_test.ps1\u0027 -PassThru -Quiet"
+                                          },
+                       "retained_failure":  {
+                                                "output":  "564bd0",
+                                                "total":  14,
+                                                "passed":  12,
+                                                "failed":  2,
+                                                "meaning":  "The actual HTTP-message fixture returned Pester assertion booleans from a ScriptMethod, so GetAwaiter received a Boolean. Removed fixture output pollution with explicit conditional throws; no production response or host was involved."
+                                            },
+                       "php_probe_review":  "artifacts/verification/host-capability-local-review-20260929.json",
+                       "php_actual_cases":  16,
+                       "php_node_tests":  2,
+                       "php_skipped":  0,
+                       "source_and_log_bindings":  "All source and four raw-log identities in the PHP review rechecked before this checkpoint.",
+                       "full_integration_suite":  "pending",
+                       "independent_publisher_review":  "pending",
+                       "live_host_probe":  "not-run",
+                       "line_coverage":  "not-measured",
+                       "fixtures":  "Memory-only FTP and actual HttpResponseMessage objects; no credentials, model payloads or live transport."
+                   },
+    "production":  {
+                       "changed":  false,
+                       "probe_published":  false,
+                       "signing_key_published":  false,
+                       "model_published":  false,
+                       "discovery_published":  false,
+                       "earlier_sentinel_receipt":  "deploy/receipts/site-deployment-20260929T224551Z.json"
+                   },
+    "limits":  [
+                   "No production PHP/rewrite/private-denial/rename capability follows from local tests.",
+                   "The live operation requires fresh canonical source/remote admission, exact account/sentinel and exclusive deployment lease.",
+                   "Uncertain failure retains the exact namespace and lease for review; no automatic retry or broad cleanup.",
+                   "No qualified default or renewed public catalog is established by this checkpoint."
+               ],
+    "reusable_lesson":  "Prove private denial using nonsecret bytes before installing executable probe inputs or any signing key; bind every operation to the existing publication lease and preserve ambiguous state."
+}

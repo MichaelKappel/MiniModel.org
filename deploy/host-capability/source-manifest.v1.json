@@ -1,0 +1,27 @@
+{
+  "schema": "minimodel.host_capability_source_manifest.v1",
+  "remoteNamespace": ".minimodel-host-capability.v1",
+  "members": [
+    {
+      "path": ".htaccess",
+      "byteLength": 131,
+      "sha256": "c23b5e1b7c1d4f35c4b69f7b93ef1e8a2631d821dac1fc08a833135d2ef1c5e7"
+    },
+    {
+      "path": "private/.htaccess",
+      "byteLength": 19,
+      "sha256": "fa28d421a28ed9b6f4b997d5119c2b8adbacff6e2dd119a179b71230f9664934"
+    },
+    {
+      "path": "probe-core.php",
+      "byteLength": 8807,
+      "sha256": "923492cbac75aaea83e5ec85156a66f632a3b6ab6879e586d1ef7aa934155de4"
+    },
+    {
+      "path": "probe.php",
+      "byteLength": 554,
+      "sha256": "c580f8651723764a437601270dabd080ef4ece61a8c8d068abdce62edc8f926e"
+    }
+  ],
+  "published": false
+}

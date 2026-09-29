@@ -82,7 +82,7 @@ test("exercises bounded input, transfer and rollback using canonical functions w
   try {
     const command = [
       "$ErrorActionPreference='Stop'",
-      "$result=Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1') -CodeCoverage @('./tools/MiniModel.DeploymentCustody.psm1','./tools/MiniModel.StaticSeed.psm1') -PassThru -Quiet",
+      "$result=Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1','./tests/MiniModel.HostCapability_test.ps1') -CodeCoverage @('./tools/MiniModel.DeploymentCustody.psm1','./tools/MiniModel.StaticSeed.psm1') -PassThru -Quiet",
       "$coverage=$result.CodeCoverage",
       "$changedCoverage=@('ConvertFrom-CustodyDirectoryListing','Assert-CustodyBootstrapManifest') | ForEach-Object { $name=$_; $hit=@($coverage.HitCommands | Where-Object Function -eq $name).Count; $miss=@($coverage.MissedCommands | Where-Object Function -eq $name).Count; [pscustomobject]@{name=$name;hit=$hit;analyzed=($hit+$miss)} }",
       "$result.TestResult | Where-Object { -not $_.Passed } | Select-Object Name,FailureMessage | ConvertTo-Json -Compress | Write-Output",

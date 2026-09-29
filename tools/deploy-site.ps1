@@ -7,13 +7,14 @@ param(
     [switch]$Publish,
     [switch]$BootstrapSentinel,
     [switch]$PublishSeed,
+    [switch]$ProbeHostedRenewal,
     [string]$SeedSourceDirectory
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.Net.Http
-if (@(@($Publish,$BootstrapSentinel,$PublishSeed) | Where-Object {$_}).Count -gt 1) { throw 'Choose exactly one publication operation.' }
+if (@(@($Publish,$BootstrapSentinel,$PublishSeed,$ProbeHostedRenewal) | Where-Object {$_}).Count -gt 1) { throw 'Choose exactly one publication operation.' }
 if ($PublishSeed -ne (-not [string]::IsNullOrWhiteSpace($SeedSourceDirectory))) { throw 'Seed publication requires its explicit canonical source directory only.' }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
@@ -180,7 +181,7 @@ function Assert-EcosystemSingleSourceAuthority {
     }
 
     $gateArguments = @()
-    if ($Publish -or $BootstrapSentinel -or $PublishSeed) {
+    if ($Publish -or $BootstrapSentinel -or $PublishSeed -or $ProbeHostedRenewal) {
         $gateArguments += @("--require-clean", "--require-remote-exact")
     }
     $gateResult = Invoke-VerifiedNode -Tool source-authority -Arguments $gateArguments
@@ -1582,6 +1583,202 @@ function Invoke-RootSentinelBootstrap {
     return $receipt
 }
 
+# Capture only the four reviewed probe source files from the admitted commit.
+function Get-HostedCapabilityInput {
+    param([Parameter(Mandatory)][string]$Commit)
+    $bytes=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $Commit -RelativePath 'deploy/host-capability/source-manifest.v1.json' -MaximumBytes 16384
+    $utf8=[Text.UTF8Encoding]::new($false,$true);$manifest=$utf8.GetString($bytes)|ConvertFrom-Json
+    $names=@('.htaccess','private/.htaccess','probe-core.php','probe.php')
+    if($manifest.schema -cne 'minimodel.host_capability_source_manifest.v1' -or
+        $manifest.remoteNamespace -cne '.minimodel-host-capability.v1' -or $manifest.published -ne $false -or @($manifest.members).Count -ne 4) {
+        throw 'Hosted capability manifest is not the reviewed source closure.'
+    }
+    $files=[ordered]@{}
+    for($index=0;$index -lt 4;$index++) {
+        $member=$manifest.members[$index]
+        if($member.path -cne $names[$index] -or $member.byteLength -lt 1 -or $member.byteLength -gt 32768 -or
+            ([string]$member.sha256).Length -ne 64 -or $member.sha256 -cnotmatch '^[0-9a-f]{64}$'){throw 'Hosted capability member identity is invalid.'}
+        $body=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $Commit -RelativePath ('deploy/host-capability/'+$member.path) -MaximumBytes $member.byteLength
+        if($body.Length -ne $member.byteLength -or (Get-CustodyByteSha256 $body) -cne $member.sha256){throw 'Hosted capability committed source identity differs.'}
+        $files[$member.path]=$body
+    }
+    if($utf8.GetString($files['private/.htaccess']) -cne "Require all denied`n"){throw 'Hosted capability private denial configuration differs.'}
+    return [pscustomobject]@{ManifestSha256=(Get-CustodyByteSha256 $bytes);Namespace=$manifest.remoteNamespace;Files=$files}
+}
+
+# Validate only the fixed public result shape; never persist unknown response fields or PHP diagnostics.
+function Assert-HostedCapabilityResult {
+    param([Parameter(Mandatory)][byte[]]$Bytes,[Parameter(Mandatory)][string]$OperationId)
+    if($Bytes.Length -lt 1 -or $Bytes.Length -gt 4096){throw 'Hosted capability result exceeds its byte bound.'}
+    $value=[Text.UTF8Encoding]::new($false,$true).GetString($Bytes)|ConvertFrom-Json
+    $keys=@('schema','nonce','ok','checks')
+    if(@($value.PSObject.Properties.Name).Count -ne 4 -or @($value.PSObject.Properties.Name|Where-Object {$_ -cnotin $keys}).Count -gt 0 -or
+        $value.schema -cne 'minimodel.host_capability_result.v1' -or $value.nonce -cne $OperationId -or $value.ok -isnot [bool]){throw 'Hosted capability result identity differs.'}
+    $checks=@('php','sodium','leaseBinding','privateRead','privateWrite','flush','atomicRename','readback','flock','cleanup')
+    if(@($value.checks.PSObject.Properties.Name).Count -ne $checks.Count -or
+        @($value.checks.PSObject.Properties.Name|Where-Object {$_ -cnotin $checks}).Count -gt 0){throw 'Hosted capability check closure differs.'}
+    foreach($name in $checks){if($value.checks.$name -isnot [bool]){throw 'Hosted capability check is not a boolean.'}}
+    if(-not $value.ok -or @($checks|Where-Object {-not $value.checks.$_}).Count -gt 0){throw 'Hosted capability prerequisite was not established.'}
+    return $value
+}
+
+# The probe admits fixed no-query routes only, with bounded bytes and a complete response deadline.
+function Get-HostedCapabilityHttpObservation {
+    param([Parameter(Mandatory)][string]$RelativePath,[Parameter(Mandatory)][string]$OperationId,[switch]$Deny)
+    $namespace='.minimodel-host-capability.v1'
+    $allowed=if($Deny){@("$namespace/private/canary.txt","$namespace/private/operation.json","$namespace/probe-core.php","$namespace/probe.php")}else{@("$namespace/probe.json")}
+    if($RelativePath -cnotin $allowed -or $OperationId.Length -ne 32 -or $OperationId -cnotmatch '^[0-9a-f]{32}$'){throw 'Hosted capability HTTP route is not admitted.'}
+    $client=New-StaticSeedHttpClient;$response=$null;$close=$null
+    $request=[Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get,('https://minimodel.org/'+$RelativePath))
+    $request.Headers.CacheControl=[Net.Http.Headers.CacheControlHeaderValue]::new();$request.Headers.CacheControl.NoCache=$true;$request.Headers.CacheControl.NoStore=$true
+    $request.Headers.AcceptEncoding.ParseAdd('identity')
+    $cts=[Threading.CancellationTokenSource]::new();$cts.CancelAfter(60000)
+    try {
+        $response=$client.SendAsync($request,[Net.Http.HttpCompletionOption]::ResponseHeadersRead,$cts.Token).GetAwaiter().GetResult()
+        $close=Register-StaticSeedResponseCancellation -Response $response -CancellationToken $cts.Token
+        if($Deny) {
+            if([int]$response.StatusCode -notin @(403,404)){throw 'Hosted private file or implementation route was not denied.'}
+            return [pscustomobject]@{status=[int]$response.StatusCode;denied=$true}
+        }
+        if([int]$response.StatusCode -ne 200 -or $null -eq $response.Content -or $null -eq $response.Content.Headers.ContentType -or
+            $response.Content.Headers.ContentType.MediaType -cne 'application/json' -or $null -eq $response.Headers.CacheControl -or
+            -not $response.Headers.CacheControl.NoStore -or $response.Content.Headers.ContentEncoding.Count -gt 0 -or
+            ($null -ne $response.Content.Headers.ContentLength -and $response.Content.Headers.ContentLength -gt 4096)){throw 'Hosted capability HTTP response is not bounded uncached JSON.'}
+        $buffer=[byte[]]::new(4097);$count=0;$stream=$response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        do {
+            $read=$stream.ReadAsync($buffer,$count,$buffer.Length-$count,$cts.Token).GetAwaiter().GetResult();$count+=$read
+            if($count -gt 4096){throw 'Hosted capability HTTP body exceeds its byte bound.'}
+        } while($read -gt 0)
+        $body=[byte[]]::new($count);[Array]::Copy($buffer,$body,$count)
+        $result=Assert-HostedCapabilityResult -Bytes $body -OperationId $OperationId
+        return [pscustomobject]@{status=200;bytes=$count;sha256=(Get-CustodyByteSha256 $body);result=$result}
+    } finally {
+        if($null -ne $close){$close.Dispose()};if($response){$response.Dispose()};$cts.Dispose();$request.Dispose();$client.Dispose()
+    }
+}
+
+# Refuse any pre-existing probe namespace, including partial or case-aliased output.
+function Assert-HostedCapabilityNamespaceAbsent {
+    $name='.minimodel-host-capability.v1'
+    foreach($observation in 1..2) {
+        if(Test-ExactListedLeaf -Entries @(Get-RemoteDirectoryEntries -LogicalPath '') -Leaf $name){throw 'Hosted capability namespace already exists; exact recovery is required.'}
+    }
+}
+
+function New-HostedCapabilityDirectory {
+    param([Parameter(Mandatory)][string]$Path)
+    if($Path -cnotin @('.minimodel-host-capability.v1','.minimodel-host-capability.v1/private')){throw 'Hosted capability directory is not admitted.'}
+    $parts=Get-RemoteParentAndLeaf -LogicalPath $Path
+    foreach($observation in 1..2) {
+        if(Test-ExactListedLeaf -Entries @(Get-RemoteDirectoryEntries -LogicalPath $parts.Parent) -Leaf $parts.Leaf){throw 'Hosted capability directory changed before creation.'}
+    }
+    Assert-RemoteLeaseOwned
+    $request=New-FtpRequest -LogicalPath $Path -Method ([Net.WebRequestMethods+Ftp]::MakeDirectory) -Mutating
+    $response=$request.GetResponse();$response.Dispose()
+    if(@(Get-RemoteDirectoryEntries -LogicalPath $Path).Count -ne 0){throw 'New hosted capability directory is not empty.'}
+}
+
+# Closure is relative to the owned probe root; unrelated account-root entries are preserved.
+function Assert-HostedCapabilityRemoteClosure {
+    param([Parameter(Mandatory)][Collections.IDictionary]$Payloads)
+    $namespace='.minimodel-host-capability.v1'
+    $tree=@{''=@(Get-RemoteDirectoryEntries -LogicalPath $namespace);'private'=@(Get-RemoteDirectoryEntries -LogicalPath ($namespace+'/private'))}
+    Assert-CustodyRemoteDirectoryTree -ExpectedFilePaths @($Payloads.Keys) -ObservedTree $tree
+    foreach($path in $Payloads.Keys){Assert-RemoteExactIdentity -LogicalPath ($namespace+'/'+$path) -Bytes $Payloads[$path].Length -Sha256 (Get-CustodyByteSha256 $Payloads[$path])}
+}
+
+# Cleanup only after the PHP scratch has disappeared and all source/nonsecret inputs still match.
+function Remove-HostedCapabilityNamespace {
+    param([Parameter(Mandatory)][Collections.IDictionary]$Payloads)
+    $namespace='.minimodel-host-capability.v1'
+    Assert-RemoteLeaseOwned
+    Assert-HostedCapabilityRemoteClosure -Payloads $Payloads
+    $paths=@($Payloads.Keys);[Array]::Reverse($paths)
+    foreach($path in $paths) {
+        Assert-RemoteLeaseOwned
+        $null=Remove-RemoteExactFile -LogicalPath ($namespace+'/'+$path) -Bytes $Payloads[$path].Length -Sha256 (Get-CustodyByteSha256 $Payloads[$path])
+    }
+    foreach($directory in @(($namespace+'/private'),$namespace)) {
+        Assert-RemoteLeaseOwned
+        if(@(Get-RemoteDirectoryEntries -LogicalPath $directory).Count -ne 0){throw 'Hosted capability cleanup found an unowned entry.'}
+        $request=New-FtpRequest -LogicalPath $directory -Method ([Net.WebRequestMethods+Ftp]::RemoveDirectory) -Mutating
+        $response=$request.GetResponse();$response.Dispose()
+        if(Test-RemoteDirectory -LogicalPath $directory){throw 'Hosted capability directory removal was not verified.'}
+    }
+    Assert-HostedCapabilityNamespaceAbsent
+}
+
+# Install a temporary nonsecret capability probe only under the verified root and exclusive lease.
+function Invoke-HostedCapabilityProbe {
+    param([Parameter(Mandatory)]$AuthorityRecord)
+    if(-not $script:sourceAuthorityAdmitted){throw 'Hosted capability probe requires source admission.'}
+    $probeAuthority=$AuthorityRecord.Value
+    if($probeAuthority.transport.status -cne 'bound'){throw 'Hosted capability probe requires bound transport.'}
+    $repository=Get-RepositoryObservation -Authority $probeAuthority
+    Assert-CustodyRepositoryIdentity -Authority $probeAuthority -Observed $repository -ExpectedRepositoryRoot $repositoryRoot
+    $inputRecord=Get-HostedCapabilityInput -Commit $repository.head
+    $namespace=$inputRecord.Namespace;$operation=[Guid]::NewGuid().ToString('N')
+    $receipt=[ordered]@{schema='minimodel.host_capability_receipt.v1';operation_id=$operation;publisher_commit=$repository.head;
+        authority_sha256=$AuthorityRecord.Sha256;source_manifest_sha256=$inputRecord.ManifestSha256;started_utc=[DateTime]::UtcNow.ToString('o');
+        status='failed';private_denial_verified=$false;capabilities_verified=$false;namespace_cleanup_verified=$false;
+        website_published=$false;seed_published=$false;discovery_published=$false;signing_key_published=$false;last_step='source-admitted'}
+    $script:phase='input-verified';$profile=$null;$leaseAttempted=$false;$leaseReleased=$false
+    try {
+        Import-MiniModelCredentialModule
+        $profile=Get-CredentialProfile -Path $FtpExportPath -ProfileName $probeAuthority.transport.profile_name
+        $observed=[pscustomobject]@{profile_name=$profile.profile;protocol='ftps-explicit';host=$profile.host;port=$profile.port;username=$profile.user;remote_root=$probeAuthority.transport.remote_root}
+        Assert-CustodyTransportAuthority -Authority $probeAuthority -Observed $observed
+        $script:ftpHost=$profile.host;$script:ftpPort=$profile.port;$script:remoteRoot=$probeAuthority.transport.remote_root
+        $script:credential=[Net.NetworkCredential]::new($profile.user,$profile.password);$profile.password=$null
+        Assert-RemoteExactIdentity -LogicalPath $probeAuthority.transport.root_sentinel_path -Bytes $probeAuthority.transport.root_sentinel_bytes -Sha256 $probeAuthority.transport.root_sentinel_sha256
+        Assert-HostedCapabilityNamespaceAbsent
+        $script:phase='transport-admitted';$leaseAttempted=$true;$receipt.last_step='lease-create-attempted'
+        $ownedLease=New-RemoteDeploymentLease -Authority $probeAuthority -OperationId $operation -PublisherCommit $repository.head -ManifestSha256 $inputRecord.ManifestSha256 -AuthoritySha256 $AuthorityRecord.Sha256
+        $script:phase='leased'
+        Assert-RemoteExactIdentity -LogicalPath $probeAuthority.transport.root_sentinel_path -Bytes $probeAuthority.transport.root_sentinel_bytes -Sha256 $probeAuthority.transport.root_sentinel_sha256
+        Assert-HostedCapabilityNamespaceAbsent
+        $receipt.last_step='namespace-create-attempted';New-HostedCapabilityDirectory -Path $namespace
+        $receipt.last_step='private-directory-create-attempted';New-HostedCapabilityDirectory -Path ($namespace+'/private')
+        $operationValue=[ordered]@{schema='minimodel.host_capability_operation.v1';operation_id=$operation;lease_owner_sha256=$ownedLease.OwnerSha256}
+        $utf8=[Text.UTF8Encoding]::new($false,$true)
+        $payloads=[ordered]@{
+            'private/.htaccess'=$inputRecord.Files['private/.htaccess'];
+            'private/canary.txt'=$utf8.GetBytes(('minimodel-host-capability-canary:'+$operation+"`n"));
+            '.htaccess'=$inputRecord.Files['.htaccess'];'probe-core.php'=$inputRecord.Files['probe-core.php'];
+            'private/operation.json'=$utf8.GetBytes((($operationValue|ConvertTo-Json -Compress)+"`n"));'probe.php'=$inputRecord.Files['probe.php']
+        }
+        foreach($path in $payloads.Keys) {
+            Assert-RemoteLeaseOwned;$receipt.last_step='upload-attempted:'+ $path
+            Send-RemoteFile -Payload $payloads[$path] -LogicalPath ($namespace+'/'+$path)
+            Assert-RemoteExactIdentity -LogicalPath ($namespace+'/'+$path) -Bytes $payloads[$path].Length -Sha256 (Get-CustodyByteSha256 $payloads[$path])
+            if($path -ceq 'private/canary.txt') {
+                $receipt.last_step='initial-private-denial'
+                $null=Get-HostedCapabilityHttpObservation -RelativePath ($namespace+'/'+$path) -OperationId $operation -Deny
+                $receipt.private_denial_verified=$true
+            }
+        }
+        Assert-HostedCapabilityRemoteClosure -Payloads $payloads
+        $receipt.last_step='public-capability-observation'
+        $observation=Get-HostedCapabilityHttpObservation -RelativePath ($namespace+'/probe.json') -OperationId $operation
+        $receipt.capabilities=$observation.result.checks;$receipt.public_response_sha256=$observation.sha256;$receipt.public_response_bytes=$observation.bytes
+        foreach($path in @('private/canary.txt','private/operation.json','probe-core.php','probe.php')) {
+            $null=Get-HostedCapabilityHttpObservation -RelativePath ($namespace+'/'+$path) -OperationId $operation -Deny
+        }
+        Assert-HostedCapabilityRemoteClosure -Payloads $payloads
+        $receipt.capabilities_verified=$true;$receipt.last_step='namespace-cleanup-attempted'
+        Remove-HostedCapabilityNamespace -Payloads $payloads
+        $receipt.namespace_cleanup_verified=$true;$receipt.last_step='lease-release-attempted'
+        Remove-RemoteDeploymentLease;$leaseReleased=$true
+        $receipt.status='verified-and-removed';$receipt.last_step='complete'
+    } catch {
+        $receipt.failure_code=Get-SafeFailureCode -Exception $_.Exception
+        $receipt.recovery=if($leaseAttempted -and -not $leaseReleased){'retained-for-exact-ownership-review'}else{'no-remote-cleanup-needed'}
+    } finally {if($profile){$profile.password=$null};$script:credential=$null}
+    $receipt.lease_retained_or_creation_ambiguous=$leaseAttempted -and -not $leaseReleased
+    $receipt.completed_utc=[DateTime]::UtcNow.ToString('o')
+    return $receipt
+}
+
 # Qualified immutable bytes can be installed independently of website/discovery publication.
 function Invoke-QualifiedStaticSeedPublication {
     param([Parameter(Mandatory)]$AuthorityRecord,[Parameter(Mandatory)][string]$SourceDirectory)
@@ -1660,6 +1857,13 @@ if ($PublishSeed) {
     Write-Receipt -Receipt $seedReceipt -Path $validatedReportPath
     if($seedReceipt.status -ceq 'failed'){throw 'Seed publication failed; inspect its exact receipt and retained lease before recovery.'}
     Write-Host 'SEED-BYTES-HTTP-VERIFIED; website and discovery were not published; browser-origin readback remains separate'
+    exit 0
+}
+if ($ProbeHostedRenewal) {
+    $probeReceipt=Invoke-HostedCapabilityProbe -AuthorityRecord $authorityRecord
+    Write-Receipt -Receipt $probeReceipt -Path $validatedReportPath
+    if($probeReceipt.status -ceq 'failed'){throw 'Hosted capability probe failed; inspect its exact receipt and lease before recovery.'}
+    Write-Host 'HOST-CAPABILITY-VERIFIED-AND-REMOVED; no model, discovery metadata, website or signing key was published'
     exit 0
 }
 

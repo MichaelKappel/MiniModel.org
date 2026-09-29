@@ -1,0 +1,11 @@
+{"schema":"minimodel.local_php_capability_test.v1","image":"sha256:f62df9916bc05ae3c5120b41a115938f22623b0c98c815cbe2c67bc73cec21ef","phpVersionId":80333,"passed":["success-all-capabilities","methods-and-query","sole-public-route","extra-lease-owner","wrong-lease","missing-denial","wrong-denial","wrong-canary","invalid-json","oversize-json","extra-field","noncanonical-json","invalid-id","missing-owner","existing-scratch-retained","symlink-rejected"],"productionCapabilityVerified":false}
+✔ capability source closure binds only the four approved deployable files (5.2413ms)
+✔ actual cached PHP executes capability and rejection paths without network (1798.7935ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1867.9209

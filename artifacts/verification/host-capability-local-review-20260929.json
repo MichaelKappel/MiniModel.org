@@ -1,0 +1,98 @@
+{
+  "schema": "minimodel.host_capability_local_review.v1",
+  "reviewedAtUtc": "2026-09-29T23:40:22.493Z",
+  "status": "local-php-tests-passed-host-unverified",
+  "purpose": "Verify prerequisites for durable signed discovery metadata renewal on the existing host; no signing key or discovery publication.",
+  "source": [
+    {
+      "path": "deploy/host-capability/probe.php",
+      "bytes": 554,
+      "sha256": "c580f8651723764a437601270dabd080ef4ece61a8c8d068abdce62edc8f926e"
+    },
+    {
+      "path": "deploy/host-capability/probe-core.php",
+      "bytes": 8807,
+      "sha256": "923492cbac75aaea83e5ec85156a66f632a3b6ab6879e586d1ef7aa934155de4"
+    },
+    {
+      "path": "deploy/host-capability/.htaccess",
+      "bytes": 131,
+      "sha256": "c23b5e1b7c1d4f35c4b69f7b93ef1e8a2631d821dac1fc08a833135d2ef1c5e7"
+    },
+    {
+      "path": "deploy/host-capability/private/.htaccess",
+      "bytes": 19,
+      "sha256": "fa28d421a28ed9b6f4b997d5119c2b8adbacff6e2dd119a179b71230f9664934"
+    },
+    {
+      "path": "deploy/host-capability/source-manifest.v1.json",
+      "bytes": 763,
+      "sha256": "e31ecf2412ebd9427e9ba1b91514b4c6e4f62c204c5e5b6811d244d2f15fdd46"
+    },
+    {
+      "path": "deploy/host-capability/README.md",
+      "bytes": 2521,
+      "sha256": "52e65cae0fea79a4eb4bb253667ab8a2a63424f57f12fd634c655692927ec777"
+    },
+    {
+      "path": "tests/host-capability.test.js",
+      "bytes": 8297,
+      "sha256": "a7225052504da5f6fd002aba1a055fc0647e368227a1ab9b4d2b5050b766abc3"
+    }
+  ],
+  "validation": {
+    "nodeTests": 2,
+    "phpCases": 16,
+    "failed": 0,
+    "skipped": 0,
+    "phpVersion": "8.3.33",
+    "image": "sha256:f62df9916bc05ae3c5120b41a115938f22623b0c98c815cbe2c67bc73cec21ef",
+    "network": "none",
+    "sourceMount": "canonical-MiniModel-read-only",
+    "fixtureOwnership": "canonical-TinyRustLM-owned-operation-root-retired-original-marker",
+    "command": "MINIMODEL_HOST_CAPABILITY_PHP_DOCKER=1 node --test tests/host-capability.test.js",
+    "independentReview": "Hosting agent reviewed bounds/bindings/retention; requested exact lease one-owner closure, now implemented and tested. Sole original public request URI is also required."
+  },
+  "attempts": [
+    {
+      "id": "a1",
+      "phpCases": 14,
+      "pass": 2,
+      "fail": 0
+    },
+    {
+      "id": "a2",
+      "phpCases": 16,
+      "pass": 2,
+      "fail": 0
+    }
+  ],
+  "logs": [
+    {
+      "path": "artifacts/verification/host-capability-local-a1-20260929.stdout.log",
+      "bytes": 745,
+      "sha256": "d86e70d4128151d5c836f873659b267102d4ee98eb79795c03d8266f768437c0"
+    },
+    {
+      "path": "artifacts/verification/host-capability-local-a1-20260929.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/verification/host-capability-local-a2-20260929.stdout.log",
+      "bytes": 785,
+      "sha256": "e01377bc8ed544374135550840378c3470461eb442ae8333b7e3d0d0325714d3"
+    },
+    {
+      "path": "artifacts/verification/host-capability-local-a2-20260929.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "limitations": [
+    "Container CLI execution does not establish production PHP or Apache/LiteSpeed rewrite/deny behavior.",
+    "The host transaction must verify HTTPS canary denial before installing operation/code and must bind/recheck its own deployment lease.",
+    "No production keys, PHP deployment, catalog/feed renewal, seed, website publication or model qualification occurred."
+  ],
+  "published": false
+}

@@ -305,7 +305,9 @@ test("actual publisher checks both Node children despite hostile startup setting
   });
   assert.ifError(result.error);
   assert.notEqual(result.status, 0);
-  assert.match(result.stdout + result.stderr, /Deployment manifest or current catalog admission failed: catalog is stale/);
+  // The committed operator-seed validator now differs from the older website
+  // content commit, so byte custody rejects before the catalog freshness gate.
+  assert.match(result.stdout + result.stderr, /Deployment manifest or current catalog admission failed: Canonical public source differs from the content commit:\s+catalog\.js/);
   assert.doesNotMatch(result.stdout + result.stderr, /Cannot find module|READ-ONLY-ADMISSION-PASS|Get-CredentialProfile/);
   assert.deepEqual(fs.readdirSync(receipts).sort(), before);
   assert.deepEqual(fs.readFileSync(manifestPath), beforeManifest);

@@ -5,13 +5,16 @@ param(
     [string]$ReportPath = (Join-Path (Split-Path -Parent $PSScriptRoot) ("deploy\receipts\site-deployment-{0}.json" -f (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ"))),
     [string]$NodeExecutablePath = (Join-Path $env:ProgramFiles 'nodejs\node.exe'),
     [switch]$Publish,
-    [switch]$BootstrapSentinel
+    [switch]$BootstrapSentinel,
+    [switch]$PublishSeed,
+    [string]$SeedSourceDirectory
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.Net.Http
-if ($Publish -and $BootstrapSentinel) { throw 'Choose website publication or sentinel bootstrap, not both.' }
+if (@(@($Publish,$BootstrapSentinel,$PublishSeed) | Where-Object {$_}).Count -gt 1) { throw 'Choose exactly one publication operation.' }
+if ($PublishSeed -ne (-not [string]::IsNullOrWhiteSpace($SeedSourceDirectory))) { throw 'Seed publication requires its explicit canonical source directory only.' }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $modulePath = Join-Path $PSScriptRoot "MiniModel.DeploymentCustody.psm1"
@@ -177,7 +180,7 @@ function Assert-EcosystemSingleSourceAuthority {
     }
 
     $gateArguments = @()
-    if ($Publish -or $BootstrapSentinel) {
+    if ($Publish -or $BootstrapSentinel -or $PublishSeed) {
         $gateArguments += @("--require-clean", "--require-remote-exact")
     }
     $gateResult = Invoke-VerifiedNode -Tool source-authority -Arguments $gateArguments
@@ -834,6 +837,150 @@ function Assert-RemoteSeedStreamIdentity {
     }
 }
 
+# Bind the admitted metadata and retained source handles to one exact transfer closure.
+function New-StaticSeedTransferSet {
+    param([Parameter(Mandatory)]$InputRecord,[Parameter(Mandatory)]$SourceSet,[Parameter(Mandatory)][string]$OperationId)
+    $plan=$InputRecord.Admission.plan
+    if($plan.schema -cne 'minimodel.static-seed-preparation.v1' -or $plan.origin -cne 'https://minimodel.org' -or
+        @($plan.files).Count -ne 6 -or @($SourceSet.Members).Count -ne 6) { throw 'Seed transfer has no exact admitted preparation.' }
+    $paths=@($plan.files|ForEach-Object {[string]$_.remotePath})+@([string]$plan.configuration.remotePath)
+    foreach($path in $paths){$null=Assert-CustodyRemotePath -Path $path -SeedFilePaths $paths -SeedOperationId $OperationId}
+    $files=[Collections.Generic.List[object]]::new()
+    for($index=0;$index -lt 6;$index++) {
+        $file=$plan.files[$index];$source=$SourceSet.Members[$index]
+        if($file.name -cne $source.Name -or [int64]$file.bytes -ne $source.Bytes -or $file.sha256 -cne $source.Sha256 -or
+            $file.url -cne ('https://minimodel.org/'+$file.remotePath) -or
+            $file.remotePath -cne ($plan.remoteDirectory+'/'+$file.name)) {throw 'Seed transfer source and descriptor differ.'}
+        $files.Add([pscustomobject]@{path=[string]$file.remotePath;bytes=[int64]$file.bytes;sha256=[string]$file.sha256;stream=$source.Stream})
+    }
+    $configuration=[Text.UTF8Encoding]::new($false,$true).GetBytes([string]$plan.configuration.text)
+    if($configuration.Length -lt 1 -or $configuration.Length -gt 65536 -or
+        $configuration.Length -ne $plan.configuration.bytes -or
+        (Get-CustodyByteSha256 $configuration) -cne $plan.configuration.sha256) {throw 'Seed configuration identity drifted.'}
+    $binding=[ordered]@{schema='minimodel.static-seed-transfer/1';operation_id=$OperationId;publisher_commit=$InputRecord.Commit;
+        registry_sha256=$InputRecord.RegistrySha256;metadata=$InputRecord.Admission.metadata;files=@($files|ForEach-Object {[ordered]@{path=$_.path;bytes=$_.bytes;sha256=$_.sha256}});
+        configuration=[ordered]@{path=$plan.configuration.remotePath;bytes=$configuration.Length;sha256=$plan.configuration.sha256}}
+    $bindingBytes=[Text.Encoding]::UTF8.GetBytes((($binding|ConvertTo-Json -Depth 12 -Compress)+"`n"))
+    $configurationStream=[IO.MemoryStream]::new($configuration,$false)
+    $files.Add([pscustomobject]@{path=[string]$plan.configuration.remotePath;bytes=$configuration.Length;sha256=[string]$plan.configuration.sha256;stream=$configurationStream})
+    return [pscustomobject]@{FilePaths=$paths;Files=$files.ToArray();ConfigurationStream=$configurationStream;BindingSha256=(Get-CustodyByteSha256 $bindingBytes)}
+}
+
+# A namespace can be entirely absent or have the exact seven-file closure. Never adopt partial output.
+function Get-StaticSeedNamespaceState {
+    param([Parameter(Mandatory)]$Plan)
+    $null=Assert-CustodyRemotePath -Path $Plan.remoteDirectory -SeedFilePaths $script:seedFilePaths -SeedOperationId $script:seedOperationId -AllowAncestor
+    $parent=''
+    foreach($leaf in ($Plan.remoteDirectory -split '/')) {
+        $before=@(Get-RemoteDirectoryEntries -LogicalPath $parent)
+        $present=Test-ExactListedLeaf -Entries $before -Leaf $leaf
+        $after=@(Get-RemoteDirectoryEntries -LogicalPath $parent)
+        if($present -ne (Test-ExactListedLeaf -Entries $after -Leaf $leaf)){throw 'Seed ancestor observations changed.'}
+        if(-not $present){return 'absent'}
+        $parent=if($parent.Length -eq 0){$leaf}else{"$parent/$leaf"}
+    }
+    $entries=@(Get-RemoteDirectoryEntries -LogicalPath $parent)
+    $expected=@($script:seedFilePaths|ForEach-Object {$_.Substring($_.LastIndexOf('/')+1)})
+    if($entries.Count -ne 7 -or @($entries|Where-Object {$_ -cnotin $expected}).Count -gt 0) {throw 'Seed namespace is partial or contains unowned entries.'}
+    foreach($name in $expected){if(-not (Test-ExactListedLeaf -Entries $entries -Leaf $name)){throw 'Seed namespace is partial or contains unowned entries.'}}
+    return 'complete'
+}
+
+# Create only exact registered ancestors under the shared lease; journal attempts before mutation.
+function New-StaticSeedDirectories {
+    param([Parameter(Mandatory)]$Plan,[Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.List[object]]$Journal)
+    $parent=''
+    foreach($leaf in ($Plan.remoteDirectory -split '/')) {
+        $path=if($parent.Length -eq 0){$leaf}else{"$parent/$leaf"}
+        $before=@(Get-RemoteDirectoryEntries -LogicalPath $parent)
+        if(-not (Test-ExactListedLeaf -Entries $before -Leaf $leaf)) {
+            $after=@(Get-RemoteDirectoryEntries -LogicalPath $parent)
+            if(Test-ExactListedLeaf -Entries $after -Leaf $leaf){throw 'Seed ancestor changed before creation.'}
+            Assert-RemoteLeaseOwned
+            $Journal.Add([ordered]@{step='directory-create-attempted';path=$path})
+            $request=New-FtpRequest -LogicalPath $path -Method ([Net.WebRequestMethods+Ftp]::MakeDirectory) -Mutating
+            $response=$request.GetResponse();$response.Dispose()
+            if(@(Get-RemoteDirectoryEntries -LogicalPath $path).Count -ne 0){throw 'New seed ancestor is not exactly empty.'}
+        } else {Get-RemoteDirectoryEntries -LogicalPath $path|Out-Null}
+        $parent=$path
+    }
+    if(@(Get-RemoteDirectoryEntries -LogicalPath $Plan.remoteDirectory).Count -ne 0){throw 'New seed namespace is occupied.'}
+}
+
+# One fixed no-cookie, no-redirect client; disposing it also disposes its owned handler.
+function New-StaticSeedHttpClient {
+    $handler=[Net.Http.HttpClientHandler]::new();$handler.AllowAutoRedirect=$false;$handler.UseCookies=$false
+    $handler.AutomaticDecompression=[Net.DecompressionMethods]::None
+    $client=[Net.Http.HttpClient]::new($handler);$client.Timeout=[Threading.Timeout]::InfiniteTimeSpan
+    return $client
+}
+
+# The same deadline covers HTTP headers and the entire streaming body. Redirects/decompression are disabled.
+function Assert-PublicStaticSeedMembers {
+    param([Parameter(Mandatory)]$Plan,[Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.List[object]]$Journal)
+    $client=New-StaticSeedHttpClient
+    try {
+        foreach($member in $Plan.files) {
+            foreach($method in @('GET','HEAD')) {
+                $request=[Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::new($method),[string]$member.url)
+                $request.Headers.AcceptEncoding.ParseAdd('identity')
+                $null=$request.Headers.TryAddWithoutValidation('Origin','https://tinyrustlm.com')
+                $cts=[Threading.CancellationTokenSource]::new();$cts.CancelAfter(1800000)
+                $response=$null;$cancellationClose=$null
+                try {
+                    $response=$client.SendAsync($request,[Net.Http.HttpCompletionOption]::ResponseHeadersRead,$cts.Token).GetAwaiter().GetResult()
+                    $cancellationClose=Register-StaticSeedResponseCancellation -Response $response -CancellationToken $cts.Token
+                    $null=Assert-StaticSeedHttpMember -Response $response -Member $member -CancellationToken $cts.Token -HeadersOnly:($method -ceq 'HEAD')
+                    $Journal.Add([ordered]@{step='https-member-verified';path=$member.remotePath;method=$method})
+                } finally {if($null -ne $cancellationClose){$cancellationClose.Dispose()};if($response){$response.Dispose()};$request.Dispose();$cts.Dispose()}
+            }
+        }
+    } finally {$client.Dispose()}
+}
+
+# Promote only after all staged bodies verify. Discovery documents are outside this transaction.
+function Invoke-StaticSeedMemberTransaction {
+    param([Parameter(Mandatory)]$Plan,[Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.List[object]]$Journal)
+    Assert-RemoteLeaseOwned
+    $state=Get-StaticSeedNamespaceState -Plan $Plan
+    if($state -ceq 'absent') {
+        New-StaticSeedDirectories -Plan $Plan -Journal $Journal
+        # Put the restrictive serving configuration in place before any model member is uploaded.
+        $configuration=$script:seedTransferFiles[6]
+        $configStage="$($configuration.path).seed-$($script:seedOperationId).tmp"
+        $Journal.Add([ordered]@{step='configuration-stage-attempted';path=$configStage})
+        $null=Send-RemoteSeedStream -Source $configuration.stream -LogicalPath $configStage
+        $null=Assert-RemoteSeedStreamIdentity -LogicalPath $configStage
+        Assert-RemoteLeaseOwned
+        if((Get-RemoteFileObservation -LogicalPath $configuration.path).State -cne 'absent'){throw 'Seed configuration target changed.'}
+        Rename-RemoteFile -LogicalPath $configStage -NewLeafName '.htaccess'
+        $null=Assert-RemoteSeedStreamIdentity -LogicalPath $configuration.path
+        if((Get-RemoteFileObservation -LogicalPath $configStage).State -cne 'absent'){throw 'Seed configuration promotion left a stage.'}
+        for($index=0;$index -lt 6;$index++) {
+            $file=$script:seedTransferFiles[$index];$stage="$($file.path).seed-$($script:seedOperationId).tmp"
+            $Journal.Add([ordered]@{step='member-stage-attempted';path=$stage})
+            $null=Send-RemoteSeedStream -Source $file.stream -LogicalPath $stage
+            $null=Assert-RemoteSeedStreamIdentity -LogicalPath $stage
+            $Journal.Add([ordered]@{step='member-stage-verified';path=$stage})
+        }
+        for($index=0;$index -lt 6;$index++) {
+            $file=$script:seedTransferFiles[$index];$stage="$($file.path).seed-$($script:seedOperationId).tmp"
+            Assert-RemoteLeaseOwned
+            if((Get-RemoteFileObservation -LogicalPath $file.path).State -cne 'absent'){throw 'Seed final target changed before promotion.'}
+            $Journal.Add([ordered]@{step='member-promotion-attempted';path=$file.path})
+            Rename-RemoteFile -LogicalPath $stage -NewLeafName $Plan.files[$index].name
+            $null=Assert-RemoteSeedStreamIdentity -LogicalPath $file.path
+            if((Get-RemoteFileObservation -LogicalPath $stage).State -cne 'absent'){throw 'Seed promotion left staging residue.'}
+        }
+    } else {
+        foreach($file in $script:seedTransferFiles){$null=Assert-RemoteSeedStreamIdentity -LogicalPath $file.path}
+    }
+    if((Get-StaticSeedNamespaceState -Plan $Plan) -cne 'complete'){throw 'Seed final closure is incomplete.'}
+    Assert-PublicStaticSeedMembers -Plan $Plan -Journal $Journal
+    Assert-RemoteLeaseOwned
+    return $(if($state -ceq 'absent'){'installed-and-http-verified'}else{'already-present-http-verified'})
+}
+
 function Get-SafeFailureCode {
     param([Exception]$Exception)
 
@@ -1435,6 +1582,64 @@ function Invoke-RootSentinelBootstrap {
     return $receipt
 }
 
+# Qualified immutable bytes can be installed independently of website/discovery publication.
+function Invoke-QualifiedStaticSeedPublication {
+    param([Parameter(Mandatory)]$AuthorityRecord,[Parameter(Mandatory)][string]$SourceDirectory)
+    if(-not $script:sourceAuthorityAdmitted){throw 'Seed publication is forbidden before source authority admission.'}
+    $seedAuthority=$AuthorityRecord.Value
+    if($seedAuthority.transport.status -cne 'bound'){throw 'Seed publication requires bound transport authority.'}
+    $repository=Get-RepositoryObservation -Authority $seedAuthority
+    Assert-CustodyRepositoryIdentity -Authority $seedAuthority -Observed $repository -ExpectedRepositoryRoot $repositoryRoot
+    # Real current qualification is required before model bytes or account credentials are opened.
+    $inputRecord=Get-StaticSeedPublicationInput -Commit $repository.head
+    $sourceSet=$null;$transfer=$null;$profile=$null
+    $operation=[Guid]::NewGuid().ToString('N')
+    $journal=[Collections.Generic.List[object]]::new()
+    $receipt=[ordered]@{schema='minimodel.static_seed_publication_receipt.v1';operation_id=$operation;publisher_commit=$repository.head;
+        authority_sha256=$AuthorityRecord.Sha256;composition_id=$inputRecord.Admission.compositionId;piece_set_id=$inputRecord.Admission.pieceSetId;
+        qualification_receipt_id=$inputRecord.Admission.qualificationReceiptId;metadata=$inputRecord.Admission.metadata;
+        started_utc=[DateTime]::UtcNow.ToString('o');status='failed';seed_published=$false;discovery_published=$false;website_published=$false;
+        browser_origin_readback_verified=$false;lease_retained_or_creation_ambiguous=$false;recovery='not-needed'}
+    $script:phase='input-verified'
+    $leaseAttempted=$false;$leaseReleased=$false
+    try {
+        $sourceSet=Open-StaticSeedSourceSet -Directory $SourceDirectory -Members $inputRecord.Admission.plan.files
+        $transfer=New-StaticSeedTransferSet -InputRecord $inputRecord -SourceSet $sourceSet -OperationId $operation
+        $script:seedFilePaths=$transfer.FilePaths;$script:seedTransferFiles=$transfer.Files;$script:seedOperationId=$operation
+        $receipt.transfer_binding_sha256=$transfer.BindingSha256
+        Import-MiniModelCredentialModule
+        $profile=Get-CredentialProfile -Path $FtpExportPath -ProfileName $seedAuthority.transport.profile_name
+        $observed=[pscustomobject]@{profile_name=$profile.profile;protocol='ftps-explicit';host=$profile.host;port=$profile.port;username=$profile.user;remote_root=$seedAuthority.transport.remote_root}
+        Assert-CustodyTransportAuthority -Authority $seedAuthority -Observed $observed
+        $script:ftpHost=$profile.host;$script:ftpPort=$profile.port;$script:remoteRoot=$seedAuthority.transport.remote_root
+        $script:credential=[Net.NetworkCredential]::new($profile.user,$profile.password);$profile.password=$null
+        Assert-RemoteExactIdentity -LogicalPath $seedAuthority.transport.root_sentinel_path -Bytes $seedAuthority.transport.root_sentinel_bytes -Sha256 $seedAuthority.transport.root_sentinel_sha256
+        $null=Get-StaticSeedNamespaceState -Plan $inputRecord.Admission.plan
+        $script:phase='transport-admitted';$leaseAttempted=$true
+        $null=New-RemoteDeploymentLease -Authority $seedAuthority -OperationId $operation -PublisherCommit $repository.head -ManifestSha256 $transfer.BindingSha256 -AuthoritySha256 $AuthorityRecord.Sha256
+        $script:phase='leased'
+        Assert-RemoteExactIdentity -LogicalPath $seedAuthority.transport.root_sentinel_path -Bytes $seedAuthority.transport.root_sentinel_bytes -Sha256 $seedAuthority.transport.root_sentinel_sha256
+        $result=Invoke-StaticSeedMemberTransaction -Plan $inputRecord.Admission.plan -Journal $journal
+        # Long transfers do not silently extend the admitted metadata lifetime.
+        $fresh=Get-StaticSeedPublicationInput -Commit $repository.head
+        if($fresh.RegistrySha256 -cne $inputRecord.RegistrySha256){throw 'Seed metadata changed after transfer.'}
+        Remove-RemoteDeploymentLease;$leaseReleased=$true
+        $receipt.status=$result;$receipt.seed_published=$true
+    } catch {
+        $receipt.failure_code=Get-SafeFailureCode -Exception $_.Exception
+        $receipt.recovery=if($leaseAttempted -and -not $leaseReleased){'retained-for-exact-ownership-review'}else{'no-remote-cleanup-needed'}
+        # Preserve uncertain upload/rename/lease outcomes. Never adopt or overwrite a partial namespace.
+    } finally {
+        if($profile){$profile.password=$null};$script:credential=$null
+        if($transfer){$transfer.ConfigurationStream.Dispose()}
+        if($sourceSet){Close-StaticSeedSourceSet -SourceSet $sourceSet}
+        $script:seedFilePaths=@();$script:seedTransferFiles=@();$script:seedOperationId=''
+    }
+    $receipt.lease_retained_or_creation_ambiguous=$leaseAttempted -and -not $leaseReleased
+    $receipt.journal=$journal.ToArray();$receipt.completed_utc=[DateTime]::UtcNow.ToString('o')
+    return $receipt
+}
+
 $authorityRecord = Read-CustodyJsonFile -Path $AuthorityPath -MaximumBytes 131072 -Label "publication authority"
 $authority = $authorityRecord.Value
 Assert-CustodyPublicationAuthority -Authority $authority -RepositoryRoot $repositoryRoot -AuthorityPath $authorityRecord.Path
@@ -1448,6 +1653,13 @@ if ($BootstrapSentinel) {
     Write-Receipt -Receipt $bootstrapReceipt -Path $validatedReportPath
     if ($bootstrapReceipt.status -ceq 'failed') { throw 'Root sentinel bootstrap failed; inspect its exact receipt before recovery.' }
     Write-Host "ROOT-SENTINEL-VERIFIED; website and seed publication were not performed"
+    exit 0
+}
+if ($PublishSeed) {
+    $seedReceipt=Invoke-QualifiedStaticSeedPublication -AuthorityRecord $authorityRecord -SourceDirectory $SeedSourceDirectory
+    Write-Receipt -Receipt $seedReceipt -Path $validatedReportPath
+    if($seedReceipt.status -ceq 'failed'){throw 'Seed publication failed; inspect its exact receipt and retained lease before recovery.'}
+    Write-Host 'SEED-BYTES-HTTP-VERIFIED; website and discovery were not published; browser-origin readback remains separate'
     exit 0
 }
 

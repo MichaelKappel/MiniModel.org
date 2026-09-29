@@ -1,4 +1,5 @@
 Set-StrictMode -Version Latest
+Add-Type -AssemblyName System.Net.Http
 
 # Bounded streaming for a separately admitted seed member. Callers own the streams
 # and must keep uploaded bytes private/unadvertised until every member verifies.
@@ -7,7 +8,8 @@ function Copy-StaticSeedVerifiedStream {
         [Parameter(Mandatory)][IO.Stream]$Source,
         [AllowNull()][IO.Stream]$Destination,
         [Parameter(Mandatory)][int64]$ExpectedBytes,
-        [Parameter(Mandatory)][string]$ExpectedSha256
+        [Parameter(Mandatory)][string]$ExpectedSha256,
+        [Threading.CancellationToken]$CancellationToken = [Threading.CancellationToken]::None
     )
 
     if ($ExpectedBytes -lt 1 -or $ExpectedBytes -gt 68719476736 -or
@@ -22,13 +24,15 @@ function Copy-StaticSeedVerifiedStream {
     try {
         while ($total -lt $ExpectedBytes) {
             $wanted = [int][Math]::Min([int64]$buffer.Length,$ExpectedBytes - $total)
-            $count = $Source.Read($buffer,0,$wanted)
+            $CancellationToken.ThrowIfCancellationRequested()
+            $count = $Source.ReadAsync($buffer,0,$wanted,$CancellationToken).GetAwaiter().GetResult()
             if ($count -le 0) { throw 'Static seed stream ended before its exact length.' }
             $null = $sha.TransformBlock($buffer,0,$count,$buffer,0)
-            if ($null -ne $Destination) { $Destination.Write($buffer,0,$count) }
+            if ($null -ne $Destination) { $Destination.WriteAsync($buffer,0,$count,$CancellationToken).GetAwaiter().GetResult() }
             $total += $count
         }
-        if ($Source.ReadByte() -ne -1) { throw 'Static seed stream exceeded its exact length.' }
+        $CancellationToken.ThrowIfCancellationRequested()
+        if ($Source.ReadAsync($buffer,0,1,$CancellationToken).GetAwaiter().GetResult() -ne 0) { throw 'Static seed stream exceeded its exact length.' }
         $null = $sha.TransformFinalBlock([byte[]]::new(0),0,0)
         $digest = ([BitConverter]::ToString($sha.Hash)).Replace('-','').ToLowerInvariant()
         if ($digest -cne $ExpectedSha256) { throw 'Static seed stream hash differs from its admitted identity.' }
@@ -39,6 +43,46 @@ function Copy-StaticSeedVerifiedStream {
         $sha.Dispose()
         [Array]::Clear($buffer,0,$buffer.Length)
     }
+}
+
+# Validate parsed HTTP headers and the full bounded body; the caller owns response lifetime.
+# HttpClient can normalize known header syntax, so this is not a raw-wire header audit.
+function Assert-StaticSeedHttpMember {
+    param(
+        [Parameter(Mandatory)][Net.Http.HttpResponseMessage]$Response,
+        [Parameter(Mandatory)]$Member,
+        [Threading.CancellationToken]$CancellationToken = [Threading.CancellationToken]::None,
+        [switch]$HeadersOnly
+    )
+    $CancellationToken.ThrowIfCancellationRequested()
+    if ([int]$Response.StatusCode -ne 200 -or $null -eq $Response.Content) { throw 'Seed HTTP readback requires a complete 200 response.' }
+    $headers=@{}
+    foreach($pair in @($Response.Headers)+@($Response.Content.Headers)) {
+        $name=$pair.Key.ToLowerInvariant()
+        if (-not $headers.ContainsKey($name)) {$headers[$name]=[Collections.Generic.List[string]]::new()}
+        foreach($value in $pair.Value){$headers[$name].Add([string]$value)}
+    }
+    foreach($property in $Member.expectedHeaders.PSObject.Properties) {
+        $values=@(if($headers.ContainsKey($property.Name)){$headers[$property.Name]})
+        if($null -eq $property.Value) {
+            if($values.Count -ne 0){throw 'Seed HTTP readback contains a forbidden header.'}
+        } elseif($values.Count -ne 1 -or $values[0] -cne [string]$property.Value) {
+            throw 'Seed HTTP readback header identity differs.'
+        }
+    }
+    foreach($forbidden in @('access-control-allow-credentials','transfer-encoding')) {
+        if($headers.ContainsKey($forbidden)){throw 'Seed HTTP readback contains a forbidden header.'}
+    }
+    if($HeadersOnly){return}
+    $stream=$Response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+    return Copy-StaticSeedVerifiedStream -Source $stream -ExpectedBytes ([int64]$Member.bytes) -ExpectedSha256 ([string]$Member.sha256) -CancellationToken $CancellationToken
+}
+
+# Close the actual HTTP response on deadline even if a framework stream ignores ReadAsync cancellation.
+# A CLR method delegate works from the cancellation timer without a PowerShell thread/runspace callback.
+function Register-StaticSeedResponseCancellation {
+    param([Parameter(Mandatory)][Net.Http.HttpResponseMessage]$Response,[Parameter(Mandatory)][Threading.CancellationToken]$CancellationToken)
+    return $CancellationToken.Register([Action][Delegate]::CreateDelegate([Action],$Response,'Dispose'))
 }
 
 # Reject link redirection anywhere in the canonical source ancestry before opening a payload.
@@ -102,4 +146,4 @@ function Close-StaticSeedSourceSet {
     foreach($member in $SourceSet.Members){$member.Stream.Dispose()}
 }
 
-Export-ModuleMember -Function @('Copy-StaticSeedVerifiedStream','Open-StaticSeedSourceSet','Close-StaticSeedSourceSet')
+Export-ModuleMember -Function @('Copy-StaticSeedVerifiedStream','Assert-StaticSeedHttpMember','Register-StaticSeedResponseCancellation','Open-StaticSeedSourceSet','Close-StaticSeedSourceSet')

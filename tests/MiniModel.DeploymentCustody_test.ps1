@@ -967,6 +967,298 @@ Describe 'Committed seed metadata custody' {
 }
 
 # Gate responses are mocked at the verified process boundary; no executable or source copy is written.
+function New-TestSeedTransactionFixture {
+    $body=[byte[]](1,2,3);$digest=Get-CustodyByteSha256 $body
+    $directory='tinyrustlm/direct-composition/v1/compositions/sha256:'+('a'*64)+'/members'
+    $names=@('model.slm2','tokenizer.tokenizer2','template.template2','sampling.sampling2','prompt.prompt2','composition.acg2')
+    $files=@($names|ForEach-Object {[pscustomobject]@{name=$_;remotePath="$directory/$_";url="https://minimodel.org/$directory/$_";bytes=3;sha256=$digest}})
+    $configuration="Options -Indexes`n";$configurationBytes=[Text.Encoding]::UTF8.GetBytes($configuration)
+    $plan=[pscustomobject]@{schema='minimodel.static-seed-preparation.v1';origin='https://minimodel.org';files=$files;remoteDirectory=$directory;
+        configuration=[pscustomobject]@{remotePath="$directory/.htaccess";text=$configuration;bytes=$configurationBytes.Length;sha256=(Get-CustodyByteSha256 $configurationBytes)}}
+    $inputRecord=[pscustomobject]@{Commit=('a'*40);RegistrySha256=('b'*64);Admission=[pscustomobject]@{plan=$plan;metadata=[pscustomobject]@{descriptor=[pscustomobject]@{bytes=3;sha256=$digest}};
+        compositionId=('sha256:'+('a'*64));pieceSetId=('sha256:'+('b'*64));qualificationReceiptId='fixture-only'}}
+    $sourceSet=[pscustomobject]@{Members=@($names|ForEach-Object {[pscustomobject]@{Name=$_;Bytes=3;Sha256=$digest;Stream=[IO.MemoryStream]::new($body,$false)}})}
+    return [pscustomobject]@{Input=$inputRecord;Sources=$sourceSet;Plan=$plan}
+}
+
+Describe 'Exact seed transaction input assembly' {
+    BeforeEach {$script:seedFixture=New-TestSeedTransactionFixture;$script:testTransfer=$null}
+    AfterEach {if($script:testTransfer){$script:testTransfer.ConfigurationStream.Dispose()};Close-StaticSeedSourceSet $script:seedFixture.Sources}
+    It 'binds exactly seven paths and retains the six already verified handles' {
+        $script:testTransfer=New-StaticSeedTransferSet -InputRecord $script:seedFixture.Input -SourceSet $script:seedFixture.Sources -OperationId ('1'*32)
+        $script:testTransfer.Files.Count | Should Be 7
+        $script:testTransfer.BindingSha256.Length | Should Be 64
+        for($index=0;$index -lt 6;$index++){[object]::ReferenceEquals($script:testTransfer.Files[$index].stream,$script:seedFixture.Sources.Members[$index].Stream) | Should Be $true}
+        (Get-CustodyByteSha256 $script:testTransfer.ConfigurationStream.ToArray()) | Should Be $script:seedFixture.Plan.configuration.sha256
+    }
+    It 'rejects substituted source, configuration, origin and namespace before transport' {
+        $member=$script:seedFixture.Sources.Members[0]
+        $member.Sha256='0'*64
+        {New-StaticSeedTransferSet -InputRecord $script:seedFixture.Input -SourceSet $script:seedFixture.Sources -OperationId ('1'*32)} | Should Throw 'source and descriptor'
+        $member.Sha256=$script:seedFixture.Plan.files[0].sha256
+        $script:seedFixture.Plan.configuration.text='different'
+        {New-StaticSeedTransferSet -InputRecord $script:seedFixture.Input -SourceSet $script:seedFixture.Sources -OperationId ('1'*32)} | Should Throw 'configuration identity'
+        $script:seedFixture.Plan.origin='https://other.invalid'
+        {New-StaticSeedTransferSet -InputRecord $script:seedFixture.Input -SourceSet $script:seedFixture.Sources -OperationId ('1'*32)} | Should Throw 'exact admitted'
+    }
+}
+
+Describe 'Staged seed publication with in-memory transport' {
+    BeforeEach {
+        $script:seedFixture=New-TestSeedTransactionFixture
+        $script:seedOperationId='1'*32
+        $script:testTransfer=New-StaticSeedTransferSet -InputRecord $script:seedFixture.Input -SourceSet $script:seedFixture.Sources -OperationId $script:seedOperationId
+        $script:seedFilePaths=$script:testTransfer.FilePaths;$script:seedTransferFiles=$script:testTransfer.Files
+        $script:seedJournal=[Collections.Generic.List[object]]::new()
+        $script:seedDirectories=@{''=[Collections.Generic.List[string]]::new()};$script:seedRemote=@{}
+        $script:seedTrace=[Collections.Generic.List[string]]::new();$script:seedFailStage=0;$script:seedUploads=0
+        Mock Assert-RemoteLeaseOwned {$script:seedTrace.Add('lease')}
+        Mock Get-RemoteDirectoryEntries {
+            param($LogicalPath)
+            if(-not $script:seedDirectories.ContainsKey($LogicalPath)){throw 'Fixture directory absent.'}
+            return $script:seedDirectories[$LogicalPath].ToArray()
+        }
+        Mock New-FtpRequest {
+            param($LogicalPath,$Method,$Mutating)
+            if($Method -cne 'MKD' -or -not $Mutating){throw 'Unexpected fixture FTP method.'}
+            $parts=Get-RemoteParentAndLeaf $LogicalPath
+            $script:seedDirectories[$parts.Parent].Add($parts.Leaf)
+            $script:seedDirectories[$LogicalPath]=[Collections.Generic.List[string]]::new()
+            $reply=[pscustomobject]@{};$reply|Add-Member ScriptMethod Dispose {}
+            $request=[pscustomobject]@{Reply=$reply};$request|Add-Member ScriptMethod GetResponse {return $this.Reply}
+            return $request
+        }
+        Mock Get-RemoteFileObservation {
+            param($LogicalPath)
+            if($script:seedRemote.ContainsKey($LogicalPath)){return [pscustomobject]@{State='present';Size=$script:seedRemote[$LogicalPath].Length}}
+            return [pscustomobject]@{State='absent';Size=$null}
+        }
+        Mock Send-RemoteSeedStream {
+            param($Source,$LogicalPath)
+            $script:seedUploads++;$script:seedTrace.Add('upload:'+($LogicalPath.Substring($LogicalPath.LastIndexOf('/')+1)))
+            if($script:seedFailStage -eq $script:seedUploads){throw 'Synthetic upload response lost.'}
+            $file=Get-RegisteredSeedTransferFile -LogicalPath $LogicalPath -RequireStage
+            $Source.Position=0;$target=[IO.MemoryStream]::new()
+            try {$null=Copy-StaticSeedVerifiedStream -Source $Source -Destination $target -ExpectedBytes $file.bytes -ExpectedSha256 $file.sha256;$script:seedRemote[$LogicalPath]=$target.ToArray()}
+            finally {$target.Dispose()}
+            $parts=Get-RemoteParentAndLeaf $LogicalPath;$script:seedDirectories[$parts.Parent].Add($parts.Leaf)
+        }
+        Mock Assert-RemoteSeedStreamIdentity {
+            param($LogicalPath)
+            $file=Get-RegisteredSeedTransferFile $LogicalPath
+            if(-not $script:seedRemote.ContainsKey($LogicalPath) -or (Get-CustodyByteSha256 $script:seedRemote[$LogicalPath]) -cne $file.sha256){throw 'Fixture remote identity differs.'}
+            $script:seedTrace.Add('verify:'+($LogicalPath.Substring($LogicalPath.LastIndexOf('/')+1)))
+        }
+        Mock Rename-RemoteFile {
+            param($LogicalPath,$NewLeafName)
+            $parts=Get-RemoteParentAndLeaf $LogicalPath;$target=$parts.Parent+'/'+$NewLeafName
+            if($script:seedRemote.ContainsKey($target)){throw 'Fixture target occupied.'}
+            $script:seedRemote[$target]=$script:seedRemote[$LogicalPath];$script:seedRemote.Remove($LogicalPath)
+            $null=$script:seedDirectories[$parts.Parent].Remove($parts.Leaf);$script:seedDirectories[$parts.Parent].Add($NewLeafName)
+            $script:seedTrace.Add('rename:'+$NewLeafName)
+        }
+        Mock Assert-PublicStaticSeedMembers {$script:seedTrace.Add('https')}
+    }
+    AfterEach {
+        $script:testTransfer.ConfigurationStream.Dispose();Close-StaticSeedSourceSet $script:seedFixture.Sources
+        $script:seedFilePaths=@();$script:seedTransferFiles=@();$script:seedOperationId=''
+    }
+    It 'verifies configuration first, all six stages before promotion, and the final exact closure' {
+        $result=Invoke-StaticSeedMemberTransaction -Plan $script:seedFixture.Plan -Journal $script:seedJournal
+        $result | Should Be 'installed-and-http-verified'
+        $script:seedUploads | Should Be 7
+        $trace=$script:seedTrace.ToArray()
+        [Array]::IndexOf($trace,'rename:.htaccess') | Should BeLessThan ([Array]::IndexOf($trace,'upload:model.slm2.seed-'+('1'*32)+'.tmp'))
+        [Array]::IndexOf($trace,'verify:composition.acg2.seed-'+('1'*32)+'.tmp') | Should BeLessThan ([Array]::IndexOf($trace,'rename:model.slm2'))
+        $script:seedRemote.Count | Should Be 7
+        (Get-StaticSeedNamespaceState $script:seedFixture.Plan) | Should Be 'complete'
+        Assert-MockCalled Assert-PublicStaticSeedMembers -Times 1 -Exactly -Scope It
+        $script:seedFixture.Sources.Members[0].Stream.CanRead | Should Be $true
+    }
+    It 're-verifies a complete existing namespace without overwriting or uploading it' {
+        $null=Invoke-StaticSeedMemberTransaction -Plan $script:seedFixture.Plan -Journal $script:seedJournal
+        $script:seedUploads=0
+        (Invoke-StaticSeedMemberTransaction -Plan $script:seedFixture.Plan -Journal $script:seedJournal) | Should Be 'already-present-http-verified'
+        $script:seedUploads | Should Be 0
+        Assert-MockCalled Assert-PublicStaticSeedMembers -Times 2 -Exactly -Scope It
+    }
+    It 'preserves a failed stage and never promotes model bytes or calls HTTP after an upload failure' {
+        $script:seedFailStage=4
+        {Invoke-StaticSeedMemberTransaction -Plan $script:seedFixture.Plan -Journal $script:seedJournal} | Should Throw 'response lost'
+        @($script:seedTrace|Where-Object {$_ -like 'rename:*' -and $_ -cne 'rename:.htaccess'}).Count | Should Be 0
+        Assert-MockCalled Assert-PublicStaticSeedMembers -Times 0 -Exactly -Scope It
+        {Get-StaticSeedNamespaceState $script:seedFixture.Plan} | Should Throw 'partial or contains unowned'
+        $script:seedJournal[-1].step | Should Be 'member-stage-attempted'
+    }
+    It 'rejects unknown leaves in an otherwise complete namespace' {
+        $null=Invoke-StaticSeedMemberTransaction -Plan $script:seedFixture.Plan -Journal $script:seedJournal
+        $script:seedDirectories[$script:seedFixture.Plan.remoteDirectory].Add('unowned.txt')
+        {Get-StaticSeedNamespaceState $script:seedFixture.Plan} | Should Throw 'partial or contains unowned'
+    }
+}
+
+Describe 'Seed HTTP request and lifetime orchestration' {
+    BeforeEach {
+        $script:seedFixture=New-TestSeedTransactionFixture
+        $script:httpRequests=[Collections.Generic.List[object]]::new();$script:httpBodies=[Collections.Generic.List[IO.Stream]]::new()
+        $script:httpReplies=[Collections.Generic.Queue[Net.Http.HttpResponseMessage]]::new();$script:httpSent=0;$script:httpFailure=$false
+        foreach($file in $script:seedFixture.Plan.files) {
+            $file|Add-Member NoteProperty expectedHeaders ([pscustomobject]@{'content-type'='application/octet-stream';'content-length'='3';'content-encoding'=$null;
+                'access-control-allow-origin'='https://tinyrustlm.com';'x-tinyrustlm-composition-id'=('sha256:'+('a'*64));'x-tinyrustlm-piece-set-id'=('sha256:'+('b'*64));
+                'x-tinyrustlm-member-name'=$file.name;'x-tinyrustlm-member-id'=('sha256:'+$file.sha256)})
+            foreach($method in @('GET','HEAD')) {
+                $body=if($method -ceq 'GET'){,[byte[]](1,2,3)}else{,[byte[]]::new(0)}
+                $stream=[IO.MemoryStream]::new($body,$false);$script:httpBodies.Add($stream)
+                $reply=[Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::OK);$reply.Content=[Net.Http.StreamContent]::new($stream)
+                foreach($property in $file.expectedHeaders.PSObject.Properties) {
+                    if($null -eq $property.Value){continue}
+                    $headers=if($property.Name.StartsWith('content-')){,$reply.Content.Headers}else{,$reply.Headers}
+                    $null=$headers.TryAddWithoutValidation($property.Name,[string]$property.Value)
+                }
+                $script:httpReplies.Enqueue($reply)
+            }
+        }
+        $script:httpClient=[pscustomobject]@{Disposed=$false}
+        $script:httpClient|Add-Member ScriptMethod Dispose {$this.Disposed=$true}
+        $script:httpClient|Add-Member ScriptMethod SendAsync {
+            param($Request,$Completion,$Token)
+            $script:httpSent++
+            $script:httpRequests.Add([pscustomobject]@{method=$Request.Method.Method;url=$Request.RequestUri.AbsoluteUri;completion=$Completion;cancelable=$Token.CanBeCanceled;
+                origin=(@($Request.Headers.GetValues('Origin')) -join ',');encoding=($Request.Headers.AcceptEncoding.ToString())})
+            $reply=$script:httpReplies.Dequeue()
+            if($script:httpFailure){$reply.StatusCode=[Net.HttpStatusCode]::Redirect}
+            $task=[pscustomobject]@{Reply=$reply}
+            $task|Add-Member ScriptMethod GetAwaiter {return $this}
+            $task|Add-Member ScriptMethod GetResult {return $this.Reply}
+            return $task
+        }
+        Mock New-StaticSeedHttpClient {return $script:httpClient}
+    }
+    AfterEach {
+        while($script:httpReplies.Count -gt 0){$script:httpReplies.Dequeue().Dispose()}
+        foreach($body in $script:httpBodies){$body.Dispose()};Close-StaticSeedSourceSet $script:seedFixture.Sources
+    }
+    It 'sends the exact twelve GET/HEAD requests with streaming completion and disposes all responses' {
+        $journal=[Collections.Generic.List[object]]::new()
+        Assert-PublicStaticSeedMembers -Plan $script:seedFixture.Plan -Journal $journal
+        $script:httpSent | Should Be 12
+        $journal.Count | Should Be 12
+        for($index=0;$index -lt 12;$index++) {
+            $request=$script:httpRequests[$index]
+            $request.method | Should Be $(if($index % 2 -eq 0){'GET'}else{'HEAD'})
+            $request.url | Should Be $script:seedFixture.Plan.files[[Math]::Floor($index/2)].url
+            $request.completion | Should Be ([Net.Http.HttpCompletionOption]::ResponseHeadersRead)
+            $request.cancelable | Should Be $true
+            $request.origin | Should Be 'https://tinyrustlm.com'
+            $request.encoding | Should Be 'identity'
+            $script:httpBodies[$index].CanRead | Should Be $false
+        }
+        $script:httpClient.Disposed | Should Be $true
+    }
+    It 'stops at a rejected response and disposes both response and client without retry' {
+        $script:httpFailure=$true;$journal=[Collections.Generic.List[object]]::new()
+        {Assert-PublicStaticSeedMembers -Plan $script:seedFixture.Plan -Journal $journal} | Should Throw 'complete 200'
+        $script:httpSent | Should Be 1
+        $journal.Count | Should Be 0
+        $script:httpBodies[0].CanRead | Should Be $false
+        $script:httpClient.Disposed | Should Be $true
+    }
+}
+
+Describe 'Qualified seed entrypoint sequencing and exact failure receipts' {
+    BeforeEach {
+        $script:seedFixture=New-TestSeedTransactionFixture
+        $script:sourceAuthorityAdmitted=$true;$script:lease=$null;$script:seedReadCount=0;$script:seedEntrypointFailure=''
+        $script:seedAuthorityRecord=[pscustomobject]@{Sha256=('c'*64);Value=(Get-Content (Join-Path $repositoryRoot 'deploy/publication-authority.v1.json') -Raw|ConvertFrom-Json)}
+        $script:FtpExportPath='not-read-fixture'
+        Mock Get-RepositoryObservation {return [pscustomobject]@{head=('a'*40)}}
+        Mock Assert-CustodyRepositoryIdentity {}
+        Mock Get-StaticSeedPublicationInput {
+            $script:seedReadCount++
+            if($script:seedEntrypointFailure -ceq 'qualification' -or ($script:seedEntrypointFailure -ceq 'expiry' -and $script:seedReadCount -eq 2)){throw 'Synthetic admission rejected.'}
+            return $script:seedFixture.Input
+        }
+        Mock Open-StaticSeedSourceSet {
+            if($script:seedEntrypointFailure -ceq 'source'){throw 'Synthetic source hash mismatch.'}
+            return $script:seedFixture.Sources
+        }
+        Mock Import-MiniModelCredentialModule {}
+        Mock Get-CredentialProfile {return [pscustomobject]@{profile='fixture';host='fixture.invalid';port=21;user='fixture';password='not-a-real-credential'}}
+        Mock Assert-CustodyTransportAuthority {}
+        Mock Assert-RemoteExactIdentity {if($script:seedEntrypointFailure -ceq 'sentinel'){throw 'Synthetic wrong target.'}}
+        Mock Get-StaticSeedNamespaceState {return 'absent'}
+        Mock New-RemoteDeploymentLease {
+            if($script:seedEntrypointFailure -ceq 'lease'){throw 'Synthetic lease response lost.'}
+            $script:lease=[pscustomobject]@{OperationId=$script:seedOperationId}
+            return $script:lease
+        }
+        Mock Invoke-StaticSeedMemberTransaction {
+            param($Plan,$Journal)
+            $Journal.Add([ordered]@{step='fixture-transaction';path=$Plan.remoteDirectory})
+            if($script:seedEntrypointFailure -ceq 'transfer'){throw 'Synthetic ambiguous upload.'}
+            return 'installed-and-http-verified'
+        }
+        Mock Remove-RemoteDeploymentLease {$script:lease=$null}
+    }
+    AfterEach {Close-StaticSeedSourceSet $script:seedFixture.Sources;$script:lease=$null;$script:credential=$null}
+    It 'closes retained handles and releases its lease only after fresh admission and HTTP transaction success' {
+        $receipt=Invoke-QualifiedStaticSeedPublication -AuthorityRecord $script:seedAuthorityRecord -SourceDirectory 'D:\LLMs\TinyRustLM\fixture-only'
+        $receipt.status | Should Be 'installed-and-http-verified'
+        $receipt.seed_published | Should Be $true
+        $receipt.discovery_published | Should Be $false
+        $receipt.website_published | Should Be $false
+        $receipt.browser_origin_readback_verified | Should Be $false
+        $receipt.lease_retained_or_creation_ambiguous | Should Be $false
+        $script:seedReadCount | Should Be 2
+        $script:seedFixture.Sources.Members[0].Stream.CanRead | Should Be $false
+        $script:seedFilePaths.Count | Should Be 0
+        Assert-MockCalled Remove-RemoteDeploymentLease -Times 1 -Exactly -Scope It
+    }
+    It 'rejects absent qualification before source or credential access' {
+        $script:seedEntrypointFailure='qualification'
+        {Invoke-QualifiedStaticSeedPublication -AuthorityRecord $script:seedAuthorityRecord -SourceDirectory 'D:\LLMs\TinyRustLM\fixture-only'} | Should Throw 'admission rejected'
+        Assert-MockCalled Open-StaticSeedSourceSet -Times 0 -Exactly -Scope It
+        Assert-MockCalled Get-CredentialProfile -Times 0 -Exactly -Scope It
+    }
+    It 'records source failure without opening credentials or touching the server' {
+        $script:seedEntrypointFailure='source'
+        $receipt=Invoke-QualifiedStaticSeedPublication -AuthorityRecord $script:seedAuthorityRecord -SourceDirectory 'D:\LLMs\TinyRustLM\fixture-only'
+        $receipt.status | Should Be 'failed'
+        $receipt.lease_retained_or_creation_ambiguous | Should Be $false
+        Assert-MockCalled Get-CredentialProfile -Times 0 -Exactly -Scope It
+        Assert-MockCalled New-RemoteDeploymentLease -Times 0 -Exactly -Scope It
+    }
+    It 'rejects a different target marker before acquiring a lease' {
+        $script:seedEntrypointFailure='sentinel'
+        $receipt=Invoke-QualifiedStaticSeedPublication -AuthorityRecord $script:seedAuthorityRecord -SourceDirectory 'D:\LLMs\TinyRustLM\fixture-only'
+        $receipt.status | Should Be 'failed'
+        $receipt.lease_retained_or_creation_ambiguous | Should Be $false
+        Assert-MockCalled New-RemoteDeploymentLease -Times 0 -Exactly -Scope It
+        $script:seedFixture.Sources.Members[0].Stream.CanRead | Should Be $false
+    }
+    It 'retains failed or expired transactions without retry, cleanup, or a false publication claim' {
+        foreach($failure in @('transfer','expiry','lease')) {
+            # Each invocation needs new caller-owned handles; no source files are used.
+            Close-StaticSeedSourceSet $script:seedFixture.Sources
+            $script:seedFixture=New-TestSeedTransactionFixture;$script:seedReadCount=0;$script:seedEntrypointFailure=$failure
+            $receipt=Invoke-QualifiedStaticSeedPublication -AuthorityRecord $script:seedAuthorityRecord -SourceDirectory 'D:\LLMs\TinyRustLM\fixture-only'
+            $receipt.status | Should Be 'failed'
+            $receipt.seed_published | Should Be $false
+            $receipt.lease_retained_or_creation_ambiguous | Should Be $true
+            $receipt.recovery | Should Be 'retained-for-exact-ownership-review'
+            $script:seedFixture.Sources.Members[0].Stream.CanRead | Should Be $false
+        }
+        Assert-MockCalled Remove-RemoteDeploymentLease -Times 0 -Exactly -Scope It
+    }
+    It 'rejects premature or unbound execution' {
+        $script:sourceAuthorityAdmitted=$false
+        {Invoke-QualifiedStaticSeedPublication -AuthorityRecord $script:seedAuthorityRecord -SourceDirectory 'D:\LLMs\TinyRustLM\fixture-only'} | Should Throw 'source authority'
+        $script:sourceAuthorityAdmitted=$true;$script:seedAuthorityRecord.Value.transport.status='unbound'
+        {Invoke-QualifiedStaticSeedPublication -AuthorityRecord $script:seedAuthorityRecord -SourceDirectory 'D:\LLMs\TinyRustLM\fixture-only'} | Should Throw 'bound transport'
+        Assert-MockCalled Get-CredentialProfile -Times 0 -Exactly -Scope It
+    }
+}
+
 Describe 'Publisher source-authority gate admission' {
     BeforeEach {
         $script:Publish=$true

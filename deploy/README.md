@@ -15,8 +15,9 @@ That check of the normal publisher reached and rejected the expired catalog
 before public admission; it read no credentials and changed no public files.
 The later read-only host observation matched the homepage and both catalog files
 over FTPS and public HTTPS. The exact nonsecret transport tuple is now bound in
-the authority. The root sentinel, reviewed remote closure, real model
-qualification and seed delivery remain unfinished.
+the authority. The root sentinel was subsequently installed and verified as
+recorded below. Reviewed website closure, real model qualification and seed
+delivery remain unfinished.
 
 The publisher now reuses the canonical TinyRustLM `Deployment.Credentials.psm1`
 FTP-export reader. It imports the exact reviewed module bytes under a read lease
@@ -49,7 +50,12 @@ staging bytes may be removed under the owned lease. Substituted bytes or a raced
 final target are preserved for review. If lease creation is ambiguous before its
 owner record is established, retain the failure receipt and inspect that exact
 lease path; do not remove the root or claim lease ownership from a generic error.
-No bootstrap has been executed against production by this implementation work.
+The corrected production bootstrap completed September 29 at 22:49:22 UTC.
+Receipt `receipts/site-deployment-20260929T224551Z.json` records the exact marker
+readback, removed staging leaf and released lease. Its SHA-256 is
+`6bac53fb169557a474356329912b100efdcb709099aeea77b17fce3d2e07143f`.
+Earlier failed attempts remain preserved. No website, model or catalog bytes
+were changed by the successful marker operation.
 
 After reviewing and committing the current source, an authorized operator can
 run `powershell.exe -NoProfile -File tools/deploy-site.ps1 -BootstrapSentinel`.
@@ -93,12 +99,15 @@ The read-only preflight is:
 .\tools\deploy-site.ps1
 ```
 
-The current manifest describes the current reviewed public source. The candidate
-catalog and peer feed expired on 2026-09-09; verification rejects that expired
-authority before public-site observation. They contain no qualified model or
-peer entries. The transport tuple is bound, but production sentinel installation
-and complete website-root reconciliation are pending. Metadata generation is preparation
-only and does not establish catalog freshness or permission to publish.
+The manifest still describes its older prepared content commit. The subsequent
+operator-seed validator change means current preflight first rejects the changed
+`catalog.js` source identity. The candidate catalog and peer feed also expired on
+2026-09-09 and contain no qualified model or peer entries. The transport tuple and
+installed root sentinel are verified; complete website-root reconciliation is
+pending. Metadata generation is preparation only and does not establish catalog
+freshness or permission to publish. The separately admitted `-PublishSeed` path
+is documented in `static-seed.md`; it does not publish discovery or bypass the
+website closure checks.
 
 The manifest generator emits JSON to stdout and accepts no output location:
 

@@ -1,0 +1,56 @@
+{
+  "schema": "minimodel.implementation-review.v1",
+  "recorded_utc": "2026-09-29T23:37:22Z",
+  "status": "qualified-seed-entrypoint-tested-no-model-publication",
+  "question": "Can one qualified immutable composition be staged and verified through the admitted FTPS account without weakening website custody or advertising incomplete bytes?",
+  "decision": "Enable an explicit PublishSeed operation. Require current canonical qualification before opening six retained source handles or credentials; verify the root sentinel and own the existing shared lease. Admit only absent or exact complete namespaces. Promote configuration first, verify all six stages before member promotion, verify full FTP and HTTPS bodies and HEAD identities, and recheck freshness before success. Keep discovery and browser-origin proof separate. Preserve ambiguous failures and their lease for exact review.",
+  "files": [
+    {"path":"tools/deploy-site.ps1","bytes":116042,"sha256":"5ccef0a438767f42fc12f22137980f8fc276e617c5acaf9213a960ecc95d9ef2"},
+    {"path":"tools/MiniModel.StaticSeed.psm1","bytes":8566,"sha256":"a73fb47fc7933705f66d2d242323f5a3b6fd99f5a0673de25900a096f732c3bc"},
+    {"path":"tests/MiniModel.DeploymentCustody_test.ps1","bytes":89594,"sha256":"451c51fc462096d3aaefb06966b530b10041e7a88c9024c523fe9193ae4cf739"},
+    {"path":"tests/MiniModel.StaticSeed_test.ps1","bytes":18797,"sha256":"e87ec086988286c39b646a471d634701494982d7c0c1ce77543556d03534b4a4"},
+    {"path":"tests/deployment-custody.test.js","bytes":18148,"sha256":"f3579699e2e8126aa9d30763ea99241879613112ac1056a72b4009ec76f4d930"},
+    {"path":"deploy/static-seed.md","bytes":15926,"sha256":"6f7d412c30f21dc3c9030f5c9cb5d4d683b910dc3bcaa847d95526f525493d2a"},
+    {"path":"deploy/README.md","bytes":10518,"sha256":"554c6d2c537115fbaf990ebd5163614ce1033aec18b1abece6309b53dc2f6cba"}
+  ],
+  "validation": {
+    "pester_final": {"total":99,"passed":99,"failed":0,"output":"3c8443","command":"Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1') -CodeCoverage './tools/MiniModel.StaticSeed.psm1' -PassThru -Quiet"},
+    "node_initial": {"total":23,"passed":22,"failed":1,"output":"d2886b","embedded_pester_passed":99},
+    "node_affected_rerun": {"total":1,"passed":1,"failed":0,"output":"afb242","command":"node --test --test-name-pattern 'actual publisher checks' tests/deployment-custody.test.js"},
+    "documentation_check": {"passed":1,"output":"0a7609"},
+    "retained_failures": [
+      {"output":"97e67f","total":19,"passed":12,"failed":7,"meaning":"New HTTP fixture setup let PowerShell enumerate an empty header collection into null. Fixed the fixture collection return; no production response was tested by these failed cases."},
+      {"output":"36d1dd","total":19,"passed":14,"failed":5,"meaning":"Actual HTTP-message cases exposed PowerShell scalar/empty-array unwrapping in the new checker. Fixed explicit array capture. Subsequent focused 19/19 and full checks passed."},
+      {"output":"d2886b","meaning":"The existing real-publisher test expected catalog expiry, but an earlier correct byte-custody gate now rejects committed catalog.js against the old website manifest content commit. Catalog, builder and manifest were unchanged in this chunk. Updated only the exact expected error, preserving no-credential/no-receipt/unchanged-manifest assertions; the actual publisher rerun passed."}
+    ],
+    "intermediate_passes": [
+      {"output":"e04cd2","passed":96,"meaning":"Before cancellation disposal registration."},
+      {"output":"e8e1a1","passed":97,"meaning":"Before final twelve-request wrapper tests."},
+      {"output":"0a5d3c","passed":2,"meaning":"Actual HTTP-message wrapper tests with a memory-only client transport."}
+    ],
+    "module_command_coverage": [
+      {"function":"Copy-StaticSeedVerifiedStream","hit":32,"analyzed":32},
+      {"function":"Assert-StaticSeedHttpMember","hit":30,"analyzed":30},
+      {"function":"Register-StaticSeedResponseCancellation","hit":1,"analyzed":1}
+    ],
+    "changed_module_coverage_percent":100,
+    "publisher_coverage_limit":"Publisher functions are imported from their actual AST without running the production entrypoint; Pester file breakpoints do not measure those imported command locations. Behavioral tests exercise namespace admission, ordering, idempotence, failure retention, all twelve GET/HEAD request constructions, cancellation propagation, actual response/body checking, disposal and entrypoint sequencing. No publisher line-coverage percentage is claimed.",
+    "fixtures":"All member bodies and transport state are memory-only synthetic bytes. The HTTP fixtures are actual System.Net.Http.HttpResponseMessage objects. CLR response-disposal registration runs on cancellation. No real model or account credential is read.",
+    "scratch":"The existing Node Pester wrapper created and retired its new canonical ownership-marked output directory. artifacts/tests was empty after completion; no earlier blocked output was removed.",
+    "diff_check":"passed"
+  },
+  "independent_review": {
+    "reviewer":"root coordinating agent",
+    "method":"Read-only review of the changed seed transaction and HTTP module",
+    "result":"No concrete blocker found in qualification ordering, exact transfer closure, stage verification, lease/sentinel/freshness checks, parsed-header limits or ambiguous-state retention. Approval is for the source checkpoint, not a qualified model or production seed. Requested stale sentinel wording was corrected."
+  },
+  "limits": [
+    "The descriptor registry and public catalog remain empty; this operation cannot publish a model until actual qualification and exact metadata exist.",
+    "No seed, website, discovery metadata or signing key was published by this chunk. The earlier successful sentinel receipt remains separate evidence.",
+    "Parsed .NET HTTP headers do not establish exact raw-wire syntax or browser-origin CORS behavior. Actual public-host and browser readback remain required.",
+    "A failed partial or ambiguous operation retains its lease and exact journal. There is no automatic partial-seed recovery command or blind retry.",
+    "Discovery publication still requires exact admission, qualification and license routes, signed fresh metadata, hosted renewal and their public readback. Success here does not claim first-run availability.",
+    "The ordinary website manifest remains stale relative to committed public source and its metadata has expired; seed transport does not bypass those website gates."
+  ],
+  "reusable_lesson":"Keep immutable payload transfer separate from mutable discovery authority. Verify staged identities before promotion, check actual HTTP response objects, propagate one deadline through body consumption, and retain uncertainty instead of silently adopting partially published state."
+}

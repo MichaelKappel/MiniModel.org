@@ -106,7 +106,11 @@ the actual host returns prefixed paths for a file-shaped `/catalog` request and
 leaf names for `/catalog/`. The strict leaf parser remains unchanged. Empty
 directories are valid observations, requiring two LISTs before absence is
 established. Two bootstrap attempts stopped before remote mutation; their failed
-outcomes are retained, and no installed sentinel is yet established.
+outcomes are retained. The corrected September 29 operation installed the exact
+165-byte sentinel and verified its SHA-256, stage absence and lease cleanup.
+Receipt `deploy/receipts/site-deployment-20260929T224551Z.json` is 999 bytes,
+SHA-256 `6bac53fb169557a474356329912b100efdcb709099aeea77b17fce3d2e07143f`.
+That operation changed no website, model or catalog bytes.
 
 The publisher now has single-request STOR and streaming RETR primitives using
 the same 64 KiB identity checker. They resolve only the six registered members
@@ -116,7 +120,8 @@ Uploads require a retained readable/seekable source of exact length, an owned
 lease and proven stage absence. A lost upload response remains a failure; it
 does not authorize an automatic retry or deletion. Source handles belong to the
 caller; transport handles are closed. Existing website file/total byte budgets
-are unchanged. These primitives do not yet enable a seed publication entrypoint.
+are unchanged. The explicit seed operation described below consumes these
+primitives; ordinary website publication retains its separate admission path.
 
 The publisher's metadata reader now binds the registry, catalog, feed, admission
 and qualification receipt to one exact Git commit. The real seed validator runs
@@ -133,9 +138,29 @@ Transport must use the returned handles, then explicitly close the set; the
 reader never creates copies or deletes payloads. Its tests use in-memory streams
 and mocked file opens, so they do not claim a real model was read or qualified.
 
-The next checkpoint must wire these admission layers, the complete staged
-transaction and HTTPS readback into the explicit seed entrypoint.
-Absent-or-complete seed admission must fail on partial uploads or unknown leaves.
+The explicit `-PublishSeed -SeedSourceDirectory D:\LLMs\TinyRustLM\<current>`
+operation now wires these layers together. It requires the fresh clean/source
+gate and exact current metadata/qualification before opening source payloads or
+credentials. It verifies the installed marker, acquires the shared lease, and
+admits only an absent namespace or the complete seven-file namespace. It preserves
+unrelated account-root entries. Configuration is promoted first; all six member
+stages must verify before any model member is promoted. Existing complete bytes
+are reverified without overwrite. Full FTP readback and HTTPS GET/HEAD checks use
+bounded streams. A per-request cancellation deadline covers headers and body.
+The HTTP checker rejects redirects, incorrect type/length/identity/CORS, encoding,
+credential CORS, and chunked framing; it checks the entire GET hash and EOF.
+These are parsed .NET HTTP header checks, not proof of raw wire syntax or a browser
+origin's CORS access. Real browser readback remains an explicit separate gate.
+
+Successful seed installation leaves discovery and website documents unchanged.
+The immutable admission and qualification receipt, license notice, and fresh signed
+catalog/feed must be published and read back by the separate discovery operation
+before first-run availability is claimed. A long transfer rechecks metadata
+freshness before success. Failure retains its compact journal and any ambiguous
+lease or partial namespace for exact ownership review; the command does not retry,
+erase, overwrite, or adopt that state. Partial-state recovery is not yet an
+automated operator command. This is a release limitation until the actual
+first-publication operation has succeeded or a reviewed exact recovery is applied.
 A subsequent search located the canonical receipt implementation in TinyRust's
 `app/catalog-admission-loader.js`, outside the earlier converter/runtime search.
 It binds the receipt to the parsed browser admission and catalog identities.

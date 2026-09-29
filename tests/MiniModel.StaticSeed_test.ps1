@@ -56,6 +56,85 @@ Describe 'Bounded static seed stream identity' {
     }
 }
 
+Describe 'Actual HTTP message seed readback without a listener' {
+    BeforeEach {
+        $script:httpBody=[byte[]](1,2,3)
+        $script:httpMember=[pscustomobject]@{bytes=3;sha256=(Get-CustodyByteSha256 $script:httpBody);expectedHeaders=[pscustomobject]@{
+            'content-type'='application/octet-stream';'content-length'='3';'content-encoding'=$null;
+            'access-control-allow-origin'='https://tinyrustlm.com';'x-tinyrustlm-composition-id'=('sha256:'+('a'*64));
+            'x-tinyrustlm-piece-set-id'=('sha256:'+('b'*64));'x-tinyrustlm-member-name'='model.slm2';
+            'x-tinyrustlm-member-id'=('sha256:'+(Get-CustodyByteSha256 $script:httpBody))}}
+        $script:httpResponse=[Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::OK)
+        $script:httpResponse.Content=[Net.Http.StreamContent]::new([IO.MemoryStream]::new($script:httpBody,$false))
+        foreach($property in $script:httpMember.expectedHeaders.PSObject.Properties) {
+            if($null -eq $property.Value){continue}
+            $headers=if($property.Name.StartsWith('content-')){,$script:httpResponse.Content.Headers}else{,$script:httpResponse.Headers}
+            $null=$headers.TryAddWithoutValidation($property.Name,[string]$property.Value)
+        }
+    }
+    AfterEach {$script:httpResponse.Dispose()}
+    It 'checks all headers, hashes the complete body and leaves response disposal to its caller' {
+        $result=Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember
+        $result.Bytes | Should Be 3
+        $result.Sha256 | Should Be $script:httpMember.sha256
+        $script:httpResponse.Content.ReadAsStreamAsync().Result.CanRead | Should Be $true
+    }
+    It 'checks a HEAD response without reading a nonexistent body' {
+        $stream=$script:httpResponse.Content.ReadAsStreamAsync().Result
+        Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember -HeadersOnly
+        $stream.Position | Should Be 0
+    }
+    It 'rejects redirects and other successful status codes' {
+        foreach($status in @(301,204,206,404)) {
+            $script:httpResponse.StatusCode=[Net.HttpStatusCode]$status
+            {Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember} | Should Throw 'complete 200'
+        }
+    }
+    It 'rejects missing, changed and duplicate custom identity headers' {
+        $name='X-TinyRustLM-Member-Name'
+        $null=$script:httpResponse.Headers.Remove($name)
+        {Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember} | Should Throw 'header identity'
+        $null=$script:httpResponse.Headers.TryAddWithoutValidation($name,'MODEL.slm2')
+        {Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember} | Should Throw 'header identity'
+        $null=$script:httpResponse.Headers.Remove($name)
+        $null=$script:httpResponse.Headers.TryAddWithoutValidation($name,[string[]]@('model.slm2','model.slm2'))
+        {Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember} | Should Throw 'header identity'
+    }
+    It 'rejects encoding, credential CORS and chunked framing' {
+        $null=$script:httpResponse.Content.Headers.TryAddWithoutValidation('Content-Encoding','gzip')
+        {Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember} | Should Throw 'forbidden header'
+        $null=$script:httpResponse.Content.Headers.Remove('Content-Encoding')
+        foreach($name in @('Access-Control-Allow-Credentials','Transfer-Encoding')) {
+            $null=$script:httpResponse.Headers.TryAddWithoutValidation($name,'true')
+            {Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember} | Should Throw 'forbidden header'
+            $null=$script:httpResponse.Headers.Remove($name)
+        }
+    }
+    It 'rejects same-size changed bodies and truncated bodies despite matching headers' {
+        $script:httpMember.sha256='0'*64
+        {Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember} | Should Throw 'hash differs'
+        {Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember} | Should Throw 'ended before'
+    }
+    It 'honors cancellation before body consumption without closing caller streams' {
+        $cts=[Threading.CancellationTokenSource]::new()
+        try {
+            $cts.Cancel()
+            {Assert-StaticSeedHttpMember -Response $script:httpResponse -Member $script:httpMember -CancellationToken $cts.Token} | Should Throw
+            $stream=$script:httpResponse.Content.ReadAsStreamAsync().Result
+            $stream.Position | Should Be 0
+            {Copy-StaticSeedVerifiedStream -Source $stream -ExpectedBytes 3 -ExpectedSha256 $script:httpMember.sha256 -CancellationToken $cts.Token} | Should Throw
+            $stream.CanRead | Should Be $true
+        } finally {$cts.Dispose()}
+    }
+    It 'closes the owned HTTP response from a CLR deadline callback' {
+        $stream=$script:httpResponse.Content.ReadAsStreamAsync().Result
+        $cts=[Threading.CancellationTokenSource]::new()
+        $registration=Register-StaticSeedResponseCancellation -Response $script:httpResponse -CancellationToken $cts.Token
+        try {$cts.Cancel();$stream.CanRead | Should Be $false}
+        finally {$registration.Dispose();$cts.Dispose()}
+    }
+}
+
 InModuleScope MiniModel.StaticSeed {
     Describe 'Canonical retained seed source handles without filesystem payloads' {
         BeforeEach {

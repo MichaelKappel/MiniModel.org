@@ -662,16 +662,23 @@
     if (value.protocol_profile !== DIRECT_COMPOSITION_PROTOCOL_PROFILE) {
       throw new Error("peer announcement protocol profile is unsupported");
     }
-    if (value.consent_status !== "explicit"
-        || value.outside_proof_status !== "current-passed") {
-      throw new Error("peer announcement lacks explicit consent or current outside proof");
+    if (value.consent_status !== "explicit") {
+      throw new Error("peer announcement lacks explicit consent");
     }
     requireSha256(value.consent_receipt_sha256, "peer announcement.consent_receipt_sha256");
-    requireSha256(
-      value.outside_proof_receipt_sha256,
-      "peer announcement.outside_proof_receipt_sha256",
-    );
     const peerUrl = normalizeDirectPeerBaseUrl(value.peer_base_url, options);
+    // Operator renewal asserts hosting responsibility, never an independent observation.
+    if (peerUrl === "https://minimodel.org/") {
+      if (value.outside_proof_status !== "not-required-operator-seed"
+          || value.outside_proof_receipt_sha256 !== null) {
+        throw new Error("operator seed requires its explicit disposition and a null outside-proof receipt");
+      }
+    } else {
+      if (value.outside_proof_status !== "current-passed") {
+        throw new Error("third-party peer requires current outside proof");
+      }
+      requireSha256(value.outside_proof_receipt_sha256, "peer announcement.outside_proof_receipt_sha256");
+    }
     const issued = requireUtc(value.issued_at_utc, "peer announcement.issued_at_utc");
     const expires = requireUtc(value.expires_utc, "peer announcement.expires_utc");
     if (Date.parse(issued) > now + MAX_FUTURE_SKEW_MILLISECONDS

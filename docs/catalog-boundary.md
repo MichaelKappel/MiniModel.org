@@ -69,6 +69,17 @@ announcement interval. Both the site and consumer verify signatures
 asynchronously before projecting a peer-backed view. A verified signature
 authenticates metadata; it does not establish reachability or prove the claims.
 
+The normalized exact `https://minimodel.org/` operator seed requires
+`outside_proof_status: "not-required-operator-seed"` and an explicit JSON null
+`outside_proof_receipt_sha256`. This declares operator responsibility without
+claiming an independent network observation. Every other admitted peer still
+requires `current-passed` and a SHA-256 receipt identity. Spoofed domains, HTTP
+downgrades, nondefault ports and alternate paths cannot obtain the operator
+disposition. Both fields remain inside the detached signature. Qualification,
+explicit consent, member hashes, TLS and the 24-hour metadata limit still apply.
+Renewal may extend the same approved seed's availability metadata; it cannot
+create qualification evidence or turn a signature into a reachability result.
+
 ## Empty Metadata Preparation
 
 Catalog strings preserve Unicode scalar values, including supplementary

@@ -21,7 +21,7 @@ function emptyPair() {
   return buildEmptyCatalog(parameters, options);
 }
 
-function signedFixture() {
+function signedFixture(operatorSeed = false) {
   // Synthetic metadata and ephemeral test keys only. No real qualification or outside proof.
   const pair = emptyPair();
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
@@ -55,6 +55,12 @@ function signedFixture() {
     issued_at_utc: utc(0), expires_utc: utc(3_600_000), verification_key_id: sha("9"),
     signature: "",
   };
+  if (operatorSeed) {
+    Object.assign(announcement, { peer_base_url: "https://minimodel.org/",
+      outside_proof_status: "not-required-operator-seed", outside_proof_receipt_sha256: null });
+    pair.catalog.project_server_serves_model_bytes = true;
+    pair.peerFeed.project_server_serves_model_bytes = true;
+  }
   announcement.signature = crypto.sign(null,
     browser.peerAnnouncementSigningBytes(announcement), privateKey).toString("base64url");
   pair.peerFeed.announcements.push(announcement);
@@ -66,6 +72,35 @@ function rejectBoth(pair, label) {
     assert.throws(() => api.validatePeerFeed(pair.peerFeed, pair.catalog, options), undefined, label);
   }
 }
+
+test("both contracts admit only the exact signed operator seed with null outside-proof identity", async () => {
+  for (const api of [site, browser]) {
+    const pair = signedFixture(true);
+    const views = await api.buildVerifiedCatalogView(pair.catalog, pair.peerFeed, options);
+    assert.equal(views[0].peerCount, 1);
+    assert.equal(pair.peerFeed.announcements[0].outside_proof_receipt_sha256, null);
+    Object.assign(pair.peerFeed.announcements[0], { peer_base_url: "https://8.8.8.8/",
+      outside_proof_status: "current-passed", outside_proof_receipt_sha256: sha("7") });
+    await assert.rejects(api.buildVerifiedCatalogView(pair.catalog, pair.peerFeed, options), /signature/);
+  }
+  for (const change of [
+    { peer_base_url: "https://8.8.8.8/" }, { peer_base_url: "http://127.0.0.1:4321/" },
+    { peer_base_url: "https://minimodel.org.evil.example/" }, { peer_base_url: "https://user@minimodel.org/" },
+    { peer_base_url: "https://minimodel.org./" }, { peer_base_url: "http://minimodel.org/" },
+    { peer_base_url: "https://minimodel.org:444/" }, { peer_base_url: "https://minimodel.org/path" },
+    { outside_proof_status: "current-passed", outside_proof_receipt_sha256: sha("7") },
+    { outside_proof_receipt_sha256: sha("7") }, { outside_proof_receipt_sha256: undefined },
+    { outside_proof_receipt_sha256: "null" }, { outside_proof_receipt_sha256: 1 },
+    { outside_proof_status: "unknown" }
+  ]) {
+    const pair = signedFixture(true);
+    Object.assign(pair.peerFeed.announcements[0], change);
+    rejectBoth(pair, JSON.stringify(change));
+  }
+  const absent = signedFixture(true);
+  delete absent.peerFeed.announcements[0].outside_proof_receipt_sha256;
+  rejectBoth(absent, "missing required null field");
+});
 
 test("generator and checked-in empty bytes agree with both contracts at issuance, not after expiry", async () => {
   for (const pair of [emptyPair(), {
@@ -235,6 +270,9 @@ test("both contracts admit exact IP origins and reject DNS, aliases, and the app
     ["https://127.0.0.1:8123/", "https://127.0.0.1:8123/"],
   ]) {
     pair.peerFeed.announcements[0].peer_base_url = url;
+    pair.peerFeed.announcements[0].outside_proof_status = normalized === "https://minimodel.org/"
+      ? "not-required-operator-seed" : "current-passed";
+    pair.peerFeed.announcements[0].outside_proof_receipt_sha256 = normalized === "https://minimodel.org/" ? null : sha("7");
     const [local] = site.validatePeerFeed(pair.peerFeed, pair.catalog, options);
     const [consumer] = browser.validatePeerFeed(pair.peerFeed, pair.catalog, options);
     assert.equal(local.peerUrl, normalized);

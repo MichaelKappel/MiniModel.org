@@ -1,0 +1,56 @@
+{
+  "schema": "minimodel.bounded-implementation-review/1",
+  "question": "Can the fixed operator-owned HTTPS seed renew approved metadata without fabricating independent-network proof?",
+  "decision": "Require not-required-operator-seed and explicit null outside-proof digest only for the normalized exact https://minimodel.org/ origin. Preserve current-passed plus SHA-256 for every other admitted peer.",
+  "authority": "Owner-authorized MiniModel initial seeding and maintainable existing-host renewal; root reviewed this concrete contract defect before implementation.",
+  "preserved_contracts": [
+    "Strict direct-peer URL admission, TLS and same-origin member paths",
+    "Detached Ed25519 signing payload including origin, proof disposition and digest",
+    "Explicit consent and receipt identity",
+    "Current immutable qualification/admission/member identities",
+    "Key validity, metadata monotonicity and maximum 24-hour freshness"
+  ],
+  "implementation": {
+    "canonical_browser_rule": "TinyRustLM.com/tinyrustlm/app/minimodel-catalog-v1.js directPeerUrlAuthority.requireProof",
+    "consumers": ["TinyRustLM P2P composition installer", "TinyRustLM interview preflight"],
+    "mirrored_validator": "MiniModel.org/catalog.js",
+    "wire_fields": "No new fields or signing format; strict existing proof fields now have two origin-bound dispositions.",
+    "compatibility": "No qualified public initial seed exists to preserve under the superseded operator/current-passed combination. Third-party proof requirements remain intact."
+  },
+  "source_identities": [
+    { "repository": "TinyRustLM.com", "path": "tinyrustlm/app/minimodel-catalog-v1.js", "sha256": "1ac264b1e347c61bd2e8bee1b878978cdf3e7077e60748305ef7bb65664b01fa" },
+    { "repository": "TinyRustLM.com", "path": "tinyrustlm/app/p2p-composition-install.js", "sha256": "2445e42ff36be0a8bb8b5ab521d2517813a4f5d7124d3ea362bdd6d846c697f5" },
+    { "repository": "TinyRustLM.com", "path": "tinyrustlm/tools/interview-demo-preflight.js", "sha256": "7709333e4b3d9d273469161296e16138f59c795af7eeca6b744ceb3c8c2823cb" },
+    { "repository": "TinyRustLM.com", "path": "tinyrustlm/tests/minimodel-catalog-v1.test.js", "sha256": "f3ab212f393c98b925471f1cd6b79d53c5e8a0fbaa51585aa375a17abe4bddd4" },
+    { "repository": "TinyRustLM.com", "path": "tinyrustlm/tests/p2p-composition-install.test.js", "sha256": "0b8e807cdd6e175d1ab9d0558892dc540aef4125540dddbb9e3dc5024c5687ce" },
+    { "repository": "TinyRustLM.com", "path": "tinyrustlm/tests/interview-demo-preflight.test.js", "sha256": "891072207a417fd4a4137914113f099b9b86f5243438ec86ad742420ba17b6d3" },
+    { "repository": "MiniModel.org", "path": "catalog.js", "sha256": "353a9a986931dfbee8306185f3254f9b8e12202a38cf20ea7f61ccdc8f6fe549" },
+    { "repository": "MiniModel.org", "path": "tests/catalog-contract.test.js", "sha256": "205a41d3b51231358dd765500825638a22320fa5c7d35f44e2e6926e8f55c49e" }
+  ],
+  "validation": {
+    "tiny_command": "node --test --experimental-test-coverage --test-coverage-include=**/app/minimodel-catalog-v1.js --test-coverage-include=**/app/p2p-composition-install.js --test-coverage-include=**/tools/interview-demo-preflight.js tinyrustlm/tests/minimodel-catalog-v1.test.js tinyrustlm/tests/p2p-composition-install.test.js tinyrustlm/tests/interview-demo-preflight.test.js tinyrustlm/tests/static-shell-parity.test.js",
+    "tiny_result": "148 passed, 0 failed",
+    "tiny_output_identity": "tool-output:26c0b6",
+    "mini_command": "node --test --experimental-test-coverage --test-coverage-include=**/catalog.js tests/catalog.test.js tests/catalog-contract.test.js",
+    "mini_result": "51 passed, 0 failed",
+    "mini_output_identity": "tool-output:aa3f54",
+    "new_cases": "Valid signed operator/null projection and six-member synthetic installation; public IP/loopback cannot use exemption; spoofed domain, userinfo, trailing dot, HTTP downgrade, alternate port/path/query reject; missing/wrong-type/non-null proof rejects; changing signed origin/disposition/digest without resigning fails; normalized uppercase/default-443 equivalence remains valid; third-party SHA proof remains required; preflight never equates an announcement to reachability.",
+    "coverage_line_branch_function_percent": {
+      "tiny_catalog": [82.66, 70.19, 88.70],
+      "tiny_installer": [89.49, 77.08, 98.28],
+      "tiny_preflight": [90.40, 82.80, 84.38],
+      "mini_catalog": [92.26, 83.47, 98.94]
+    },
+    "coverage_scope": "Whole-file measured percentages, not inflated changed-code percentages. Both new proof branches and rejection paths are covered.",
+    "retained_earlier_results": [
+      "tool-output:fc2219: Tiny 138/139; generated shell identities were not yet refreshed. Same sources passed after existing deterministic generator refreshed hashes.",
+      "tool-output:9c4b21: Mini 49/51; an older origin-only fixture still used third-party proof for MiniModel, and the index script cache hash was stale. Fixture now uses the current origin-bound disposition; existing script identity was refreshed."
+    ],
+    "independent_read_only_review": "runtime_state_review found no material defect in normalized origin selection, strict null/SHA branches, signed payload binding, installer/preflight sharing or Mini mirror. Review does not prove hosted renewal or seed reachability.",
+    "diff_check": "passed"
+  },
+  "presentation": "Only existing script cache identities changed in Tiny app/root HTML and Mini index.html; Tiny offline-worker generated identities updated. No visible copy/style/component changes. No screenshot comparison is claimed.",
+  "publication_status": "Local implementation only. No public seed, model qualification, renewal service or new outside-network observation is established.",
+  "remaining": "Exact receipt/admission binding and seed streaming publication; nonsecret exact-host PHP/HTTP-denial capability proof; reviewed hosted request renewal; actual qualified model and live browser acceptance.",
+  "reusable_lesson": "A trusted operator HTTPS seed needs an explicit signed responsibility statement. Requiring recurring independent-peer evidence for that fixed origin creates an availability dependency without adding the intended third-party routing assurance."
+}

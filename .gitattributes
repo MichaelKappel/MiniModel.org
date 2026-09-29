@@ -60,3 +60,5 @@ tests/build-static-seed-namespace_test.js text eol=lf
 tests/MiniModel.StaticSeed_test.ps1 text eol=lf
 artifacts/verification/static-seed-core-review-20260929.json text eol=lf
 artifacts/verification/root-bootstrap-review-20260929.json text eol=lf
+tools/admit-static-seed-publication.js text eol=lf
+tests/admit-static-seed-publication_test.js text eol=lf

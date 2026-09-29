@@ -13,8 +13,18 @@ was aligned with the prepared authority. Initial failures and exact identities
 are in `artifacts/verification/publication-binding-review-20260929.json`.
 The actual publisher now reaches and rejects the expired catalog before public
 admission. No credentials were read and no public files were changed. The
-unbound transport, current FileZilla reader, real model qualification and seed
+unbound transport, real model qualification and seed
 delivery remain unfinished.
+
+The publisher now reuses the canonical TinyRustLM `Deployment.Credentials.psm1`
+FTP-export reader. It imports the exact reviewed module bytes under a read lease
+after source admission and immediately before credential access. No FileZilla
+reader or copied credential implementation remains. `-FtpExportPath` selects an
+absolute external UTF-8 account export; its default is `ftp.txt` in the canonical
+repositories' parent directory. Only the `MiniModel.org` account is selected.
+The file stays outside the site worktree and its values are never logged or
+included in deployment receipts. This change does not bind a target or authorize
+an expired catalog.
 
 The publisher requires all of the following before it can read credentials or
 mutate the authenticated target:
@@ -41,7 +51,7 @@ mutate the authenticated target:
   with no unknown overlay entries.
 
 `deploy/publication-authority.v1.json` deliberately leaves the transport tuple
-`unbound`. `-Publish` therefore fails before reading the FileZilla profile.
+`unbound`. `-Publish` therefore fails before reading the external FTP export.
 An authorized operator must independently record the real nonsecret tuple,
 install the already-bound sentinel bytes at the intended remote root, and land
 that authority through the normal reviewed commit and push flow. Never infer

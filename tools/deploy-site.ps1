@@ -1,7 +1,7 @@
 param(
     [string]$AuthorityPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "deploy\publication-authority.v1.json"),
     [string]$ManifestPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "deploy\site-deployment-manifest.v1.json"),
-    [string]$FileZillaProfilePath = (Join-Path $env:APPDATA "FileZilla\sitemanager.xml"),
+    [string]$FtpExportPath = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "ftp.txt"),
     [string]$ReportPath = (Join-Path (Split-Path -Parent $PSScriptRoot) ("deploy\receipts\site-deployment-{0}.json" -f (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ"))),
     [string]$NodeExecutablePath = (Join-Path $env:ProgramFiles 'nodejs\node.exe'),
     [switch]$Publish
@@ -353,78 +353,51 @@ function Get-PublicBytes {
     }
 }
 
+# Selects only the admitted site's account from the sole shared bounded FTP-export reader.
 function Get-CredentialProfile {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$ProfileName)
 
     if (-not $script:sourceAuthorityAdmitted) {
         throw "Credential access is forbidden before the ecosystem source-authority gate."
     }
-    $resolved = [IO.Path]::GetFullPath($Path)
-    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
-        throw "The external FileZilla profile is unavailable."
-    }
-    $item = Get-Item -LiteralPath $resolved
-    if ($item.Length -lt 1 -or $item.Length -gt 1048576 -or
-        ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw "The external FileZilla profile has an invalid type or size."
-    }
+    return Get-DeploymentCredentialProfile -ProfilePath $Path -SourceRoot $repositoryRoot -ExpectedProfileName $ProfileName
+}
 
-    $settings = [Xml.XmlReaderSettings]::new()
-    $settings.DtdProcessing = [Xml.DtdProcessing]::Prohibit
-    $settings.XmlResolver = $null
-    $reader = [Xml.XmlReader]::Create($resolved, $settings)
-    $document = [Xml.XmlDocument]::new()
-    $document.XmlResolver = $null
-    try { $document.Load($reader) } finally { $reader.Dispose() }
+# Verifies a read-leased module stream against the reviewed shared reader; callers retain the lease.
+function Assert-MiniModelCredentialModuleIdentity {
+    param([Parameter(Mandatory)][IO.Stream]$Stream)
 
-    $matches = @($document.SelectNodes("/FileZilla3/Servers/Server") | Where-Object {
-        $name = $_.SelectSingleNode("Name")
-        $name -and [string]::Equals([string]$name.InnerText, $ProfileName, [StringComparison]::Ordinal)
-    })
-    if ($matches.Count -ne 1) {
-        throw "The external FileZilla profile must contain exactly one matching site."
+    if (-not $Stream.CanRead -or -not $Stream.CanSeek -or $Stream.Length -ne 6525) {
+        throw "The canonical credential module identity drifted."
     }
-
-    $site = $matches[0]
-    $required = {
-        param([string]$Name)
-        $node = $site.SelectSingleNode($Name)
-        if (-not $node -or [string]::IsNullOrWhiteSpace([string]$node.InnerText)) {
-            throw "The deployment profile is missing a required field."
+    $Stream.Position = 0
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $actual = ([BitConverter]::ToString($sha.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant()
+        if ($actual -cne '26a07d33724c8bf7e9f02c3dc4e6fe8f812167c0b1db5d9d736c989da88e17a7') {
+            throw "The canonical credential module identity drifted."
         }
-        return ([string]$node.InnerText).Trim()
     }
+    finally { $sha.Dispose() }
+}
 
-    $hostName = & $required "Host"
-    $portText = & $required "Port"
-    $userName = & $required "User"
-    $passwordNode = $site.SelectSingleNode("Pass")
-    if (-not $passwordNode) { throw "The deployment profile is missing a required field." }
-    $encoding = if ($passwordNode.Attributes["encoding"]) { [string]$passwordNode.Attributes["encoding"].Value } else { "" }
-    if ($encoding -and -not [string]::Equals($encoding, "base64", [StringComparison]::OrdinalIgnoreCase)) {
-        throw "The deployment profile password encoding is unsupported."
+# Imports the canonical sibling credential module only after source admission and exact byte verification.
+function Import-MiniModelCredentialModule {
+    if (-not $script:sourceAuthorityAdmitted) {
+        throw "Credential module access is forbidden before the ecosystem source-authority gate."
     }
-    $password = if ($encoding) {
-        [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$passwordNode.InnerText))
+    $path = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\tools\Deployment.Credentials.psm1'))
+    if (Test-BootstrapPathHasReparsePoint -Path $path) {
+        throw "The canonical credential module ancestry is unsafe."
     }
-    else { [string]$passwordNode.InnerText }
-
-    $port = 0
-    if ([Uri]::CheckHostName($hostName) -eq [UriHostNameType]::Unknown -or
-        -not [int]::TryParse($portText, [ref]$port) -or
-        $port -lt 1 -or $port -gt 65535 -or
-        $userName.Length -lt 1 -or $userName.Length -gt 256 -or
-        [string]::IsNullOrEmpty($password) -or $password.Length -gt 4096) {
-        $password = $null
-        throw "The deployment profile contains an invalid bounded field."
+    $lease = $null
+    try {
+        $lease = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        Assert-MiniModelCredentialModuleIdentity -Stream $lease
+        Import-Module -Name $path -Global -Force -ErrorAction Stop
     }
-
-    return [pscustomobject]@{
-        ProfileName = $ProfileName
-        Host = $hostName
-        Port = $port
-        User = $userName
-        Password = $password
+    finally {
+        if ($lease) { $lease.Dispose() }
     }
 }
 
@@ -1351,9 +1324,10 @@ $leaseAcquired = $false
 $finalGatesPassed = $false
 $rollbackCompleted = $false
 try {
-    $profile = Get-CredentialProfile -Path $FileZillaProfilePath -ProfileName ([string]$authority.transport.profile_name)
+    Import-MiniModelCredentialModule
+    $profile = Get-CredentialProfile -Path $FtpExportPath -ProfileName ([string]$authority.transport.profile_name)
     $observedTransport = [pscustomobject]@{
-        profile_name = [string]$profile.ProfileName
+        profile_name = [string]$profile.profile
         protocol = "ftps-explicit"
         host = [string]$profile.Host
         port = [int]$profile.Port

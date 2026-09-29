@@ -182,6 +182,80 @@ foreach ($definition in $ast.EndBlock.Statements | Where-Object { $_ -is [Manage
     . ([scriptblock]::Create($definition.Extent.Text))
 }
 
+Describe 'Shared FTP-export credentials without remote operations' {
+    BeforeEach {
+        $script:credentialOriginalRoot = $repositoryRoot
+        $script:sourceAuthorityAdmitted = $true
+        Import-MiniModelCredentialModule
+        $script:credentialFixturePath = Join-Path $env:TEMP ('credential-' + [Guid]::NewGuid().ToString('N') + '.txt')
+        $script:credentialText = "FTP Username: fixture@MiniModel.org`nFTP server: publish.example`nFTP & explicit FTPS port: 21`nUsername: fixture`nPassword: synthetic:fixture=value`n"
+        [IO.File]::WriteAllText($script:credentialFixturePath, $script:credentialText, [Text.UTF8Encoding]::new($false))
+        # A synthetic source boundary inside the operation-owned directory; no source is created.
+        $repositoryRoot = Join-Path $env:TEMP 'unwritten-source-boundary'
+    }
+    AfterEach {
+        $repositoryRoot = $script:credentialOriginalRoot
+        [IO.File]::Delete($script:credentialFixturePath)
+    }
+
+    It 'selects the exact MiniModel account and preserves supported password punctuation' {
+        $twoSites = $script:credentialText.Replace('MiniModel.org', 'TinyRustLM.com') + $script:credentialText
+        [IO.File]::WriteAllText($script:credentialFixturePath, $twoSites)
+        $profile = Get-CredentialProfile -Path $script:credentialFixturePath -ProfileName 'MiniModel.org'
+        $profile.profile | Should Be 'MiniModel.org'
+        $profile.host | Should Be 'publish.example'
+        $profile.user | Should Be 'fixture@MiniModel.org'
+        $profile.port | Should Be 21
+        $profile.password | Should Be 'synthetic:fixture=value'
+        $profile.password = $null
+        (Get-Command Get-DeploymentCredentialProfile).ModuleName | Should Be 'Deployment.Credentials'
+    }
+
+    It 'rejects missing source admission before reading an absent export or importing code' {
+        $script:sourceAuthorityAdmitted = $false
+        { Get-CredentialProfile -Path 'absent' -ProfileName 'MiniModel.org' } | Should Throw 'source-authority gate'
+        { Import-MiniModelCredentialModule } | Should Throw 'source-authority gate'
+    }
+
+    It 'rejects duplicate accounts and obsolete XML without exposing credential fields' {
+        foreach ($text in @(($script:credentialText + $script:credentialText), '<FileZilla3><Servers /></FileZilla3>')) {
+            [IO.File]::WriteAllText($script:credentialFixturePath, $text)
+            $caught = $null
+            try { Get-CredentialProfile -Path $script:credentialFixturePath -ProfileName 'MiniModel.org' }
+            catch { $caught = $_.Exception.Message }
+            $caught | Should Not BeNullOrEmpty
+            $caught | Should Not Match 'synthetic:fixture|publish.example|fixture@'
+        }
+    }
+
+    It 'rejects the selected account against a different authorized transport tuple before FTP use' {
+        $profile = Get-CredentialProfile -Path $script:credentialFixturePath -ProfileName 'MiniModel.org'
+        $bound = Get-Content -LiteralPath (Join-Path $script:credentialOriginalRoot 'deploy/publication-authority.v1.json') -Raw | ConvertFrom-Json
+        $bound.transport.status = 'bound'; $bound.transport.host = 'different.example'
+        $bound.transport.port = 21; $bound.transport.remote_root = '.'
+        $bound.transport.username_sha256 = Get-CustodyByteSha256 -Bytes ([Text.Encoding]::UTF8.GetBytes($profile.user))
+        $observed = [pscustomobject]@{profile_name=$profile.profile;protocol='ftps-explicit';host=$profile.host;port=$profile.port;username=$profile.user;remote_root='.'}
+        { Assert-CustodyTransportAuthority -Authority $bound -Observed $observed } | Should Throw 'immutable publication transport tuple'
+        $profile.password = $null
+    }
+
+    It 'checks exact module bytes and rejects wrong length, same-size changed bytes and unreadable streams' {
+        foreach ($length in @(0, 6524, 6525, 6526)) {
+            $stream = [IO.MemoryStream]::new([byte[]]::new($length), $false)
+            try { { Assert-MiniModelCredentialModuleIdentity -Stream $stream } | Should Throw 'identity drifted' }
+            finally { $stream.Dispose() }
+        }
+        $closed = [IO.MemoryStream]::new(); $closed.Dispose()
+        { Assert-MiniModelCredentialModuleIdentity -Stream $closed } | Should Throw 'identity drifted'
+    }
+
+    It 'rejects unsafe module ancestry before importing the shared module' {
+        $repositoryRoot = $script:credentialOriginalRoot
+        Mock Test-BootstrapPathHasReparsePoint { return $true }
+        { Import-MiniModelCredentialModule } | Should Throw 'ancestry is unsafe'
+    }
+}
+
 Describe 'Canonical publisher memory transfer and partial rollback' {
     BeforeEach {
         $script:chunks=[Collections.Generic.List[object]]::new()

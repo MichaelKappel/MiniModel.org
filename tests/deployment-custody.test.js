@@ -177,6 +177,15 @@ test("performs exact public admission before input creation or credential access
   assert.ok(phaseAdvance < transportBinding);
   assert.ok(transportBinding < input);
   assert.ok(input < credentialAccess);
+  const credentialImport = publisher.indexOf("    Import-MiniModelCredentialModule", input);
+  assert.ok(input < credentialImport && credentialImport < credentialAccess);
+  assert.doesNotMatch(publisher, /FileZilla|XmlReader|sitemanager\.xml/);
+  assert.match(publisher, /Get-DeploymentCredentialProfile -ProfilePath \$Path -SourceRoot \$repositoryRoot -ExpectedProfileName \$ProfileName/);
+  const moduleBytes = fs.readFileSync(path.join(repositoryRoot, "../TinyRustLM.com/tinyrustlm/tools/Deployment.Credentials.psm1"));
+  assert.ok(publisher.includes(`$Stream.Length -ne ${moduleBytes.length}`));
+  assert.ok(publisher.includes(`$actual -cne '${sha256(moduleBytes)}'`));
+  assert.match(publisher, /Assert-MiniModelCredentialModuleIdentity -Stream \$lease/);
+  assert.match(publisher, /Import-Module -Name \$path -Global -Force/);
   assert.match(publisher, /New-FtpRequest[\s\S]*Assert-CustodyMutationAllowed -Phase \$script:phase -MutationKind remote/);
 });
 

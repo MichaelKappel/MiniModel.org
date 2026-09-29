@@ -244,12 +244,16 @@ function Invoke-GitText {
     return @($output | ForEach-Object { [string]$_ })
 }
 
+# Compare working bytes with the exact commit captured by repository observation.
 function Test-TrackedPathMatchesHead {
-    param([Parameter(Mandatory)][string]$RelativePath)
+    param(
+        [Parameter(Mandatory)][string]$RelativePath,
+        [Parameter(Mandatory)][string]$ObservedCommit
+    )
 
     $tracked = @(& git --no-optional-locks -C $repositoryRoot ls-files -- $RelativePath 2>$null)
     if ($LASTEXITCODE -ne 0 -or $tracked.Count -ne 1 -or ([string]$tracked[0]).Trim() -cne $RelativePath) { return $false }
-    $headBytes = Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit "HEAD" -RelativePath $RelativePath
+    $headBytes = Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $ObservedCommit -RelativePath $RelativePath
     $workingPath = [IO.Path]::GetFullPath((Join-Path $repositoryRoot ($RelativePath -replace "/", "\")))
     if (-not (Test-Path -LiteralPath $workingPath -PathType Leaf)) { return $false }
     $workingBytes = [IO.File]::ReadAllBytes($workingPath)
@@ -306,8 +310,8 @@ function Get-RepositoryObservation {
         status_count = $status.Count
         source_is_ancestor = $sourceIsAncestor
         source_tree = $sourceTree
-        manifest_matches_head = Test-TrackedPathMatchesHead -RelativePath ([string]$Authority.candidate.manifest_path)
-        authority_matches_head = Test-TrackedPathMatchesHead -RelativePath "deploy/publication-authority.v1.json"
+        manifest_matches_head = Test-TrackedPathMatchesHead -RelativePath ([string]$Authority.candidate.manifest_path) -ObservedCommit $head
+        authority_matches_head = Test-TrackedPathMatchesHead -RelativePath "deploy/publication-authority.v1.json" -ObservedCommit $head
     }
 }
 

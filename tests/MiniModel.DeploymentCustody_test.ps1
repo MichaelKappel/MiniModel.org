@@ -183,6 +183,16 @@ foreach ($definition in $ast.EndBlock.Statements | Where-Object { $_ -is [Manage
     . ([scriptblock]::Create($definition.Extent.Text))
 }
 
+Describe 'Publisher tracked-file observation with real canonical Git bytes' {
+    It 'binds working bytes to the observed exact commit and preserves strict revision admission' {
+        $observedCommit = (& git --no-optional-locks -C $repositoryRoot rev-parse HEAD).Trim()
+        Test-TrackedPathMatchesHead -RelativePath 'catalog/compositions.v1.json' -ObservedCommit $observedCommit | Should Be $true
+        Test-TrackedPathMatchesHead -RelativePath 'missing-tracked-file-fixture.txt' -ObservedCommit $observedCommit | Should Be $false
+        Test-TrackedPathMatchesHead -RelativePath 'deploy/site-deployment-manifest.v1.json' -ObservedCommit '672991ba646cde761ba6a361fc20b5a24aaabbe0' | Should Be $false
+        { Test-TrackedPathMatchesHead -RelativePath 'catalog/compositions.v1.json' -ObservedCommit 'HEAD' } | Should Throw 'exact object identity'
+    }
+}
+
 Describe 'Bounded actual NLST ingress' {
     BeforeEach {$script:seedFilePaths=@()}
     It 'ignores only literal dot entries and keeps provider state and other names visible' {

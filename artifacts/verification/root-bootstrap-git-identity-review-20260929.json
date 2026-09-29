@@ -1,0 +1,40 @@
+{
+  "schema": "minimodel.bounded-implementation-review/1",
+  "reviewed_at_utc": "2026-09-29T21:46:56Z",
+  "question": "Can real publisher repository observation satisfy the strict immutable Git blob reader before sentinel bootstrap?",
+  "prior_source_commit": "c7958d7751c6dabb829099c0dcafefb311415d90",
+  "failed_authorized_attempt": {
+    "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/deploy-site.ps1 -BootstrapSentinel",
+    "default_receipt_path_policy": "deploy/receipts/site-deployment-YYYYMMDDTHHMMSSZ.json",
+    "output_identity": "tool-output:dc2b59",
+    "exit_code": 1,
+    "failure": "Git publication commit must be an exact object identity.",
+    "source_authority_gate": "passed; execution reached Get-RepositoryObservation after sourceAuthorityAdmitted=true",
+    "credentials_read": false,
+    "hosting_http_or_ftps_started": false,
+    "remote_mutation_started": false,
+    "receipt_created": false,
+    "interpretation": "Test-TrackedPathMatchesHead supplied literal HEAD to a blob reader that deliberately accepts only exact 40-hex commits. Failure preceded bootstrap receipt construction and every hosting action. No ambiguous write or recovery is involved."
+  },
+  "change": "Pass the exact commit already captured by Get-RepositoryObservation to both tracked-file comparisons. Preserve the blob reader's rejection of symbolic revisions.",
+  "source_identities": [
+    { "path": "tools/deploy-site.ps1", "sha256": "7aac5ba95162b550b39e7c24dac851fdd63c816bdab47b399932edf2215de01d" },
+    { "path": "tests/MiniModel.DeploymentCustody_test.ps1", "sha256": "e44dd761682e25e1b32a65b9218d164a68acaa1015ccb1972bae82e819c5e117" }
+  ],
+  "validation": {
+    "broad_command": "node --test tests/deployment-custody.test.js tests/build-site-deployment-manifest_test.js",
+    "broad_output_identity": "tool-output:e9ff05",
+    "broad_result": "34 passed, 1 failed; all 12 manifest tests passed",
+    "retained_test_failure": "The new negative test expected historical catalog bytes to differ, but those bytes were identical. Replaced only that negative fixture with the genuinely different historical deployment manifest at the same immutable commit.",
+    "final_command": "Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1') -PassThru -Quiet",
+    "final_output_identity": "tool-output:c4aa36",
+    "final_result": "54 passed, 0 failed",
+    "regression_scope": "Real canonical Git reader plus actual publisher helper: current tracked bytes pass, missing tracked path fails, different immutable historical manifest fails, symbolic HEAD remains rejected. No copied source or real model fixture.",
+    "coverage_limit": "Actual publisher helpers are imported from AST and are not attributed by the current module-only Pester coverage configuration. Behavioral coverage is reported; no numeric coverage claim for this helper.",
+    "diff_check": "passed",
+    "owned_test_output": "artifacts/tests empty after the established harness cleanup"
+  },
+  "decision": "Implementation defect corrected and locally tested; a fresh clean/pushed admission and distinct bootstrap attempt remain necessary.",
+  "live_status": "No sentinel, website, catalog, or model publication from this attempt.",
+  "reusable_lesson": "Strict lower-level contracts require real caller integration tests. Mocking repository observation hid a symbolic-revision mismatch despite isolated blob-reader coverage."
+}

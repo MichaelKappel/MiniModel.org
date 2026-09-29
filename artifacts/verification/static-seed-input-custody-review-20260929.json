@@ -1,0 +1,34 @@
+{
+  "schema": "minimodel.implementation-review.v1",
+  "recorded_utc": "2026-09-29T22:43:01Z",
+  "status": "metadata-and-handle-custody-tested-entrypoint-not-enabled",
+  "question": "Can the publisher bind the actual qualification reader and all canonical source handles before any seed transport begins?",
+  "decision": "Read the registry and four public documents from one exact Git commit, send the resulting five inputs to the canonical validator through bounded stdin, and re-bind its returned byte identities. Admit canonical model-directory names and retain all six read-only handles after streaming each exact hash. Keep public transaction and renewal wiring separate until these gates are complete.",
+  "files": [
+    {"path": "tools/deploy-site.ps1", "sha256": "c4c2a57e1908f9c3637cf48489e876e355e057d49af34aa793107798fda1a2c0"},
+    {"path": "tools/MiniModel.StaticSeed.psm1", "sha256": "634d97e236b83a4637023e47ce78e75a28aed19c02ea76eef02ff2b81242d0ca"},
+    {"path": "tests/MiniModel.DeploymentCustody_test.ps1", "sha256": "f2af26f5951fe5887168372b7d6f203ddb2b66160a858a3af7bff38ec1dc103f"},
+    {"path": "tests/MiniModel.StaticSeed_test.ps1", "sha256": "d95855092b81e5771ace60815e6e75cfdfeca373c7c9ccd2d0cfcf617a66aeb1"},
+    {"path": "deploy/static-seed.md", "sha256": "b3010fcc43092139afba3f65b59933743f36437d061888ab6f4405ceb45b3fe8"}
+  ],
+  "validation": {
+    "focused": {"total": 13, "passed": 13, "failed": 0, "output": "1e42bd"},
+    "final": {"total": 77, "passed": 77, "failed": 0, "output": "0b57f6", "command": "Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1') -CodeCoverage @('./tools/MiniModel.DeploymentCustody.psm1','./tools/MiniModel.StaticSeed.psm1') -PassThru -Quiet"},
+    "actual_process": "Real pinned Node and all seven canonical non-builtin source files are read-leased and hashed. Bounded stdin reaches the actual validator, whose malformed-envelope rejection is preserved. Existing timeout and hostile NODE_* isolation tests remain passing.",
+    "metadata_custody": "Memory-only Git/validator boundary fixtures prove exact commit, five input identities, safe local routes, registry canonicalization, failure propagation and returned-byte binding. These fixtures do not establish model qualification; actual semantic reader tests were recorded in the preceding admission checkpoint.",
+    "source_custody": "Mocked file opens return in-memory streams. Tests prove exact six-name admission, canonical root restriction, pre-open identity checks, all-handle verification/rewind, source-open/length/hash failure cleanup and explicit caller release. No model files are read.",
+    "module_command_coverage": [
+      {"function": "Copy-StaticSeedVerifiedStream", "hit": 30, "analyzed": 30},
+      {"function": "Assert-StaticSeedPlainPath", "hit": 0, "analyzed": 8},
+      {"function": "Open-StaticSeedSourceFile", "hit": 0, "analyzed": 2},
+      {"function": "Open-StaticSeedSourceSet", "hit": 40, "analyzed": 40},
+      {"function": "Close-StaticSeedSourceSet", "hit": 2, "analyzed": 2}
+    ],
+    "changed_source_function_coverage": {"hit": 42, "analyzed": 52, "percentage": 80.77},
+    "coverage_limit": "Actual model-path reparse ancestry and FileStream opening are not executed by these tests. Publisher AST-imported functions have meaningful behavior checks but no reliable source-line coverage percentage.",
+    "diff_check": "passed"
+  },
+  "review": {"reviewer": "runtime_state_review agent", "method": "Independent read-only review of the four production/test diffs", "result": "No material defect found. The pinned dependency closure covers all non-builtin require edges; returned metadata is re-bound to exact input bytes, and failed source admission disposes the handles opened so far."},
+  "limits": ["No public seed entrypoint, complete promotion/recovery transaction or hosted renewal is enabled by this checkpoint.", "No real model file, credential or live endpoint was accessed in this chunk.", "The current registry remains empty and cannot admit a seed.", "Actual quality qualification remains an independent prerequisite.", "No sentinel, model or website publication was performed."],
+  "reusable_lesson": "Reuse the real consumer admission code, pin its entire dependency closure, and retain verified source handles rather than reopening files by path after admission. Separate mocked custody proofs from actual model and host evidence."
+}

@@ -863,6 +863,20 @@ Describe 'Verified Node child boundary' {
             { Invoke-VerifiedNode -Tool source-authority -TimeoutMilliseconds 1 } | Should Throw 'exceeded its deadline'
         }
     }
+    It 'delivers bounded metadata bytes to the real pinned seed validator and preserves its rejection' {
+        $result=Invoke-VerifiedNode -Tool seed-admission -InputBytes ([Text.Encoding]::UTF8.GetBytes("{}`n"))
+        $result.ExitCode | Should Be 1
+        $result.Stdout | Should Be ''
+        $result.Stderr.Trim() | Should Be 'static-seed-publication-envelope-fields'
+    }
+    It 'rejects absent, empty, oversized or argument-bearing seed input before starting a child' {
+        {Invoke-VerifiedNode -Tool seed-admission} | Should Throw 'Invalid seed-admission input'
+        {Invoke-VerifiedNode -Tool seed-admission -InputBytes ([byte[]]::new(0))} | Should Throw 'Invalid seed-admission input'
+        {Invoke-VerifiedNode -Tool seed-admission -InputBytes ([byte[]]::new(3145729))} | Should Throw 'Invalid seed-admission input'
+        {Invoke-VerifiedNode -Tool seed-admission -Arguments @('unexpected') -InputBytes ([byte[]](1))} | Should Throw 'Invalid seed-admission input'
+        {Invoke-VerifiedNode -Tool manifest -Arguments @('a'*40) -InputBytes ([byte[]](1))} | Should Throw 'does not accept stdin'
+        {Invoke-VerifiedNode -Tool source-authority -InputBytes ([byte[]](1))} | Should Throw 'does not accept stdin'
+    }
     It 'runs the real manifest tool with hostile Node startup settings excluded from its child only' {
         $saved=@{}
         $coveragePath=Join-Path $TestDrive 'must-not-create-node-coverage'
@@ -882,6 +896,72 @@ Describe 'Verified Node child boundary' {
         }
         finally {
             foreach ($name in $settings.Keys) { [Environment]::SetEnvironmentVariable($name,$saved[$name],'Process') }
+        }
+    }
+}
+
+# This fixture exercises committed-byte plumbing; the actual qualification validator has its separate real semantic tests.
+Describe 'Committed seed metadata custody' {
+    BeforeEach {
+        $script:seedProcessMode='pass'
+        $script:seedGitFiles=@{
+            'deploy/static-seed-namespace.v1.json'=[Text.Encoding]::UTF8.GetBytes("{`"schema`":`"minimodel.static-seed-namespace/1`",`"descriptorBase64`":`"e30K`"}`n")
+            'catalog/compositions.v1.json'=[Text.Encoding]::UTF8.GetBytes('{"entries":[{"browser_admission":{"route":"/test-only/admission.json"},"qualification":{"receipt_route":"/test-only/qualification.json"}}]}')
+            'catalog/peer-announcements.v1.json'=[Text.Encoding]::UTF8.GetBytes('{}')
+            'test-only/admission.json'=[Text.Encoding]::UTF8.GetBytes('{"fixture":"admission"}')
+            'test-only/qualification.json'=[Text.Encoding]::UTF8.GetBytes('{"fixture":"qualification"}')
+        }
+        Mock Get-CustodyGitBlobBytes {
+            param($RepositoryRoot,$Commit,$RelativePath,$MaximumBytes)
+            if (-not $script:seedGitFiles.ContainsKey($RelativePath)) {throw 'Unexpected committed metadata route.'}
+            if($script:seedGitFiles[$RelativePath].Length -gt $MaximumBytes){throw 'Fixture read exceeds bound.'}
+            return ,([byte[]]$script:seedGitFiles[$RelativePath].Clone())
+        }
+        Mock Invoke-VerifiedNode {
+            param($Tool,$InputBytes)
+            $Tool | Should Be 'seed-admission'
+            $text=[Text.Encoding]::UTF8.GetString($InputBytes)
+            $text.EndsWith("`n") | Should Be $true
+            $script:seedEnvelope=$text|ConvertFrom-Json
+            $metadata=[ordered]@{}
+            foreach($property in $script:seedEnvelope.PSObject.Properties){
+                $bytes=[Convert]::FromBase64String($property.Value)
+                $metadata[$property.Name]=[ordered]@{bytes=$bytes.Length;sha256=(Get-CustodyByteSha256 -Bytes $bytes)}
+            }
+            $verdict=[ordered]@{schema='minimodel.qualified-static-seed-plan/1';status='metadata-admitted-payload-and-host-unverified';publicationAllowed=$false;metadata=$metadata}
+            if($script:seedProcessMode -ceq 'shape'){$verdict.publicationAllowed=$true}
+            if($script:seedProcessMode -ceq 'bytes'){$verdict.metadata.admission.sha256='0'*64}
+            return [pscustomobject]@{ExitCode=$(if($script:seedProcessMode -ceq 'exit'){1}else{0});Stdout=($verdict|ConvertTo-Json -Depth 6 -Compress);Stderr=$(if($script:seedProcessMode -ceq 'stderr'){'unexpected'}else{''})}
+        }
+    }
+    It 'binds five exact immutable inputs and both local routes to one observed commit' {
+        $record=Get-StaticSeedPublicationInput -Commit ('a'*40)
+        $record.Commit | Should Be ('a'*40)
+        $record.RegistrySha256 | Should Be (Get-CustodyByteSha256 -Bytes $script:seedGitFiles['deploy/static-seed-namespace.v1.json'])
+        ($record.Inputs.Keys -join ',') | Should Be 'descriptor,catalog,peerFeed,admission,qualificationReceipt'
+        [Text.Encoding]::UTF8.GetString($record.Inputs.descriptor) | Should Be "{}`n"
+        Assert-MockCalled Get-CustodyGitBlobBytes -Times 5 -Exactly -Scope It -ParameterFilter {$Commit -ceq ('a'*40)}
+        $script:seedGitFiles['test-only/admission.json'][0]=0
+        [Text.Encoding]::UTF8.GetString($record.Inputs.admission) | Should Be '{"fixture":"admission"}'
+    }
+    It 'rejects a missing registry descriptor and noncanonical registry before metadata admission' {
+        $script:seedGitFiles['deploy/static-seed-namespace.v1.json']=[Text.Encoding]::UTF8.GetBytes('{"schema":"minimodel.static-seed-namespace/1","descriptorBase64":null}')
+        {Get-StaticSeedPublicationInput -Commit ('a'*40)} | Should Throw 'No exact static seed descriptor'
+        $script:seedGitFiles['deploy/static-seed-namespace.v1.json']=[Text.Encoding]::UTF8.GetBytes('{"schema":"minimodel.static-seed-namespace/1","descriptorBase64":"e30K"}')
+        {Get-StaticSeedPublicationInput -Commit ('a'*40)} | Should Throw 'canonical descriptor bytes'
+        Assert-MockCalled Invoke-VerifiedNode -Times 0 -Exactly -Scope It
+    }
+    It 'rejects unsafe metadata routes before reading them from Git' {
+        foreach($route in @('https://other.invalid/file','//other.invalid/file','/../outside','/file?query=1')){
+            $script:seedGitFiles['catalog/compositions.v1.json']=[Text.Encoding]::UTF8.GetBytes(('{"entries":[{"browser_admission":{"route":"'+$route+'"},"qualification":{"receipt_route":"/test-only/qualification.json"}}]}'))
+            {Get-StaticSeedPublicationInput -Commit ('a'*40)} | Should Throw
+        }
+        Assert-MockCalled Invoke-VerifiedNode -Times 0 -Exactly -Scope It
+    }
+    It 'preserves actual validator failure and rejects changed result shape or consumed identity' {
+        foreach($mode in @('exit','stderr','shape','bytes')){
+            $script:seedProcessMode=$mode
+            {Get-StaticSeedPublicationInput -Commit ('a'*40)} | Should Throw
         }
     }
 }

@@ -118,8 +118,23 @@ does not authorize an automatic retry or deletion. Source handles belong to the
 caller; transport handles are closed. Existing website file/total byte budgets
 are unchanged. These primitives do not yet enable a seed publication entrypoint.
 
-The next checkpoint must wire the registry, immutable metadata and source-file
-admission, complete staged transaction and HTTPS readback into that entrypoint.
+The publisher's metadata reader now binds the registry, catalog, feed, admission
+and qualification receipt to one exact Git commit. The real seed validator runs
+through the existing bounded Node process boundary with pinned read leases for
+its full canonical dependency closure. The returned metadata hashes must match
+the exact input bytes. The still-empty registry fails before payload or account
+access. Tests distinguish this plumbing from the validator's semantic tests.
+
+`Open-StaticSeedSourceSet` admits only an absolute directory in
+`D:\LLMs\TinyRustLM`, rejects reparse ancestry, opens the six fixed names with
+read access and read sharing only, and verifies all lengths and hashes while
+retaining those same handles. Any failure closes the handles already opened.
+Transport must use the returned handles, then explicitly close the set; the
+reader never creates copies or deletes payloads. Its tests use in-memory streams
+and mocked file opens, so they do not claim a real model was read or qualified.
+
+The next checkpoint must wire these admission layers, the complete staged
+transaction and HTTPS readback into the explicit seed entrypoint.
 Absent-or-complete seed admission must fail on partial uploads or unknown leaves.
 A subsequent search located the canonical receipt implementation in TinyRust's
 `app/catalog-admission-loader.js`, outside the earlier converter/runtime search.

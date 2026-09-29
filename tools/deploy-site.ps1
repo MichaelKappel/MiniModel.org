@@ -29,14 +29,17 @@ function Test-BootstrapPathHasReparsePoint {
     return $false
 }
 
-# Execute only the reviewed gate or manifest tool with pinned, read-leased files and bounded pipes.
+# Execute reviewed tools with their pinned dependency closure, retained read leases and bounded pipes.
 function Invoke-VerifiedNode {
     param(
-        [Parameter(Mandatory)][ValidateSet('source-authority','manifest')][string]$Tool,
+        [Parameter(Mandatory)][ValidateSet('source-authority','manifest','seed-admission')][string]$Tool,
         [AllowEmptyCollection()][string[]]$Arguments = @(),
+        [AllowNull()][AllowEmptyCollection()][byte[]]$InputBytes,
         [ValidateRange(1,120000)][int]$TimeoutMilliseconds = 120000
     )
 
+    $dependencyIdentities = @()
+    if ($Tool -cne 'seed-admission' -and $null -ne $InputBytes) { throw 'This verified tool does not accept stdin bytes.' }
     if ($Tool -ceq 'source-authority') {
         if (@($Arguments | Where-Object { $_ -cnotin @('--require-clean','--require-remote-exact') }).Count -gt 0 -or
             @($Arguments | Select-Object -Unique).Count -ne $Arguments.Count) { throw 'Invalid source-authority arguments.' }
@@ -45,13 +48,30 @@ function Invoke-VerifiedNode {
         $toolSha256 = 'e8867b01d00399f319852449ff80c249edab30a8bcee4c09fd3789300f65aaf7'
         $maximumOutput = 4096
     }
-    else {
+    elseif ($Tool -ceq 'manifest') {
         if ($Arguments.Count -lt 1 -or $Arguments.Count -gt 2 -or $Arguments[0].Length -ne 40 -or $Arguments[0] -cnotmatch '^[0-9a-f]{40}$' -or
             ($Arguments.Count -eq 2 -and $Arguments[1] -cne '--verify')) { throw 'Invalid manifest arguments.' }
         $toolPath = Join-Path $repositoryRoot 'tools\build-site-deployment-manifest.js'
         $toolBytes = 17615
         $toolSha256 = 'bd9276bc4a1296db550b7fb6511a6d2ba257b481b08d212c1f85724a3015e305'
         $maximumOutput = 2097152
+    }
+    else {
+        if ($Arguments.Count -ne 0 -or $null -eq $InputBytes -or $InputBytes.Length -lt 1 -or $InputBytes.Length -gt 3145728) {
+            throw 'Invalid seed-admission input.'
+        }
+        $toolPath = Join-Path $repositoryRoot 'tools\admit-static-seed-publication.js'
+        $toolBytes = 7611
+        $toolSha256 = '88abfd7e0b0f3633cc121e7cfb3c35a94b7da1e9d889f1f159c610362918035c'
+        $maximumOutput = 262144
+        $dependencyIdentities = @(
+            @{Path=(Join-Path $repositoryRoot 'tools\build-static-seed-plan.js');Bytes=7934;Sha256='47821c9a826be9f0cf0ee0f44ec6aaf4fe24863dc912dc1a5f6a0ac08f47048d'},
+            @{Path=(Join-Path $repositoryRoot 'catalog.js');Bytes=52668;Sha256='353a9a986931dfbee8306185f3254f9b8e12202a38cf20ea7f61ccdc8f6fe549'},
+            @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\minimodel-catalog-v1.js');Bytes=76134;Sha256='1ac264b1e347c61bd2e8bee1b878978cdf3e7077e60748305ef7bb65664b01fa'},
+            @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\browser-model-admission.js');Bytes=14858;Sha256='87cdc059e71435f1572b3ad03fcce17701d5b73e83c3a6172e078a3349e5b683'},
+            @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\catalog-admission-loader.js');Bytes=38187;Sha256='623bb655aacdb075ea575193a64ef91469c6eda545e54b1dd4718fcf22493951'},
+            @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\operation-lifetime.js');Bytes=2292;Sha256='4a9d907a3c62b679f896d859e843124bf4252e6d2be0f8aacc7e754113a9f570'}
+        )
     }
     if (-not [IO.Path]::IsPathRooted($NodeExecutablePath)) { throw 'Node executable path must be absolute.' }
     $nodePath = [IO.Path]::GetFullPath($NodeExecutablePath)
@@ -62,10 +82,10 @@ function Invoke-VerifiedNode {
     $output.SetLength(0); $errors.SetLength(0)
     $started = $false
     try {
-        foreach ($identity in @(
+        foreach ($identity in (@(
             @{Path=$nodePath;Bytes=91380224;Sha256='63c259c81e5d472b5f11c8d506070130cb04a1ecf84b80377a34ed6ec9048088'},
             @{Path=$toolPath;Bytes=$toolBytes;Sha256=$toolSha256}
-        )) {
+        ) + $dependencyIdentities)) {
             if (Test-BootstrapPathHasReparsePoint -Path $identity.Path) { throw 'Verified Node input contains a reparse point.' }
             $file = Get-Item -LiteralPath $identity.Path -Force
             if ($file -isnot [IO.FileInfo] -or $file.Length -ne $identity.Bytes) { throw 'Verified Node file identity drifted.' }
@@ -83,6 +103,7 @@ function Invoke-VerifiedNode {
         $start.CreateNoWindow=$true
         $start.RedirectStandardOutput=$true
         $start.RedirectStandardError=$true
+        $start.RedirectStandardInput=($null -ne $InputBytes)
         # Arguments are fixed canonical paths, exact object IDs and admitted literal flags, never shell code.
         $start.Arguments=(@($toolPath)+@($Arguments) | ForEach-Object { '"'+$_+'"' }) -join ' '
         foreach ($name in @($start.EnvironmentVariables.Keys)) {
@@ -94,7 +115,14 @@ function Invoke-VerifiedNode {
         $watch=[Diagnostics.Stopwatch]::StartNew()
         $stdoutTask=$process.StandardOutput.BaseStream.CopyToAsync($output)
         $stderrTask=$process.StandardError.BaseStream.CopyToAsync($errors)
-        if (-not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdoutTask,$stderrTask),$TimeoutMilliseconds) -or
+        if ($null -ne $InputBytes) {
+            $stdinTask=$process.StandardInput.BaseStream.WriteAsync($InputBytes,0,$InputBytes.Length)
+            if (-not $stdinTask.Wait([Math]::Max(0,$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds))) {
+                throw 'Verified Node exceeded its stdin deadline.'
+            }
+            $process.StandardInput.Close()
+        }
+        if (-not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdoutTask,$stderrTask),[Math]::Max(0,$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds)) -or
             -not $process.WaitForExit([Math]::Max(0,$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds))) {
             throw 'Verified Node exceeded its deadline.'
         }
@@ -684,6 +712,56 @@ function Send-RemoteFile {
         }
         $offset = $intendedSize
     }
+}
+
+# Read exact committed public metadata and invoke the canonical browser qualification/admission readers.
+function Get-StaticSeedPublicationInput {
+    param([Parameter(Mandatory)][string]$Commit)
+    $registryBytes=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $Commit -RelativePath 'deploy/static-seed-namespace.v1.json' -MaximumBytes 16384
+    $utf8=[Text.UTF8Encoding]::new($false,$true)
+    $registry=$utf8.GetString($registryBytes)|ConvertFrom-Json
+    if (@($registry.PSObject.Properties.Name).Count -ne 2 -or $registry.schema -cne 'minimodel.static-seed-namespace/1' -or
+        $registry.descriptorBase64 -isnot [string] -or $registry.descriptorBase64.Length -lt 1 -or $registry.descriptorBase64.Length -gt 10924) {
+        throw 'No exact static seed descriptor is registered for publication.'
+    }
+    $registryCanonical=$utf8.GetBytes((([ordered]@{schema=$registry.schema;descriptorBase64=$registry.descriptorBase64}|ConvertTo-Json -Compress)+"`n"))
+    $descriptor=[Convert]::FromBase64String($registry.descriptorBase64)
+    if ($descriptor.Length -gt 8192 -or [Convert]::ToBase64String($descriptor) -cne $registry.descriptorBase64 -or
+        $registryBytes.Length -ne $registryCanonical.Length -or
+        (Get-CustodyByteSha256 -Bytes $registryBytes) -cne (Get-CustodyByteSha256 -Bytes $registryCanonical)) {
+        throw 'Static seed registry does not contain canonical descriptor bytes.'
+    }
+    $catalogBytes=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $Commit -RelativePath 'catalog/compositions.v1.json' -MaximumBytes 1048576
+    $peerBytes=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $Commit -RelativePath 'catalog/peer-announcements.v1.json' -MaximumBytes 1048576
+    $catalog=$utf8.GetString($catalogBytes)|ConvertFrom-Json
+    if (@($catalog.entries).Count -ne 1) { throw 'Static seed publication requires one current catalog entry.' }
+    $entry=$catalog.entries[0]
+    $routes=[ordered]@{admission=[string]$entry.browser_admission.route;qualificationReceipt=[string]$entry.qualification.receipt_route}
+    $inputs=[ordered]@{descriptor=$descriptor;catalog=$catalogBytes;peerFeed=$peerBytes}
+    foreach($name in $routes.Keys) {
+        $route=$routes[$name]
+        if (-not $route.StartsWith('/') -or $route.StartsWith('//')) { throw 'Static seed metadata route is not local.' }
+        $relative=Assert-RelativePath -Path $route.Substring(1)
+        $maximum=if($name -ceq 'admission'){65536}else{131072}
+        $inputs[$name]=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $Commit -RelativePath $relative -MaximumBytes $maximum
+    }
+    $envelope=[ordered]@{}
+    foreach($name in $inputs.Keys){$envelope[$name]=[Convert]::ToBase64String($inputs[$name])}
+    $inputBytes=$utf8.GetBytes((($envelope|ConvertTo-Json -Compress)+"`n"))
+    $result=Invoke-VerifiedNode -Tool seed-admission -InputBytes $inputBytes
+    if ($result.ExitCode -ne 0 -or $result.Stderr.Length -ne 0) { throw 'Canonical static seed qualification and metadata admission failed.' }
+    $admitted=$result.Stdout|ConvertFrom-Json
+    if ($admitted.schema -cne 'minimodel.qualified-static-seed-plan/1' -or
+        $admitted.status -cne 'metadata-admitted-payload-and-host-unverified' -or $admitted.publicationAllowed -ne $false) {
+        throw 'Static seed metadata admission returned an unsupported result.'
+    }
+    foreach($name in $inputs.Keys) {
+        if ($admitted.metadata.$name.bytes -ne $inputs[$name].Length -or
+            $admitted.metadata.$name.sha256 -cne (Get-CustodyByteSha256 -Bytes $inputs[$name])) {
+            throw 'Static seed metadata admission consumed different bytes.'
+        }
+    }
+    return [pscustomobject]@{Commit=$Commit;RegistrySha256=(Get-CustodyByteSha256 -Bytes $registryBytes);Inputs=$inputs;Admission=$admitted}
 }
 
 # Resolve only one of the seven admitted immutable members or its current operation's exact stage.

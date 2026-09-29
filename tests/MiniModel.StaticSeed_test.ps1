@@ -56,6 +56,76 @@ Describe 'Bounded static seed stream identity' {
     }
 }
 
+InModuleScope MiniModel.StaticSeed {
+    Describe 'Canonical retained seed source handles without filesystem payloads' {
+        BeforeEach {
+            $script:sourceBodies=[byte[]](1,2,3)
+            $sha=[Security.Cryptography.SHA256]::Create()
+            try {$digest=([BitConverter]::ToString($sha.ComputeHash($script:sourceBodies))).Replace('-','').ToLowerInvariant()}
+            finally {$sha.Dispose()}
+            $script:sourceMembers=@('model.slm2','tokenizer.tokenizer2','template.template2','sampling.sampling2','prompt.prompt2','composition.acg2')|ForEach-Object {[pscustomobject]@{name=$_;bytes=3;sha256=$digest}}
+            $script:openedSources=[Collections.Generic.List[IO.Stream]]::new()
+            $script:openedPaths=[Collections.Generic.List[string]]::new()
+            $script:failSourceIndex=-1
+            Mock Assert-StaticSeedPlainPath {}
+            Mock Open-StaticSeedSourceFile {
+                param($Path)
+                if($script:openedSources.Count -eq $script:failSourceIndex){throw 'Synthetic canonical file open failure.'}
+                $stream=[IO.MemoryStream]::new($script:sourceBodies,$false)
+                $script:openedSources.Add($stream);$script:openedPaths.Add($Path)
+                return $stream
+            }
+        }
+        AfterEach {foreach($stream in $script:openedSources){$stream.Dispose()}}
+        It 'hashes all six unchanged handles, rewinds them and releases only on caller close' {
+            $source=Open-StaticSeedSourceSet -Directory 'D:\LLMs\TinyRustLM\fixture-only' -Members $script:sourceMembers
+            $source.Members.Count | Should Be 6
+            for($index=0;$index -lt 6;$index++){
+                $member=$source.Members[$index]
+                $member.Name | Should Be $script:sourceMembers[$index].name
+                [object]::ReferenceEquals($member.Stream,$script:openedSources[$index]) | Should Be $true
+                $member.Stream.CanRead | Should Be $true
+                $member.Stream.Position | Should Be 0
+                $script:openedPaths[$index] | Should Be ('D:\LLMs\TinyRustLM\fixture-only\'+$member.Name)
+            }
+            Close-StaticSeedSourceSet -SourceSet $source
+            foreach($stream in $script:openedSources){$stream.CanRead | Should Be $false}
+        }
+        It 'rejects alternate stores, relative paths and unknown member names before opening anything' {
+            foreach($directory in @('fixture','E:\Temp\fixture','D:\LLMs\TinyRustLM-other\fixture','X:\LLMS\fixture','D:\LLMs\TinyRustLM\fixture:stream')){
+                {Open-StaticSeedSourceSet -Directory $directory -Members $script:sourceMembers} | Should Throw
+            }
+            $script:sourceMembers[1].name='../tokenizer.tokenizer2'
+            {Open-StaticSeedSourceSet -Directory 'D:\LLMs\TinyRustLM\fixture-only' -Members $script:sourceMembers} | Should Throw 'member identity'
+            Assert-MockCalled Open-StaticSeedSourceFile -Times 0 -Exactly -Scope It
+        }
+        It 'closes already opened handles on source-open, length or hash failure' {
+            $script:failSourceIndex=3
+            {Open-StaticSeedSourceSet -Directory 'D:\LLMs\TinyRustLM\fixture-only' -Members $script:sourceMembers} | Should Throw 'file open failure'
+            $script:openedSources.Count | Should Be 3
+            foreach($stream in $script:openedSources){$stream.CanRead | Should Be $false}
+            $script:openedSources.Clear();$script:failSourceIndex=-1
+            $script:sourceMembers[0].bytes=4
+            {Open-StaticSeedSourceSet -Directory 'D:\LLMs\TinyRustLM\fixture-only' -Members $script:sourceMembers} | Should Throw 'different length'
+            $script:openedSources[0].CanRead | Should Be $false
+            $script:openedSources.Clear();$script:sourceMembers[0].bytes=3;$script:sourceMembers[2].sha256='a'*64
+            {Open-StaticSeedSourceSet -Directory 'D:\LLMs\TinyRustLM\fixture-only' -Members $script:sourceMembers} | Should Throw 'hash differs'
+            $script:openedSources.Count | Should Be 3
+            foreach($stream in $script:openedSources){$stream.CanRead | Should Be $false}
+        }
+        It 'rejects incomplete closures and invalid numerical or digest identities before source probing' {
+            {Open-StaticSeedSourceSet -Directory 'D:\LLMs\TinyRustLM\fixture-only' -Members @($script:sourceMembers[0])} | Should Throw 'exactly six'
+            foreach($length in @([int64]0,[int64]68719476737)){
+                $script:sourceMembers[0].bytes=$length
+                {Open-StaticSeedSourceSet -Directory 'D:\LLMs\TinyRustLM\fixture-only' -Members $script:sourceMembers} | Should Throw 'member identity'
+            }
+            $script:sourceMembers[0].bytes=3;$script:sourceMembers[0].sha256=('a'*64)+"`n"
+            {Open-StaticSeedSourceSet -Directory 'D:\LLMs\TinyRustLM\fixture-only' -Members $script:sourceMembers} | Should Throw 'member identity'
+            Assert-MockCalled Assert-StaticSeedPlainPath -Times 0 -Exactly -Scope It
+        }
+    }
+}
+
 Describe 'Exact static seed remote namespace' {
     BeforeEach {
         $directory='tinyrustlm/direct-composition/v1/compositions/sha256:'+('a'*64)+'/members'

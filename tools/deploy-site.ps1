@@ -527,7 +527,7 @@ function Get-RemoteParentAndLeaf {
 }
 
 function Test-ExactListedLeaf {
-    param([Parameter(Mandatory)][string[]]$Entries, [Parameter(Mandatory)][string]$Leaf)
+    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Entries, [Parameter(Mandatory)][string]$Leaf)
 
     $exact = @($Entries | Where-Object { [string]$_ -ceq $Leaf })
     $aliases = @($Entries | Where-Object {

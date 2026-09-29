@@ -236,6 +236,18 @@ Describe 'Bounded actual NLST ingress' {
     }
 }
 
+Describe 'Empty remote directory observation' {
+    It 'proves a new lease owner absent using two empty directory observations without SIZE' {
+        Mock Get-RemoteDirectoryEntries { return @() }
+        Mock Get-RemoteSize { throw 'SIZE is forbidden for an unlisted file.' }
+        $observation=Get-RemoteFileObservation -LogicalPath '.minimodel-deployment-lease.v1/owner-fixture.json'
+        $observation.State | Should Be 'absent'
+        ($null -eq $observation.Size) | Should Be $true
+        Assert-MockCalled Get-RemoteDirectoryEntries -Times 2 -Exactly -Scope It -ParameterFilter {$LogicalPath -ceq '.minimodel-deployment-lease.v1'}
+        Assert-MockCalled Get-RemoteSize -Times 0 -Exactly -Scope It
+    }
+}
+
 Describe 'Actual FTP request URI directory semantics without transport' {
     BeforeEach {
         $script:sourceAuthorityAdmitted=$true

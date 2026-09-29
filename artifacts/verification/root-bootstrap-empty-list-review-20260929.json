@@ -1,0 +1,23 @@
+{
+  "schema": "minimodel.implementation-review.v1",
+  "recorded_utc": "2026-09-29T22:23:46Z",
+  "status": "implemented-and-locally-tested-no-publication",
+  "question": "Can the actual owner-file observation admit an empty newly created lease directory?",
+  "finding": "The mandatory Entries string[] parameter rejected an empty array before two LIST observations could establish absence. This would interrupt the lease workflow after directory creation. It was found and reproduced locally before any new live bootstrap attempt.",
+  "decision": "Add AllowEmptyCollection to Test-ExactListedLeaf. Preserve exact leaf/case-alias checks and require the existing two observations; an unlisted file must never trigger SIZE.",
+  "files": [
+    {"path": "tools/deploy-site.ps1", "sha256": "cf548d3830afd0d2df97ff796d48659298945ca51e3ce111030b7b1aee6373d4"},
+    {"path": "tests/MiniModel.DeploymentCustody_test.ps1", "sha256": "d60917e9a07cd2a9685ab2faf8515c21fd9fd6126669d40373c19162102da385"}
+  ],
+  "validation": {
+    "initial": {"total": 4, "passed": 2, "failed": 2, "output": "f1578e", "interpretation": "One real empty-array binding failure and one test-isolation failure caused by a mock persisting across the same Pester Describe. The new observation case was isolated in its own Describe."},
+    "baseline": {"total": 1, "passed": 0, "failed": 1, "output": "2eeafe", "failure": "Cannot bind argument to parameter Entries because it is an empty array."},
+    "final": {"total": 58, "passed": 58, "failed": 0, "output": "eaea47", "command": "Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1') -PassThru -Quiet"},
+    "regression": "Calls actual Get-RemoteFileObservation with two empty directory results; requires absent/null-size, exactly two LIST calls to the lease directory and no SIZE call.",
+    "coverage": "Behavior of the changed parameter is directly exercised. No whole publisher line-coverage percentage is claimed for AST-imported functions.",
+    "diff_check": "passed"
+  },
+  "remote_writes": 0,
+  "limits": ["Previous failed bootstrap receipt remains unchanged.", "No live bootstrap retry was attempted.", "This test does not establish remote lease creation, write or rename capability."],
+  "reusable_lesson": "Treat a genuinely empty directory as a valid observation at the PowerShell parameter boundary; then apply the same absence and ambiguity rules as for nonempty listings."
+}

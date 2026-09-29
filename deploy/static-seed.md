@@ -65,10 +65,48 @@ actual host's module availability, override permissions or behavior.
 
 The existing site publisher still accepts only its reviewed 22-file web closure.
 This tool does not extend that closure or bypass its unbound transport identity,
-expired catalog or incomplete source-authority scan. A seed publication route
+expired catalog. Current registered-root source-authority admission has passed;
+that result does not establish host ownership or seed availability. A seed publication route
 must separately admit exact target ownership and hashes, stream verified bytes
 from the canonical model store, and verify remote readback before advertising
 availability. Existing source, site, seed and qualification records remain distinct.
+
+The September 29 seed core adds a deliberately empty
+`deploy/static-seed-namespace.v1.json`. Its compiler uses the existing descriptor
+parser and derives exactly six member paths plus the generated `.htaccess`.
+Registration means an exact path set is available for review; it does not mean
+the files exist, are qualified, or may be advertised. The custody module can
+validate that exact colon-bearing namespace while its normal website and local
+source path grammar remains unchanged. A complete expected directory tree
+rejects missing members and unknown entries. The existing website entrypoint
+does not yet load the registry or publish seeds.
+
+`MiniModel.StaticSeed.psm1` provides a 64 KiB streaming identity check. It can
+hash without a destination, or hash while copying into a caller-owned stream;
+short bodies, extra bytes and digest disagreement fail. It leaves stream
+lifetime and transport admission to the caller. A failed copy can already have
+written partial bytes, so a future publisher must use an exclusively owned,
+unadvertised transaction and promote only after all six members and configuration
+verify. This primitive does not read model paths or grant publication authority.
+
+Read-only FTPS observation on September 29 matched the homepage and both live
+catalog files to public HTTPS bytes and obtained identical repeated root lists.
+The root sentinel was absent. The listing includes structural `.`/`..` entries,
+which the existing publisher currently rejects, and six entries outside its web
+closure: `.ftpquota`, `workspace.uai`, `artifacts`, `examples`, and two dated web
+backup names. Their names alone do not authorize deletion. Keep provider state
+and unreviewed content untouched; inspect exact ownership and dependencies before
+any root cleanup. Full hashes and the target tuple are in
+`artifacts/verification/static-seed-core-review-20260929.json`.
+
+The next production checkpoint must wire the registry and streaming operation
+into the existing admitted transport and shared lease, handle structural listing
+entries without admitting arbitrary paths, and establish the exact sentinel.
+Absent-or-complete seed admission must fail on partial uploads or unknown leaves.
+No qualified receipt implementation was found in the inspected TinyRust runtime,
+converter contracts or tools; the catalog currently checks qualification metadata
+assertions. Bind the real reviewed evidence contract before enabling seed upload;
+do not manufacture a passing receipt or infer qualification from registration.
 
 The next host gate must establish all of the following against the actual server:
 

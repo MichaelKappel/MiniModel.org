@@ -82,7 +82,7 @@ test("exercises bounded input, transfer and rollback using canonical functions w
   try {
     const command = [
       "$ErrorActionPreference='Stop'",
-      "$result=Invoke-Pester -Script './tests/MiniModel.DeploymentCustody_test.ps1' -CodeCoverage './tools/MiniModel.DeploymentCustody.psm1' -PassThru -Quiet",
+      "$result=Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1') -CodeCoverage @('./tools/MiniModel.DeploymentCustody.psm1','./tools/MiniModel.StaticSeed.psm1') -PassThru -Quiet",
       "$coverage=$result.CodeCoverage",
       "$result.TestResult | Where-Object { -not $_.Passed } | Select-Object Name,FailureMessage | ConvertTo-Json -Compress | Write-Output",
       "[pscustomobject]@{total=$result.TotalCount;passed=$result.PassedCount;failed=$result.FailedCount;hit=$coverage.NumberOfCommandsExecuted;analyzed=$coverage.NumberOfCommandsAnalyzed} | ConvertTo-Json -Compress | Write-Output",

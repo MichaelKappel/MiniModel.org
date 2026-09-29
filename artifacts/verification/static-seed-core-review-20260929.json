@@ -1,0 +1,112 @@
+{
+  "schema": "minimodel.static_seed_core_review.v1",
+  "status": "tested-preparation-and-streaming-primitives-not-a-seed-publication",
+  "source_admission": {
+    "root_reported_tinyrustlm_commit": "17baa40",
+    "scope": "registered governed roots; clean admission preceded read-only target discovery",
+    "limitation": "Other agents were subsequently authorized to edit TinyRustLM; no later all-tree-clean claim is made."
+  },
+  "target_observation": {
+    "observed_utc": "2026-09-29T20:36:43.1853049Z",
+    "read_only": true,
+    "credential_module_bytes": 6525,
+    "credential_module_sha256": "26a07d33724c8bf7e9f02c3dc4e6fe8f812167c0b1db5d9d736c989da88e17a7",
+    "profile": "MiniModel.org",
+    "protocol": "ftps-explicit",
+    "host": "server41.shared.spaceship.host",
+    "port": 21,
+    "username_sha256": "efbabe420071a41d5b24570f14e8e9b5a72db8cde22dcb2437d03dc6baeba3b1",
+    "requested_remote_root": "/",
+    "tls_certificate_validation": "platform validation unchanged; no bypass installed",
+    "repeated_listing_bytes_equal": true,
+    "root_entries": [
+      ".ftpquota", ".htaccess", ".well-known", "artifacts", "catalog", "catalog.js", "docs", "examples",
+      "index.html", "index.html.pre-catalog-home-20260713T174046Z.bak", "LICENSE.txt", "llms.txt",
+      "llms-full.txt", "ROADMAP.md", "robots.txt", "sitemap.xml", "styles.css",
+      "styles.css.pre-catalog-home-20260713T174046Z.bak", "updates", "workspace.uai"
+    ],
+    "structural_listing_entries": [".", ".."],
+    "files": [
+      {"path":"index.html","ftp_bytes":8284,"ftp_sha256":"cfeb89175271f321e981fcc3c441c1d6cdfe18e9f78076aca7f10946fc0cb89f","public_bytes":8284,"public_sha256":"cfeb89175271f321e981fcc3c441c1d6cdfe18e9f78076aca7f10946fc0cb89f","exact_match":true},
+      {"path":"catalog/compositions.v1.json","ftp_bytes":422,"ftp_sha256":"700b510d068934627bb0a308da36d7672c1a4e296c7d984ea33199b903692a42","public_bytes":422,"public_sha256":"700b510d068934627bb0a308da36d7672c1a4e296c7d984ea33199b903692a42","exact_match":true},
+      {"path":"catalog/peer-announcements.v1.json","ftp_bytes":263,"ftp_sha256":"10bea93b9613f9bbc7ffff0d03d22dbdeeb28abd276dcf6609dd929fdd2643a4","public_bytes":263,"public_sha256":"10bea93b9613f9bbc7ffff0d03d22dbdeeb28abd276dcf6609dd929fdd2643a4","exact_match":true}
+    ],
+    "sentinel": {"path":".minimodel-publication-root.v1.json","state":"absent-in-identical-repeated-root-listings","bytes_read":false},
+    "writes_performed": false,
+    "evidence_output": "70785f"
+  },
+  "root_inventory_disposition": {
+    "expected_web_roots": [".htaccess",".well-known","catalog","catalog.js","docs","index.html","LICENSE.txt","llms-full.txt","llms.txt","ROADMAP.md","robots.txt","sitemap.xml","styles.css","updates"],
+    "preserve_unowned_host_state": [".ftpquota"],
+    "review_exact_ownership_and_contents_before_any_change": ["artifacts","examples","workspace.uai","index.html.pre-catalog-home-20260713T174046Z.bak","styles.css.pre-catalog-home-20260713T174046Z.bak"],
+    "limitation": "Only root names were inspected. Names do not prove provider ownership, safe deletion, dependency absence or public access. No recursive remote inventory or private content read was performed."
+  },
+  "prepared_target_binding_not_applied": {
+    "status": "bound",
+    "host": "server41.shared.spaceship.host",
+    "port": 21,
+    "username_sha256": "efbabe420071a41d5b24570f14e8e9b5a72db8cde22dcb2437d03dc6baeba3b1",
+    "remote_root": ".",
+    "root_equivalence": "The publisher maps remote_root dot and empty logical path to the observed FTP account root slash.",
+    "limitation": "This proposed transport tuple does not establish a sentinel or admit the current remote overlay. Existing user publication authorization is retained; no new user approval is invented."
+  },
+  "first_sentinel_procedure_not_executed": [
+    "Require committed tested source, fresh registered-root clean/remote-exact admission, the hash-bound shared credential module and exact approved transport tuple.",
+    "Repeat bounded root listing and FTP/public identities; distinguish structural dot entries from files. Preserve .ftpquota and all unreviewed overlays.",
+    "Bind an operation record to the exact absent sentinel leaf and unchanged canonical 165-byte sentinel with SHA256 b11cd954128332e63a44e32be5523ccbb3b1b005cfd23f4d03569f37ef97d1dd.",
+    "Implement and test a bounded bootstrap operation that obtains the existing exclusive lease without requiring the not-yet-created sentinel; the exact target correspondence and operation identity are the bootstrap premise.",
+    "Upload only those reviewed sentinel bytes to an absent operation-owned staging leaf, verify readback, confirm final sentinel absence again, promote, verify final bytes and release only the owned lease.",
+    "If any observation, upload or promotion is ambiguous, preserve the exact operation evidence and ownership rather than overwrite another target or remove unrelated files. Never report website or seed publication from sentinel success alone."
+  ],
+  "implemented": [
+    "Canonical empty descriptor registry and bounded compiler using the existing sole static seed descriptor parser.",
+    "Exact optional six-member-plus-htaccess namespace support in the custody path and directory-tree helpers; default website grammar and byte limits unchanged.",
+    "64KiB streaming hash/copy primitive with exact int64 length, overflow/truncation/hash rejection and caller-owned stream lifetime.",
+    "Regression tests for namespace closure and synthetic in-memory streams."
+  ],
+  "validation": {
+    "node_command": "node --test tests/deployment-custody.test.js tests/build-static-seed-namespace_test.js tests/build-static-seed-plan_test.js",
+    "node_passed": 69,
+    "node_failed": 0,
+    "node_skipped": 0,
+    "pester_passed": 40,
+    "pester_failed": 0,
+    "aggregate_pester_commands_hit": 356,
+    "aggregate_pester_commands_analyzed": 620,
+    "changed_function_statement_line_coverage": [
+      {"function":"Copy-StaticSeedVerifiedStream","hit":22,"analyzed":22},
+      {"function":"Assert-CustodyRemotePath","hit":20,"analyzed":20}
+    ],
+    "namespace_compiler_in_memory_v8_ranges": {"function":"buildStaticSeedNamespace","executed":24,"total":24},
+    "coverage_limit": "Changed-function statement-line and V8 range observations are not whole-file or branch coverage. CLI success/argument failure behavior is tested; no full CLI coverage percentage is claimed.",
+    "outputs": ["d91e1d","aa1a2d","22c206","162cd9","9b2dca","12df8e"],
+    "owned_test_output": "Existing canonical artifacts/tests operation was removed by its established harness; no remaining entries were observed."
+  },
+  "retained_failed_stages": [
+    "First read-only probe rejected the server's structural dot listing entries; it performed no writes.",
+    "Focused NLST diagnostic returned the root listing, then cleanup attempted to reset submitted FtpWebRequest credentials and failed. No credential values were printed and no remote writes occurred.",
+    "An intermediate read-only probe's running-cell result was not retained by the orchestration wrapper. No success is claimed from that attempt; the final bounded probe has a complete captured result.",
+    "Initial expanded Pester run passed39/40; the remaining test expected lowercase unsafe while the existing exception begins Unsafe. Only that assertion was corrected, then the final40/40 and69/69 suites passed.",
+    "A coverage-only command containing recursive cleanup of a newly proposed owned scratch directory was automatically rejected before execution, with only blocked-by-policy given as the reason. No directory was created and the cleanup was not retried. Coverage was subsequently measured wholly in memory, without creating or deleting filesystem output."
+  ],
+  "remaining_production_work": [
+    "Wire the checked-in registry and exact generated path set into the live publisher, preserving absent-or-complete closure and the website limits.",
+    "Treat literal dot listing records as structural only; retain strict entry bounds, alias detection and registered colon-path admission.",
+    "Bind and implement tested first-sentinel bootstrap and classify exact remote overlays; no broad cleanup or provider-state deletion.",
+    "Implement exclusive-lease streaming staging/readback/recovery and actual public HTTP/header/browser checks.",
+    "Bind a real reviewed qualification receipt contract and six exact members before any seed upload; the inspected catalog validates metadata assertions, not a demonstrated complete receipt implementation.",
+    "Refresh and publish the catalog/announcement only after actual qualification, seed verification and signed metadata admission."
+  ],
+  "claims_not_made": ["qualified default","real model execution","live seed","sentinel installation","deployment","changed website presentation","whole-server ownership","new permission requirement"],
+  "files": [
+    {"path":".gitattributes","bytes":2579,"sha256":"6d544b44cc7ea7e18279c99a6189ef6c2d5d82bf2bece4e035619c0d935fbac4"},
+    {"path":"deploy/static-seed.md","bytes":11274,"sha256":"47bf9315965c83676e84c09466e5d526cc76c074cc263623d727931fdb2676f0"},
+    {"path":"deploy/static-seed-namespace.v1.json","bytes":71,"sha256":"ad3e7687c5a37eb9091d8b6979fbaecf47d33b1cc2835565ee96a97bb12926fc"},
+    {"path":"tools/build-static-seed-namespace.js","bytes":3170,"sha256":"c1fafae759c5517f4b3368eaa0373a4eeb346505b443513ade3c970ef5ef7390"},
+    {"path":"tools/MiniModel.StaticSeed.psm1","bytes":2069,"sha256":"cae7b00357e8cc7ab00b98efdad5e916bbfc8ee371f4620656fea75a3c0b1669"},
+    {"path":"tools/MiniModel.DeploymentCustody.psm1","bytes":49367,"sha256":"ea5ec076c9ee706702f9b1467e7b3fb699d4c33ddf182dc6988b4ea6ec0c3dbf"},
+    {"path":"tests/build-static-seed-namespace_test.js","bytes":4350,"sha256":"7a15b546fbd55829c194dd0f69c680b132adee04104e5430f39b10a0fad8931f"},
+    {"path":"tests/MiniModel.StaticSeed_test.ps1","bytes":6346,"sha256":"0f315b136fcc301a21e6195f4ca9bc33146475118cb6fb9bec8b6c28c23ce037"},
+    {"path":"tests/deployment-custody.test.js","bytes":17476,"sha256":"3aaa5e614b6857c8255acb1a4152549a87ddcc795f989664392c8aedd7dbfade"}
+  ]
+}

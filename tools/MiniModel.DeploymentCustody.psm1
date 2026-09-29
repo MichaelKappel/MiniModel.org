@@ -562,13 +562,55 @@ function Assert-CustodyPublishedReleasePair {
     }
 }
 
+# A colon is admitted only for this one descriptor-derived six-member namespace.
+# This does not expand the local-source or general website path grammar.
+function Assert-CustodyRemotePath {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [AllowEmptyCollection()][string[]]$SeedFilePaths = @(),
+        [switch]$AllowAncestor
+    )
+
+    $allowed = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    if ($SeedFilePaths.Count -ne 0) {
+        if ($SeedFilePaths.Count -ne 7 -or
+            $SeedFilePaths[0] -cnotmatch '^(tinyrustlm/direct-composition/v1/compositions/sha256:[0-9a-f]{64}/members)/model\.slm2$') {
+            throw 'Registered static seed namespace is invalid.'
+        }
+        $directory = $Matches[1]
+        $names = @('model.slm2','tokenizer.tokenizer2','template.template2','sampling.sampling2','prompt.prompt2','composition.acg2','.htaccess')
+        for ($index = 0; $index -lt $names.Count; $index++) {
+            if ($SeedFilePaths[$index] -cne "$directory/$($names[$index])") {
+                throw 'Registered static seed namespace is not the exact member closure.'
+            }
+            $null = $allowed.Add($SeedFilePaths[$index])
+        }
+        if ($AllowAncestor) {
+            $ancestor = $directory
+            while ($ancestor.Contains('/')) {
+                $null = $allowed.Add($ancestor)
+                $ancestor = $ancestor.Substring(0,$ancestor.LastIndexOf('/'))
+            }
+            $null = $allowed.Add($ancestor)
+        }
+    }
+    if ($Path.Contains(':')) {
+        if (-not $allowed.Contains($Path)) { throw 'Remote colon path is outside the registered static seed namespace.' }
+        return $Path
+    }
+    return Assert-CustodyRelativePath -Path $Path
+}
+
 function Get-CustodyExpectedDirectoryTree {
-    param([Parameter(Mandatory)][string[]]$FilePaths)
+    param(
+        [Parameter(Mandatory)][string[]]$FilePaths,
+        [AllowEmptyCollection()][string[]]$SeedFilePaths = @()
+    )
 
     $tree = @{}
     $tree[""] = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($filePathValue in $FilePaths) {
-        $filePath = Assert-CustodyRelativePath -Path ([string]$filePathValue)
+        $filePath = Assert-CustodyRemotePath -Path ([string]$filePathValue) -SeedFilePaths $SeedFilePaths
         $parts = $filePath -split "/"
         $parent = ""
         for ($index = 0; $index -lt $parts.Count; $index++) {
@@ -587,10 +629,11 @@ function Get-CustodyExpectedDirectoryTree {
 function Assert-CustodyRemoteDirectoryTree {
     param(
         [Parameter(Mandatory)][string[]]$ExpectedFilePaths,
-        [Parameter(Mandatory)][Collections.IDictionary]$ObservedTree
+        [Parameter(Mandatory)][Collections.IDictionary]$ObservedTree,
+        [AllowEmptyCollection()][string[]]$SeedFilePaths = @()
     )
 
-    $expectedTree = Get-CustodyExpectedDirectoryTree -FilePaths $ExpectedFilePaths
+    $expectedTree = Get-CustodyExpectedDirectoryTree -FilePaths $ExpectedFilePaths -SeedFilePaths $SeedFilePaths
     $expectedDirectories = @($expectedTree.Keys | Sort-Object -CaseSensitive)
     $observedDirectories = @($ObservedTree.Keys | ForEach-Object { [string]$_ } | Sort-Object -CaseSensitive)
     if ($expectedDirectories.Count -ne $observedDirectories.Count) {
@@ -900,6 +943,7 @@ Export-ModuleMember -Function @(
     "ConvertTo-CustodyPublishedArtifactBytes",
     "Assert-CustodyPublishedReleasePair",
     "Get-CustodyExpectedDirectoryTree",
+    "Assert-CustodyRemotePath",
     "Assert-CustodyRemoteDirectoryTree",
     "New-CustodyLeaseOwnerBytes",
     "Assert-CustodyLeaseOwnership",

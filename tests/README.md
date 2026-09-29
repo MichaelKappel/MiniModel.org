@@ -17,9 +17,12 @@ Git settings to make an observation pass.
 Manifest closure checks compare public worktree bytes with the exact local HEAD.
 Run them after committing the tested public change; dirty public bytes correctly
 fail admission. Pinned helper identities must follow a reviewed canonical change,
-including the manifest helper's dependent pin in the PowerShell publisher. The
-September 19 source-gate change updated only its canonical workspace-policy
-identity; MiniModel now binds that committed gate without changing its behavior.
+including the manifest helper's dependent pin in the PowerShell publisher.
+The September 29 binding follows TinyRustLM's committed verifier at `2b98d46`:
+both publisher and manifest builder require the same 144,521-byte SHA-256
+identity. The verifier checks the declared local, tracking and direct remote
+branch identities; incidental FETCH_HEAD contents are not authority. Changing
+these pins does not renew the expired catalog or authorize publication.
 
 The browser check uses installed Microsoft Edge and the existing playwright-core
 package under the canonical TinyRustLM.com/tinyrustlm/node_modules directory.

@@ -5,6 +5,17 @@ transition from the exact public 1.1.1 predecessor; it is not an overlay of a
 checkout, an ignored staging directory, or whatever happens to exist at an
 FTP login.
 
+On September 29, the publisher and manifest builder were rebound to the current
+committed ecosystem verifier, and the prepared manifest was regenerated against
+content commit `67f3e06`. Deployment custody passes 23 checks (including 27 actual
+PowerShell cases); the manifest builder passes 12 checks after its date fixture
+was aligned with the prepared authority. Initial failures and exact identities
+are in `artifacts/verification/publication-binding-review-20260929.json`.
+The actual publisher now reaches and rejects the expired catalog before public
+admission. No credentials were read and no public files were changed. The
+unbound transport, current FileZilla reader, real model qualification and seed
+delivery remain unfinished.
+
 The publisher requires all of the following before it can read credentials or
 mutate the authenticated target:
 

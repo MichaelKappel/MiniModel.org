@@ -12,9 +12,9 @@
     "version": "1.1.2",
     "release_id": "minimodel.org@1.1.2",
     "manifest_path": "deploy/site-deployment-manifest.v1.json",
-    "source_commit": "d30114cac9326be104d0c441151caf0224425e3d",
-    "source_tree": "a4b4bf77a637c7eb3101dab248c177e40978d29f",
-    "publication_date": "2026-09-13"
+    "source_commit": "67f3e06b7bc1b2098f8ab95198eacdafaec80f3e",
+    "source_tree": "8a324f1d50ad036f2d23cea74779561f487d4d15",
+    "publication_date": "2026-09-29"
   },
   "predecessor": {
     "version": "1.1.1",

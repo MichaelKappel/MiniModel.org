@@ -4,9 +4,9 @@
   "origin": "https://minimodel.org",
   "version": "1.1.2",
   "release_date": "2026-08-31",
-  "publication_date": "2026-09-13",
-  "source_commit": "d30114cac9326be104d0c441151caf0224425e3d",
-  "source_tree": "a4b4bf77a637c7eb3101dab248c177e40978d29f",
+  "publication_date": "2026-09-29",
+  "source_commit": "67f3e06b7bc1b2098f8ab95198eacdafaec80f3e",
+  "source_tree": "8a324f1d50ad036f2d23cea74779561f487d4d15",
   "transport_profile": "MiniModel.org",
   "materializations": [
     {
@@ -32,7 +32,7 @@
     {
       "path": ".well-known/site-release-history.json",
       "bytes": 3214,
-      "sha256": "6c2801a2a470ee500dddf948006324a85d258d8b16f8b0e7dd6089991fd7f72e",
+      "sha256": "7b6fd277e96c6f70a89be833e869b3bd06039d133b92af8203697aad74477ab2",
       "https_readback_path": "/.well-known/site-release-history.json"
     },
     {
@@ -43,8 +43,8 @@
     },
     {
       "path": "catalog.js",
-      "bytes": 46600,
-      "sha256": "1154872dcbfbce55f49be824e78a98dc876a85543eb0e0d587a6488d47721742",
+      "bytes": 52220,
+      "sha256": "a65fc580d1aa21d10649bec48ad361e3f8a0f00ff63c7368e1f5901bc0eb2311",
       "https_readback_path": "/catalog.js"
     },
     {
@@ -73,8 +73,8 @@
     },
     {
       "path": "docs/catalog-boundary.md",
-      "bytes": 9240,
-      "sha256": "a46ccc8f2814320b1979355798742e8dffee3e96d1b8e05b5bfc0444906cda00",
+      "bytes": 11017,
+      "sha256": "eced8ce1a710acbd5b51c5e1a31bfd01578386c6f3e54cdd11517629d7ff52b6",
       "https_readback_path": "/docs/catalog-boundary.md"
     },
     {
@@ -98,7 +98,7 @@
     {
       "path": "index.html",
       "bytes": 8357,
-      "sha256": "59b7a21eefc803218cd28e64dbe0340eacb6b10dc2403e0c40a20298ebe43828",
+      "sha256": "5dca0eaaad9857fe5f297f21c7fd46ff935c16d270505b64dbd4d4f7ada2046d",
       "https_readback_path": "/index.html"
     },
     {
@@ -152,7 +152,7 @@
     {
       "path": ".well-known/site-release.json",
       "bytes": 255,
-      "sha256": "1ead507c1c399af4cd4a3ff9d6340e4af3159b8267b95d679db2d04312327bb0",
+      "sha256": "149df001ab704d5bb9f7d65a289bfff7b0b73e92a5a6ff0b153314b12f23ec69",
       "https_readback_path": "/.well-known/site-release.json"
     }
   ],

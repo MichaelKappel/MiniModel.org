@@ -10,7 +10,9 @@ const builder = require("../tools/build-site-deployment-manifest.js");
 const root = path.resolve(__dirname, "..");
 const tool = path.join(root, "tools/build-site-deployment-manifest.js");
 const head = execFileSync("git", ["-c", `safe.directory=${root}`, "-C", root, "rev-parse", "HEAD"], { encoding: "utf8", timeout: 30000, windowsHide: true }).trim();
-const publicationDate = "2026-09-13";
+const publicationDate = JSON.parse(fs.readFileSync(
+  path.join(root, "deploy/publication-authority.v1.json"), "utf8"
+)).candidate.publication_date;
 const sha = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const blobId = (bytes) => crypto.createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
 const tree = (rows = builder.publicFiles.map((name) => `100644 blob ${"a".repeat(40)}\t${name}`)) => Buffer.from(rows.join("\0") + "\0");

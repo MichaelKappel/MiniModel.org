@@ -1,0 +1,85 @@
+{
+  "schema": "minimodel.publication_binding_review.v1",
+  "reviewedAtUtc": "2026-09-29T19:35:44.246Z",
+  "scope": "Repair stale canonical verifier bindings and prepared source manifest; no public deployment.",
+  "baseline": {
+    "test": "actual publisher checks both Node children",
+    "passed": 0,
+    "failed": 1,
+    "error": "Verified Node file identity drifted"
+  },
+  "intermediate": [
+    {
+      "passed": 31,
+      "failed": 4,
+      "reason": "Manifest builder also pinned obsolete verifier identity."
+    },
+    {
+      "passed": 34,
+      "failed": 1,
+      "reason": "Prepared manifest referred to old public catalog.js commit."
+    },
+    {
+      "passed": 34,
+      "failed": 1,
+      "reason": "Materialization test used a hardcoded publication date inconsistent with the refreshed authority."
+    }
+  ],
+  "final": {
+    "deploymentCustody": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "actualPowerShellPester": {
+      "passed": 27,
+      "failed": 0,
+      "coverageHitCommands": 241,
+      "coverageAnalyzedCommands": 562
+    },
+    "manifestBuilderAfterDateCorrection": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "expiredCatalogRejectedBeforePublicAdmission": true
+  },
+  "inputs": [
+    {
+      "path": "../TinyRustLM.com/tinyrustlm/tools/verify-single-source-authority.js",
+      "bytes": 144521,
+      "sha256": "e8867b01d00399f319852449ff80c249edab30a8bcee4c09fd3789300f65aaf7"
+    },
+    {
+      "path": "tools/build-site-deployment-manifest.js",
+      "bytes": 17615,
+      "sha256": "bd9276bc4a1296db550b7fb6511a6d2ba257b481b08d212c1f85724a3015e305"
+    },
+    {
+      "path": "tools/deploy-site.ps1",
+      "bytes": 79851,
+      "sha256": "e5c637b31db12c09ebe6d62afa0d046a31ebf9a7dbb4655053e7c10c6766b43e"
+    },
+    {
+      "path": "deploy/publication-authority.v1.json",
+      "bytes": 2845,
+      "sha256": "401c961dc650a19abb9164c26212b50b1723dbfa3d64a7d5d78049b74fb17f56"
+    },
+    {
+      "path": "deploy/site-deployment-manifest.v1.json",
+      "bytes": 6901,
+      "sha256": "c2c8dfd1006d62eb0f8ae787b5c1f8d0191ac884d22c46f7086ff925cedfd233"
+    }
+  ],
+  "preparedContentCommit": "67f3e06b7bc1b2098f8ab95198eacdafaec80f3e",
+  "limits": {
+    "transport": "unbound",
+    "credentialReader": "Existing FileZilla reader has not been adapted to the owner FTP export.",
+    "catalog": "Expired and empty; no authority renewed.",
+    "qualifiedDefault": false,
+    "liveSeed": false,
+    "credentialsRead": false,
+    "deploymentPerformed": false,
+    "publicBytesChanged": false
+  }
+}

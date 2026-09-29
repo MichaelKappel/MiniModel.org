@@ -11,7 +11,7 @@ const canonicalRoot = "E:\\Source\\Rust\\MiniModel.org";
 const manifestPath = path.join(repositoryRoot, "deploy/site-deployment-manifest.v1.json");
 const maxFileBytes = 16 * 1024 * 1024;
 const maxTotalBytes = 64 * 1024 * 1024;
-const gateSha256 = "c3308e10c7cf055767839528ea3605827c6f0c047a2c10d1dabe8907988c03e6";
+const gateSha256 = "e8867b01d00399f319852449ff80c249edab30a8bcee4c09fd3789300f65aaf7";
 const publicFiles = Object.freeze([
   ".htaccess", ".well-known/site-release-history.json", ".well-known/uaix-talisman.txt",
   "catalog.js", "catalog/.htaccess", "catalog/compositions.v1.json", "catalog/peer-announcements.v1.json",
@@ -104,7 +104,7 @@ function assertCanonicalRepository() {
     throw new Error("Publication repository top-level differs from its canonical path");
   }
   const gate = path.join(path.dirname(repositoryRoot), "TinyRustLM.com/tinyrustlm/tools/verify-single-source-authority.js");
-  if (sha256(readBoundedFile(gate, 141430)) !== gateSha256) throw new Error("Reviewed ecosystem source gate identity drifted");
+  if (sha256(readBoundedFile(gate, 144521)) !== gateSha256) throw new Error("Reviewed ecosystem source gate identity drifted");
   const verdict = require(gate).verifySingleSourceAuthority();
   if (verdict.verdict !== "pass" || verdict.canonicalLayoutAvailable !== true || verdict.localScanPerformed !== true ||
       verdict.coverageClass !== "registered-governed-roots-only") throw new Error("Ecosystem source authority was not proved");

@@ -1,0 +1,15 @@
+{
+  "schema": "minimodel.root-bootstrap.v1",
+  "observed_at_utc": "2026-09-29T20:36:43Z",
+  "root_entries": [
+    ".ftpquota", ".htaccess", ".well-known", "artifacts", "catalog", "catalog.js", "docs", "examples",
+    "index.html", "index.html.pre-catalog-home-20260713T174046Z.bak", "LICENSE.txt", "llms.txt",
+    "llms-full.txt", "ROADMAP.md", "robots.txt", "sitemap.xml", "styles.css",
+    "styles.css.pre-catalog-home-20260713T174046Z.bak", "updates", "workspace.uai"
+  ],
+  "public_matches": [
+    {"path":"index.html","bytes":8284,"sha256":"cfeb89175271f321e981fcc3c441c1d6cdfe18e9f78076aca7f10946fc0cb89f"},
+    {"path":"catalog/compositions.v1.json","bytes":422,"sha256":"700b510d068934627bb0a308da36d7672c1a4e296c7d984ea33199b903692a42"},
+    {"path":"catalog/peer-announcements.v1.json","bytes":263,"sha256":"10bea93b9613f9bbc7ffff0d03d22dbdeeb28abd276dcf6609dd929fdd2643a4"}
+  ]
+}

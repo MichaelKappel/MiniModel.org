@@ -11,10 +11,12 @@ content commit `67f3e06`. Deployment custody passes 23 checks (including 27 actu
 PowerShell cases); the manifest builder passes 12 checks after its date fixture
 was aligned with the prepared authority. Initial failures and exact identities
 are in `artifacts/verification/publication-binding-review-20260929.json`.
-The actual publisher now reaches and rejects the expired catalog before public
-admission. No credentials were read and no public files were changed. The
-unbound transport, real model qualification and seed
-delivery remain unfinished.
+That check of the normal publisher reached and rejected the expired catalog
+before public admission; it read no credentials and changed no public files.
+The later read-only host observation matched the homepage and both catalog files
+over FTPS and public HTTPS. The exact nonsecret transport tuple is now bound in
+the authority. The root sentinel, reviewed remote closure, real model
+qualification and seed delivery remain unfinished.
 
 The publisher now reuses the canonical TinyRustLM `Deployment.Credentials.psm1`
 FTP-export reader. It imports the exact reviewed module bytes under a read lease
@@ -26,7 +28,37 @@ The file stays outside the site worktree and its values are never logged or
 included in deployment receipts. This change does not bind a target or authorize
 an expired catalog.
 
-The publisher requires all of the following before it can read credentials or
+`-BootstrapSentinel` is a separate operation from `-Publish`. It requires the
+same clean, pushed source gate and shared credential parser, then binds the
+checked-in bootstrap manifest to the current commit. It rechecks all three
+public/FTPS identities and the exact reviewed root listing before taking the
+existing deployment lease. It installs only the exact 165-byte root sentinel
+through an absent staging leaf, verifies readback, and releases its own lease.
+An already present exact sentinel is verified without overwrite. This mode does
+not publish the website, renew discovery metadata, upload models or claim a seed.
+
+The bootstrap inventory records existing overlays solely to identify the account
+root for that one marker. It does not approve those overlays for website release.
+`.ftpquota` and the unreviewed historical entries remain untouched. NLST decoding
+now ignores only literal `.` and `..` structural entries; unsafe names, case
+aliases, unknown colon paths, invalid UTF-8 and oversized listings fail.
+
+Bootstrap failure receipts distinguish exact-prefix cleanup, verified promotion
+after a lost response, and retained or ambiguous lease state. Exact partial
+staging bytes may be removed under the owned lease. Substituted bytes or a raced
+final target are preserved for review. If lease creation is ambiguous before its
+owner record is established, retain the failure receipt and inspect that exact
+lease path; do not remove the root or claim lease ownership from a generic error.
+No bootstrap has been executed against production by this implementation work.
+
+After reviewing and committing the current source, an authorized operator can
+run `powershell.exe -NoProfile -File tools/deploy-site.ps1 -BootstrapSentinel`.
+Its append-only receipt has schema `minimodel.root_bootstrap_receipt.v1`; the
+existing bounded receipt filename is retained. A failed receipt must be reviewed
+before another attempt. Normal `-Publish` retains its independent catalog,
+predecessor, complete tree and final-marker gates.
+
+Normal website publication requires all of the following before it can read credentials or
 mutate the authenticated target:
 
 - the script-derived repository root exactly equal to the Git top-level,
@@ -50,12 +82,10 @@ mutate the authenticated target:
 - an exact root sentinel plus an exact predecessor directory and file closure
   with no unknown overlay entries.
 
-`deploy/publication-authority.v1.json` deliberately leaves the transport tuple
-`unbound`. `-Publish` therefore fails before reading the external FTP export.
-An authorized operator must independently record the real nonsecret tuple,
-install the already-bound sentinel bytes at the intended remote root, and land
-that authority through the normal reviewed commit and push flow. Never infer
-those values from a credential file or guess them from a hostname.
+`deploy/publication-authority.v1.json` binds the independently observed nonsecret
+transport tuple. The bootstrap mode above prepares the root sentinel; neither
+that binding nor a verified sentinel bypasses the normal publication gates.
+Never infer account ownership from a credential file or a hostname alone.
 
 The read-only preflight is:
 
@@ -66,7 +96,8 @@ The read-only preflight is:
 The current manifest describes the current reviewed public source. The candidate
 catalog and peer feed expired on 2026-09-09; verification rejects that expired
 authority before public-site observation. They contain no qualified model or
-peer entries. Transport remains unbound. Metadata generation is preparation
+peer entries. The transport tuple is bound, but production sentinel installation
+and complete website-root reconciliation are pending. Metadata generation is preparation
 only and does not establish catalog freshness or permission to publish.
 
 The manifest generator emits JSON to stdout and accepts no output location:
@@ -96,7 +127,7 @@ changed tool requires reviewing and updating its pin before use. Child processes
 have bounded stdout/stderr and a 120-second deadline; timeout terminates the
 owned process tree. Each generator Git read has its own 30-second deadline.
 
-Once the authority is legitimately bound, the publication command is:
+Once all website publication gates are satisfied, the publication command is:
 
 ```powershell
 .\tools\deploy-site.ps1 -Publish

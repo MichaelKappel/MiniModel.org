@@ -92,21 +92,26 @@ verify. This primitive does not read model paths or grant publication authority.
 Read-only FTPS observation on September 29 matched the homepage and both live
 catalog files to public HTTPS bytes and obtained identical repeated root lists.
 The root sentinel was absent. The listing includes structural `.`/`..` entries,
-which the existing publisher currently rejects, and six entries outside its web
+which the older publisher rejected, and six entries outside its web
 closure: `.ftpquota`, `workspace.uai`, `artifacts`, `examples`, and two dated web
 backup names. Their names alone do not authorize deletion. Keep provider state
 and unreviewed content untouched; inspect exact ownership and dependencies before
 any root cleanup. Full hashes and the target tuple are in
 `artifacts/verification/static-seed-core-review-20260929.json`.
 
-The next production checkpoint must wire the registry and streaming operation
-into the existing admitted transport and shared lease, handle structural listing
-entries without admitting arbitrary paths, and establish the exact sentinel.
+The bounded NLST reader now handles the two literal structural listing entries
+without admitting arbitrary paths. A separate tested bootstrap mode prepares
+installation of the exact sentinel under the existing shared lease; it has not
+been run against production. The next seed checkpoint must wire the registry and
+streaming operation into the existing admitted transport and shared lease.
 Absent-or-complete seed admission must fail on partial uploads or unknown leaves.
-No qualified receipt implementation was found in the inspected TinyRust runtime,
-converter contracts or tools; the catalog currently checks qualification metadata
-assertions. Bind the real reviewed evidence contract before enabling seed upload;
-do not manufacture a passing receipt or infer qualification from registration.
+A subsequent search located the canonical receipt implementation in TinyRust's
+`app/catalog-admission-loader.js`, outside the earlier converter/runtime search.
+It binds the receipt to the parsed browser admission and catalog identities.
+Reuse that implementation with `browser-model-admission.js` when wiring the
+publisher; do not invent another receipt schema. Real reviewed passing evidence
+is still required before seed upload. Registration or passing metadata strings
+alone do not establish that the underlying experiments succeeded.
 
 The next host gate must establish all of the following against the actual server:
 

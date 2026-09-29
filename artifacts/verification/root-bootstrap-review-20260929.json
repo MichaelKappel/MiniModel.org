@@ -1,0 +1,83 @@
+{
+  "schema": "minimodel.root-bootstrap-review/1",
+  "date": "2026-09-29",
+  "status": "implemented-and-locally-tested-not-executed-live",
+  "source_base_commit": "34a53676ca372fc9a0814d5f5f54970a053f1948",
+  "purpose": "Bind the independently observed FTPS account tuple and prepare a separate exact root-sentinel bootstrap operation without publishing website or model bytes.",
+  "authority": {
+    "basis": "The owner explicitly authorized established-account FTPS publication; target identity is independently bound to public bytes and repeated root listings.",
+    "host": "server41.shared.spaceship.host",
+    "port": 21,
+    "protocol": "ftps-explicit",
+    "username_sha256": "efbabe420071a41d5b24570f14e8e9b5a72db8cde22dcb2437d03dc6baeba3b1",
+    "remote_root": ".",
+    "observation": "Read-only 2026-09-29T20:36:43.1853049Z; all three FTP/public HTTPS identities and repeated raw listing equality are retained in static-seed-core-review-20260929.json. This review performs no new live request.",
+    "bootstrap_manifest": "deploy/root-bootstrap-manifest.v1.json",
+    "sentinel_bytes": 165,
+    "sentinel_sha256": "b11cd954128332e63a44e32be5523ccbb3b1b005cfd23f4d03569f37ef97d1dd"
+  },
+  "implementation": [
+    "BootstrapSentinel and Publish are mutually exclusive; both require the existing clean, pushed ecosystem source gate.",
+    "Bootstrap binds its inventory and sentinel bytes to the admitted Git commit, rechecks three exact public HTTPS bodies before credential access, then proves the exact FTPS tuple, three remote bodies and reviewed root listing.",
+    "Only a previously absent sentinel is staged and promoted under the existing exact operation-owned lease. Existing exact sentinel bytes are verified without overwrite.",
+    "Failure recovery removes only a verified prefix at this operation's staging leaf under proven lease ownership. Unexpected bytes, raced final targets and ambiguous lease creation remain for exact review.",
+    "NLST reads stop above 65536 bytes, decode strict UTF-8 and ignore only literal self/parent records. Duplicate/case aliases, unsafe names and unregistered colon paths still fail.",
+    "Zero-byte FTP bodies retain byte-array type so interrupted empty staging files can be authenticated.",
+    "Normal website file, memory, predecessor, catalog, closure and final-marker gates are unchanged. The bootstrap inventory does not admit legacy overlays for website release."
+  ],
+  "remote_inventory_disposition": {
+    "preserve_unowned": [".ftpquota"],
+    "exact_contents_ownership_and_dependency_review_pending": [
+      "artifacts", "examples", "workspace.uai",
+      "index.html.pre-catalog-home-20260713T174046Z.bak",
+      "styles.css.pre-catalog-home-20260713T174046Z.bak"
+    ],
+    "warning": "Names establish neither ownership nor deletion authority. No remote entry was removed or inspected recursively."
+  },
+  "retained_failed_stages": [
+    {"output_identity":"397299","result":"43/51 passed, eight setup failures","interpretation":"Canonical function AST import lacked System.Net.Http assembly needed for Pester mock parameter metadata; loaded the installed framework assembly explicitly."},
+    {"output_identity":"327c0f","result":"43/51 passed, eight validator failures","interpretation":"New validator used PowerShell automatic variable Matches; regex evaluation overwrote the public evidence collection. Renamed it publicMatches. No live operation occurred."},
+    {"output_identity":"14582e","result":"44/51 passed, seven mock-count failures","interpretation":"Assertions counted earlier tests in the Describe scope. Set explicit per-test mock scope; behavioral state assertions had passed."}
+  ],
+  "validation": [
+    {"command":"node --test tests/deployment-custody.test.js tests/build-static-seed-namespace_test.js tests/build-static-seed-plan_test.js","output_identity":"a8131f","result":"69/69 Node tests passed, including the then-current 51/51 Pester cases. The initial command also supplied a non-existent dot-separated manifest filename; Node ignored that unmatched path, so the actual underscore-named manifest suite was run separately."},
+    {"command":"node --test tests/build-site-deployment-manifest_test.js","output_identity":"ff3f26","result":"12/12 passed."},
+    {"command":"node --test --test-name-pattern=\"exercises bounded input\" tests/deployment-custody.test.js","output_identity":"22067d","result":"After adding two direct manifest admission tests and coverage reporting, final 53/53 Pester cases passed. Production source was unchanged after the broader suite."},
+    {"check":"changed pure-function command coverage","result":{"ConvertFrom-CustodyDirectoryListing":{"hit":23,"analyzed":23},"Assert-CustodyBootstrapManifest":{"hit":28,"analyzed":28}},"limit":"Pester 3.4.0 statement-command coverage, not branch coverage. Aggregate for the two existing modules is 415/671; no whole-module 75% claim. Bootstrap orchestration executes actual canonical functions imported by AST and has eight behavioral fault-injection tests; this mechanism does not retain file attribution for numeric publisher coverage."},
+    {"check":"git diff --check","output_identity":"9d7fde","result":"Passed."},
+    {"check":"canonical owned test output","output_identity":"9d7fde","result":"artifacts/tests directory had no remaining children after final harness cleanup. No source snapshot, model payload or external scratch directory was created."}
+  ],
+  "source_files": [
+    {"path":".gitattributes","bytes":2701,"sha256":"05caf8d42ead57492c52911762a76058b8cb4a057594fd2cd9afdc7ff4d72b9e"},
+    {"path":"deploy/README.md","bytes":9934,"sha256":"80b4448f881d06e54e97fbb415e9a28e0ea1e59c7c8b5f92bc481688fe49de01"},
+    {"path":"deploy/publication-authority.v1.json","bytes":2930,"sha256":"408346c123906c607a7e411222309a3687dfba073df2bc1f31dbb59b0ebc2070"},
+    {"path":"deploy/root-bootstrap-manifest.v1.json","bytes":891,"sha256":"798d675cae759e9c77ec385872f25e7098665298463e590a6ffcb2ce583d2ecc"},
+    {"path":"deploy/static-seed.md","bytes":11631,"sha256":"ec803e9a53148508b01c8c8f1a3ec9577484fdfcd6a8b309dc8bfe465ec30427"},
+    {"path":"tests/MiniModel.DeploymentCustody_test.ps1","bytes":48402,"sha256":"9c75c678bd42f2e097cfa5602ae235e0331f9f6c5cc617ae6ff0c41366c18790"},
+    {"path":"tests/deployment-custody.harness.ps1","bytes":18586,"sha256":"2704cea439992e57c37c70a3373f20bdeb3071fc2aede11fc6c874718a30ef0c"},
+    {"path":"tests/deployment-custody.test.js","bytes":17936,"sha256":"451eef46fa8551fd3175497bf8364eeed7fc9aefc1c8cd31795009e3e00cc90b"},
+    {"path":"tools/MiniModel.DeploymentCustody.psm1","bytes":52972,"sha256":"987081c280e448097f0e9f7d9b0ef55fc65358d7ef8fbeb64839bbadd1207341"},
+    {"path":"tools/deploy-site.ps1","bytes":88592,"sha256":"52ce0748e8a3d05eaf9b85751529e5d3811b80189a78da3ee557854e17f022b6"}
+  ],
+  "independent_review": {
+    "reviewer_role": "runtime_state_review agent, independent read-only source inspection",
+    "result": "No material defect found in the frozen scoped bootstrap path.",
+    "checked": "Public three-file hashes before credentials; account root inventory and hashes before lease and repeated under lease; commit-bound manifest/sentinel; exact owned-stage-prefix cleanup; substituted-byte preservation; lost-rename response represented as failed with verified final identity where observed.",
+    "limits": "No edits, tests, network operations or credential reads by reviewer. Local mocks do not prove host rename/lease behavior or exclusion against noncooperating writers."
+  },
+  "limits": [
+    "All bootstrap failure scenarios use memory-only remote state. No sentinel was installed or production state changed in this checkpoint.",
+    "No real qualified default, usable public seed, complete website-root reconciliation or renewed catalog is established.",
+    "Seed streaming/namespace primitives are implemented, but production seed-operation wiring and daily metadata renewal remain pending.",
+    "An earlier bounded search overlooked the existing qualification receipt binder in TinyRustLM tinyrustlm/app/catalog-admission-loader.js. The next seed path must reuse that current contract; the historical review is retained unchanged.",
+    "FTPS rename is not a cross-host conditional transaction. Safety assumes all authorized writers honor the existing lease; detected foreign changes remain retained failures."
+  ],
+  "lesson": {
+    "question": "Can the proven account root be bound without requiring a fresh model catalog or accepting unknown website overlays?",
+    "method": "Separate tiny identity-marker bootstrap from website release; bind its exact public correspondence and root inventory, then fault-inject actual canonical functions with all state in memory.",
+    "result": "Local tests pass, including interruption and identity-substitution failures. No production success claim.",
+    "uncertainty": "Actual first write, host recovery behavior and remaining legacy-root reconciliation are unobserved.",
+    "decision": "Checkpoint and review bootstrap independently; keep model qualification and actual seed publication as separate required evidence.",
+    "reusable_lesson": "Use domain-specific variable names instead of PowerShell automatic variables, and scope Pester mock-count assertions to each test."
+  }
+}

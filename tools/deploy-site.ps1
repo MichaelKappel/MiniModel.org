@@ -4,12 +4,14 @@ param(
     [string]$FtpExportPath = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "ftp.txt"),
     [string]$ReportPath = (Join-Path (Split-Path -Parent $PSScriptRoot) ("deploy\receipts\site-deployment-{0}.json" -f (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ"))),
     [string]$NodeExecutablePath = (Join-Path $env:ProgramFiles 'nodejs\node.exe'),
-    [switch]$Publish
+    [switch]$Publish,
+    [switch]$BootstrapSentinel
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.Net.Http
+if ($Publish -and $BootstrapSentinel) { throw 'Choose website publication or sentinel bootstrap, not both.' }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $modulePath = Join-Path $PSScriptRoot "MiniModel.DeploymentCustody.psm1"
@@ -147,7 +149,7 @@ function Assert-EcosystemSingleSourceAuthority {
     }
 
     $gateArguments = @()
-    if ($Publish) {
+    if ($Publish -or $BootstrapSentinel) {
         $gateArguments += @("--require-clean", "--require-remote-exact")
     }
     $gateResult = Invoke-VerifiedNode -Tool source-authority -Arguments $gateArguments
@@ -182,6 +184,7 @@ $script:publicationInput = $null
 $script:publicationInputSha256 = $null
 $script:publicationOperationId = $null
 $script:lease = $null
+$script:seedFilePaths = @()
 $script:transactionJournal = [Collections.Generic.List[object]]::new()
 $script:commitCleanupStarted = $false
 
@@ -473,7 +476,7 @@ function Get-RemoteBytes {
             if ($memory.Length + $read -gt $MaximumBytes) { throw "Remote download exceeded its exact byte bound." }
             $memory.Write($buffer, 0, $read)
         }
-        return $memory.ToArray()
+        return ,$memory.ToArray()
     }
     finally {
         $memory.Dispose()
@@ -488,24 +491,17 @@ function Get-RemoteDirectoryEntries {
     $request = New-FtpRequest -LogicalPath $LogicalPath -Method ([Net.WebRequestMethods+Ftp]::ListDirectory)
     $response = $request.GetResponse()
     $stream = $response.GetResponseStream()
-    $reader = [IO.StreamReader]::new($stream, [Text.UTF8Encoding]::new($false, $true), $true, 4096, $true)
+    $memory = [IO.MemoryStream]::new()
+    $buffer = [byte[]]::new(4096)
     try {
-        $entries = @()
-        while (-not $reader.EndOfStream) {
-            $entry = $reader.ReadLine()
-            if ([string]::IsNullOrEmpty($entry)) { continue }
-            if ($entry.Length -gt 512 -or $entry -in @(".", "..") -or $entry.Contains("/") -or $entry.Contains("\") -or
-                $entry -notmatch "^[A-Za-z0-9._-]+$") {
-                throw "Remote directory listing contains an unsafe entry."
-            }
-            if ($entries -ccontains $entry) { throw "Remote directory listing contains a duplicate entry." }
-            $entries += $entry
-            if ($entries.Count -gt 500) { throw "Remote directory listing exceeds its entry bound." }
+        while (($count=$stream.Read($buffer,0,$buffer.Length)) -gt 0) {
+            if ($memory.Length+$count -gt 65536) { throw 'Remote directory listing exceeds its byte bound.' }
+            $memory.Write($buffer,0,$count)
         }
-        return $entries
+        return ConvertFrom-CustodyDirectoryListing -Bytes $memory.ToArray() -DirectoryPath $LogicalPath -SeedFilePaths $script:seedFilePaths
     }
     finally {
-        $reader.Dispose()
+        $memory.Dispose()
         $stream.Dispose()
         $response.Dispose()
     }
@@ -1168,6 +1164,112 @@ function Assert-NoOverlayTransition {
     }
 }
 
+# Bootstrap only the reviewed identity marker; this grants no website/seed success.
+function Invoke-RootSentinelBootstrap {
+    param([Parameter(Mandatory)]$AuthorityRecord)
+
+    if (-not $script:sourceAuthorityAdmitted) { throw 'Root bootstrap is forbidden before source authority admission.' }
+    $bootstrapAuthority=$AuthorityRecord.Value
+    if ($bootstrapAuthority.transport.status -cne 'bound') { throw 'Root bootstrap requires an exact bound transport tuple.' }
+    $bootstrapRepository=Get-RepositoryObservation -Authority $bootstrapAuthority
+    Assert-CustodyRepositoryIdentity -Authority $bootstrapAuthority -Observed $bootstrapRepository -ExpectedRepositoryRoot $repositoryRoot
+    $bootstrapManifest=Read-CustodyJsonFile -Path (Join-Path $repositoryRoot 'deploy/root-bootstrap-manifest.v1.json') -MaximumBytes 16384 -Label 'root bootstrap manifest'
+    Assert-CustodyBootstrapManifest -Manifest $bootstrapManifest.Value -Authority $bootstrapAuthority
+    $committed=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $bootstrapRepository.head -RelativePath 'deploy/root-bootstrap-manifest.v1.json' -MaximumBytes 16384
+    if ((Get-CustodyByteSha256 $committed) -cne $bootstrapManifest.Sha256) { throw 'Bootstrap manifest differs from the admitted commit.' }
+    $sentinelBytes=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $bootstrapRepository.head -RelativePath $bootstrapAuthority.transport.root_sentinel_source_path -MaximumBytes 8192
+    if ($sentinelBytes.Length -ne $bootstrapAuthority.transport.root_sentinel_bytes -or
+        (Get-CustodyByteSha256 $sentinelBytes) -cne $bootstrapAuthority.transport.root_sentinel_sha256) { throw 'Bootstrap sentinel bytes differ from the admitted identity.' }
+
+    $httpHandler=[Net.Http.HttpClientHandler]::new();$httpHandler.AllowAutoRedirect=$false
+    $http=[Net.Http.HttpClient]::new($httpHandler);$http.Timeout=[TimeSpan]::FromSeconds(60)
+    try {
+        foreach ($match in $bootstrapManifest.Value.public_matches) {
+            $observedBytes=Get-PublicBytes -Client $http -Origin $bootstrapAuthority.origin -RelativePath $match.path -AuditNonce ([Guid]::NewGuid().ToString('N')) -MaximumBytes $match.bytes
+            if ($observedBytes.Length -ne $match.bytes -or (Get-CustodyByteSha256 $observedBytes) -cne $match.sha256) { throw 'Bootstrap public correspondence changed.' }
+        }
+    } finally {$http.Dispose();$httpHandler.Dispose()}
+    $afterPublic=Get-RepositoryObservation -Authority $bootstrapAuthority
+    Assert-CustodyRepositoryIdentity -Authority $bootstrapAuthority -Observed $afterPublic -ExpectedRepositoryRoot $repositoryRoot
+    if ($afterPublic.head -cne $bootstrapRepository.head) { throw 'Bootstrap source changed during public admission.' }
+    $script:phase='public-admitted'
+    $operation=[Guid]::NewGuid().ToString('N')
+    $sentinelPath=[string]$bootstrapAuthority.transport.root_sentinel_path
+    $stagePath=Get-RemoteOperationPath -Relative $sentinelPath -Nonce $operation -Kind deploy
+    $bootstrapProfile=$null;$held=$false;$leaseAttempted=$false;$leaseReleased=$false;$sentinelVerified=$false;$stageAttempted=$false
+    $receipt=[ordered]@{schema='minimodel.root_bootstrap_receipt.v1';operation_id=$operation;publisher_commit=$bootstrapRepository.head;authority_sha256=$AuthorityRecord.Sha256;manifest_sha256=$bootstrapManifest.Sha256;started_utc=[DateTime]::UtcNow.ToString('o');status='failed';sentinel_path=$sentinelPath;sentinel_bytes=$sentinelBytes.Length;sentinel_sha256=$bootstrapAuthority.transport.root_sentinel_sha256;stage_path=$stagePath;sentinel_verified=$false;recovery='not-needed';website_published=$false;seed_published=$false}
+    try {
+        Import-MiniModelCredentialModule
+        $bootstrapProfile=Get-CredentialProfile -Path $FtpExportPath -ProfileName $bootstrapAuthority.transport.profile_name
+        $transport=[pscustomobject]@{profile_name=$bootstrapProfile.profile;protocol='ftps-explicit';host=$bootstrapProfile.host;port=$bootstrapProfile.port;username=$bootstrapProfile.user;remote_root=$bootstrapAuthority.transport.remote_root}
+        Assert-CustodyTransportAuthority -Authority $bootstrapAuthority -Observed $transport
+        $script:ftpHost=$bootstrapProfile.host;$script:ftpPort=$bootstrapProfile.port;$script:remoteRoot=$bootstrapAuthority.transport.remote_root
+        $script:credential=[Net.NetworkCredential]::new($bootstrapProfile.user,$bootstrapProfile.password);$bootstrapProfile.password=$null
+        $initial=Get-RemoteFileObservation -LogicalPath $sentinelPath
+        $initialPaths=@($bootstrapManifest.Value.root_entries)
+        if ($initial.State -ceq 'present') {
+            Assert-RemoteExactIdentity -LogicalPath $sentinelPath -Bytes $sentinelBytes.Length -Sha256 $bootstrapAuthority.transport.root_sentinel_sha256
+            $initialPaths += $sentinelPath
+        }
+        Assert-CustodyRemoteDirectoryTree -ExpectedFilePaths $initialPaths -ObservedTree @{''=@(Get-RemoteDirectoryEntries -LogicalPath '')}
+        foreach($match in $bootstrapManifest.Value.public_matches){Assert-RemoteExactIdentity -LogicalPath $match.path -Bytes $match.bytes -Sha256 $match.sha256}
+        if ($initial.State -ceq 'present') {
+            $sentinelVerified=$true;$receipt.status='already-present-verified'
+        } else {
+            $script:phase='transport-admitted'
+            $leaseAttempted=$true
+            $ownedLease=New-RemoteDeploymentLease -Authority $bootstrapAuthority -OperationId $operation -PublisherCommit $bootstrapRepository.head -ManifestSha256 $bootstrapManifest.Sha256 -AuthoritySha256 $AuthorityRecord.Sha256
+            $held=$true;$script:phase='leased'
+            $leasedPaths=@($bootstrapManifest.Value.root_entries)+@($ownedLease.DirectoryPath)
+            Assert-CustodyRemoteDirectoryTree -ExpectedFilePaths $leasedPaths -ObservedTree @{''=@(Get-RemoteDirectoryEntries -LogicalPath '')}
+            foreach($match in $bootstrapManifest.Value.public_matches){Assert-RemoteExactIdentity -LogicalPath $match.path -Bytes $match.bytes -Sha256 $match.sha256}
+            if ((Get-RemoteFileObservation -LogicalPath $sentinelPath).State -cne 'absent' -or
+                (Get-RemoteFileObservation -LogicalPath $stagePath).State -cne 'absent') { throw 'Bootstrap target or operation stage is occupied.' }
+            Assert-RemoteLeaseOwned
+            $stageAttempted=$true
+            Send-RemoteFile -Payload $sentinelBytes -LogicalPath $stagePath
+            Assert-RemoteExactIdentity -LogicalPath $stagePath -Bytes $sentinelBytes.Length -Sha256 $bootstrapAuthority.transport.root_sentinel_sha256
+            Assert-RemoteLeaseOwned
+            if ((Get-RemoteFileObservation -LogicalPath $sentinelPath).State -cne 'absent') { throw 'Bootstrap final target changed before promotion.' }
+            Rename-RemoteFile -LogicalPath $stagePath -NewLeafName $sentinelPath
+            Assert-RemoteExactIdentity -LogicalPath $sentinelPath -Bytes $sentinelBytes.Length -Sha256 $bootstrapAuthority.transport.root_sentinel_sha256
+            if ((Get-RemoteFileObservation -LogicalPath $stagePath).State -cne 'absent') { throw 'Bootstrap promotion left staging residue.' }
+            $sentinelVerified=$true
+            Remove-RemoteDeploymentLease;$held=$false;$leaseReleased=$true
+            Assert-CustodyRemoteDirectoryTree -ExpectedFilePaths (@($bootstrapManifest.Value.root_entries)+@($sentinelPath)) -ObservedTree @{''=@(Get-RemoteDirectoryEntries -LogicalPath '')}
+            $receipt.status='installed-and-readback-verified'
+        }
+    } catch {
+        $receipt.failure_code=Get-SafeFailureCode -Exception $_.Exception
+        $receipt.recovery='no-remote-cleanup-attempted'
+        if ($held) {
+            try {
+                Assert-RemoteLeaseOwned
+                if ($stageAttempted) {
+                    $stage=Get-RemoteBoundedIdentity -LogicalPath $stagePath -MaximumBytes $sentinelBytes.Length
+                    if ($stage.State -ceq 'present') {
+                        if ($stage.Bytes -lt 0 -or $stage.Bytes -gt $sentinelBytes.Length -or
+                            $stage.Sha256 -cne (Get-PublicationPrefixSha256 -Payload $sentinelBytes -Bytes $stage.Bytes)) { throw 'Bootstrap stage is not an exact owned prefix.' }
+                        $null=Remove-RemoteExactFile -LogicalPath $stagePath -Bytes $stage.Bytes -Sha256 $stage.Sha256
+                    }
+                }
+                if ((Get-RemoteFileObservation -LogicalPath $sentinelPath).State -ceq 'present') {
+                    Assert-RemoteExactIdentity -LogicalPath $sentinelPath -Bytes $sentinelBytes.Length -Sha256 $bootstrapAuthority.transport.root_sentinel_sha256
+                    $sentinelVerified=$true
+                }
+                Remove-RemoteDeploymentLease;$held=$false;$leaseReleased=$true
+                $receipt.recovery='owned-stage-removed-lease-released'
+            } catch {$receipt.recovery='retained-for-exact-ownership-review';$receipt.recovery_failure_code=Get-SafeFailureCode -Exception $_.Exception}
+        }
+    } finally {
+        if ($bootstrapProfile) {$bootstrapProfile.password=$null};$script:credential=$null
+    }
+    $receipt.sentinel_verified=$sentinelVerified
+    $receipt.lease_retained_or_creation_ambiguous=$leaseAttempted -and -not $leaseReleased
+    $receipt.completed_utc=[DateTime]::UtcNow.ToString('o')
+    return $receipt
+}
+
 $authorityRecord = Read-CustodyJsonFile -Path $AuthorityPath -MaximumBytes 131072 -Label "publication authority"
 $authority = $authorityRecord.Value
 Assert-CustodyPublicationAuthority -Authority $authority -RepositoryRoot $repositoryRoot -AuthorityPath $authorityRecord.Path
@@ -1175,6 +1277,13 @@ $validatedReportPath = Assert-BoundedReceiptPath -Path $ReportPath
 $reportTemporaryPath = "$validatedReportPath.tmp"
 if ((Test-Path -LiteralPath $validatedReportPath) -or (Test-Path -LiteralPath $reportTemporaryPath)) {
     throw "Deployment receipt or its staging path is already occupied."
+}
+if ($BootstrapSentinel) {
+    $bootstrapReceipt=Invoke-RootSentinelBootstrap -AuthorityRecord $authorityRecord
+    Write-Receipt -Receipt $bootstrapReceipt -Path $validatedReportPath
+    if ($bootstrapReceipt.status -ceq 'failed') { throw 'Root sentinel bootstrap failed; inspect its exact receipt before recovery.' }
+    Write-Host "ROOT-SENTINEL-VERIFIED; website and seed publication were not performed"
+    exit 0
 }
 
 $canonicalManifestPath = [IO.Path]::GetFullPath((Join-Path $repositoryRoot (([string]$authority.candidate.manifest_path) -replace "/", "\")))

@@ -1,4 +1,5 @@
 # Exercise canonical code with publication payloads and transport observations held in memory.
+Add-Type -AssemblyName System.Net.Http
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 Import-Module (Join-Path $repositoryRoot 'tools/MiniModel.DeploymentCustody.psm1') -Force
 
@@ -180,6 +181,226 @@ $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repositoryRo
 if ($errors) { throw 'Publisher parse failed.' }
 foreach ($definition in $ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] }) {
     . ([scriptblock]::Create($definition.Extent.Text))
+}
+
+Describe 'Bounded actual NLST ingress' {
+    BeforeEach {$script:seedFilePaths=@()}
+    It 'ignores only literal dot entries and keeps provider state and other names visible' {
+        $bytes=[Text.Encoding]::UTF8.GetBytes(".`r`n..`r`n.ftpquota`r`nindex.html`r`n")
+        (@(ConvertFrom-CustodyDirectoryListing -Bytes $bytes) -join ',') | Should Be '.ftpquota,index.html'
+        @(ConvertFrom-CustodyDirectoryListing -Bytes ([byte[]]::new(0))).Count | Should Be 0
+        foreach($text in @('../outside',"x`ny`nx","x`nX",' .',"x`ry",'dir/file','sha256:abc')){
+            {ConvertFrom-CustodyDirectoryListing -Bytes ([Text.Encoding]::UTF8.GetBytes($text))} | Should Throw
+        }
+        {ConvertFrom-CustodyDirectoryListing -Bytes ([byte[]](255))} | Should Throw 'not UTF-8'
+        {ConvertFrom-CustodyDirectoryListing -Bytes ([byte[]]::new(65537))} | Should Throw 'byte bound'
+        $large=([string[]](1..501|ForEach-Object{"file$_"})) -join "`n"
+        {ConvertFrom-CustodyDirectoryListing -Bytes ([Text.Encoding]::UTF8.GetBytes($large))} | Should Throw 'entry bound'
+    }
+    It 'admits a registered digest directory only at its exact parent' {
+        $directory='tinyrustlm/direct-composition/v1/compositions/sha256:'+('a'*64)+'/members'
+        $paths=@('model.slm2','tokenizer.tokenizer2','template.template2','sampling.sampling2','prompt.prompt2','composition.acg2','.htaccess')|ForEach-Object{"$directory/$_"}
+        $bytes=[Text.Encoding]::UTF8.GetBytes('sha256:'+('a'*64))
+        @(ConvertFrom-CustodyDirectoryListing -Bytes $bytes -DirectoryPath 'tinyrustlm/direct-composition/v1/compositions' -SeedFilePaths $paths).Count | Should Be 1
+        {ConvertFrom-CustodyDirectoryListing -Bytes $bytes -DirectoryPath 'elsewhere' -SeedFilePaths $paths} | Should Throw 'outside the registered'
+    }
+    It 'bounds the actual response stream before decoding and closes its handles' {
+        $script:nlstReply=[pscustomobject]@{Stream=[IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes(".`n..`nindex.html`n"));Disposed=$false}
+        $script:nlstReply|Add-Member ScriptMethod GetResponseStream {return $this.Stream}
+        $script:nlstReply|Add-Member ScriptMethod Dispose {$this.Disposed=$true}
+        $script:nlstRequest=[pscustomobject]@{Reply=$script:nlstReply}
+        $script:nlstRequest|Add-Member ScriptMethod GetResponse {return $this.Reply}
+        Mock New-FtpRequest {return $script:nlstRequest}
+        (@(Get-RemoteDirectoryEntries -LogicalPath '') -join ',') | Should Be 'index.html'
+        $script:nlstReply.Disposed | Should Be $true
+        $script:nlstReply.Stream.CanRead | Should Be $false
+        $script:nlstReply.Stream=[IO.MemoryStream]::new([byte[]]::new(0));$script:nlstReply.Disposed=$false
+        $empty=Get-RemoteBytes -LogicalPath 'empty-test-only' -MaximumBytes 1
+        ($empty -is [byte[]]) | Should Be $true
+        $empty.Length | Should Be 0
+        $script:nlstReply.Disposed | Should Be $true
+        $script:nlstReply.Stream=[IO.MemoryStream]::new([byte[]]::new(65537));$script:nlstReply.Disposed=$false
+        {Get-RemoteDirectoryEntries -LogicalPath ''} | Should Throw 'byte bound'
+        $script:nlstReply.Disposed | Should Be $true
+        $script:nlstReply.Stream.CanRead | Should Be $false
+    }
+}
+
+Describe 'Exact bootstrap manifest admission' {
+    BeforeEach {
+        $script:manifestAuthority=Get-Content -LiteralPath (Join-Path $repositoryRoot 'deploy/publication-authority.v1.json') -Raw|ConvertFrom-Json
+        $script:manifestText=Get-Content -LiteralPath (Join-Path $repositoryRoot 'deploy/root-bootstrap-manifest.v1.json') -Raw
+    }
+    It 'admits all three checked-in evidence identities without regex state replacing them' {
+        $record=$script:manifestText|ConvertFrom-Json
+        Assert-CustodyBootstrapManifest -Manifest $record -Authority $script:manifestAuthority
+        $record.public_matches.Count | Should Be 3
+        $record.public_matches[2].path | Should Be 'catalog/peer-announcements.v1.json'
+    }
+    It 'rejects unknown schema, unsafe inventories and incomplete or altered public evidence' {
+        $mutations=@(
+            {$args[0].schema='unknown'},
+            {$args[0].observed_at_utc='yesterday'},
+            {$args[0].root_entries=@('a','b')},
+            {$args[0].root_entries=@('a','b','A')},
+            {$args[0].root_entries=@('a','b','../outside')},
+            {$args[0].root_entries=@('a','b',$script:manifestAuthority.transport.root_sentinel_path)},
+            {$args[0].root_entries=@('a','b',$script:manifestAuthority.transport.lease_directory_path)},
+            {$args[0].public_matches=@($args[0].public_matches[0])},
+            {$args[0].public_matches[2].path='other.json'},
+            {$args[0].public_matches[2].bytes=2097153},
+            {$args[0].public_matches[2].bytes='263'},
+            {$args[0].public_matches[2].sha256='G'*64}
+        )
+        foreach($mutate in $mutations){
+            $record=$script:manifestText|ConvertFrom-Json
+            & $mutate $record
+            {Assert-CustodyBootstrapManifest -Manifest $record -Authority $script:manifestAuthority} | Should Throw
+        }
+    }
+}
+
+Describe 'Exact sentinel bootstrap with memory-only remote state' {
+    BeforeEach {
+        $script:sourceAuthorityAdmitted=$true;$script:phase='read-only';$script:lease=$null;$script:FtpExportPath='test-only-never-read'
+        $script:bootstrapAuthority=Get-Content -LiteralPath (Join-Path $repositoryRoot 'deploy/publication-authority.v1.json') -Raw|ConvertFrom-Json
+        $script:bootstrapAuthority.transport.username_sha256=Get-CustodyByteSha256 ([Text.Encoding]::UTF8.GetBytes('synthetic-user'))
+        $script:bootstrapRecord=[pscustomobject]@{Value=$script:bootstrapAuthority;Sha256='a'*64}
+        $script:bootstrapManifestValue=Get-Content -LiteralPath (Join-Path $repositoryRoot 'deploy/root-bootstrap-manifest.v1.json') -Raw|ConvertFrom-Json
+        foreach($match in $script:bootstrapManifestValue.public_matches){$match.bytes=3;$match.sha256=Get-CustodyByteSha256 ([byte[]](1,2,3))}
+        $script:bootstrapManifestBytes=[Text.Encoding]::UTF8.GetBytes(($script:bootstrapManifestValue|ConvertTo-Json -Depth 8))
+        $script:bootstrapManifestRecord=[pscustomobject]@{Value=$script:bootstrapManifestValue;Sha256=(Get-CustodyByteSha256 $script:bootstrapManifestBytes)}
+        $script:bootstrapSentinel=[IO.File]::ReadAllBytes((Join-Path $repositoryRoot $script:bootstrapAuthority.transport.root_sentinel_source_path))
+        $script:bootstrapFinal=$null;$script:bootstrapStage=$null;$script:bootstrapStagePath=$null;$script:bootstrapLeaseExists=$false;$script:bootstrapFailure='';$script:bootstrapExtra=$null
+        $script:bootstrapObserved=[pscustomobject]@{canonical_root=$repositoryRoot;root_has_reparse_point=$false;branch='master';upstream='origin/master';remotes=@('origin');fetch_url=$script:bootstrapAuthority.repository.remote_url;push_url=$script:bootstrapAuthority.repository.remote_url;head='b'*40;tracking_head='b'*40;remote_head='b'*40;status_count=0;source_is_ancestor=$true;source_tree=$script:bootstrapAuthority.candidate.source_tree;manifest_matches_head=$true;authority_matches_head=$true}
+        Mock Get-RepositoryObservation {return $script:bootstrapObserved}
+        Mock Read-CustodyJsonFile {return $script:bootstrapManifestRecord}
+        Mock Get-CustodyGitBlobBytes {param($RelativePath) if($RelativePath -ceq 'deploy/root-bootstrap-manifest.v1.json'){return ,$script:bootstrapManifestBytes};return ,$script:bootstrapSentinel}
+        Mock Get-PublicBytes {return ,([byte[]](1,2,3))}
+        Mock Import-MiniModelCredentialModule {}
+        Mock Get-CredentialProfile {return [pscustomobject]@{profile='MiniModel.org';host='server41.shared.spaceship.host';port=21;user='synthetic-user';password='synthetic-test-only'}}
+        Mock Get-RemoteDirectoryEntries {
+            $entries=@($script:bootstrapManifestValue.root_entries)
+            if($null -ne $script:bootstrapFinal){$entries += $script:bootstrapAuthority.transport.root_sentinel_path}
+            if($null -ne $script:bootstrapStage){$entries += $script:bootstrapStagePath}
+            if($script:bootstrapLeaseExists){$entries += $script:bootstrapAuthority.transport.lease_directory_path}
+            if($script:bootstrapExtra){$entries += $script:bootstrapExtra}
+            return $entries
+        }
+        Mock Get-RemoteFileObservation {
+            param($LogicalPath)
+            if($LogicalPath -ceq $script:bootstrapAuthority.transport.root_sentinel_path){
+                if($script:bootstrapFailure -ceq 'target-race' -and $null -ne $script:bootstrapStage){$script:bootstrapFinal=[byte[]](9)}
+                return [pscustomobject]@{State=$(if($null -ne $script:bootstrapFinal){'present'}else{'absent'})}
+            }
+            return [pscustomobject]@{State=$(if($null -ne $script:bootstrapStage){'present'}else{'absent'})}
+        }
+        Mock Get-RemoteBoundedIdentity {
+            param($LogicalPath)
+            $body=if($LogicalPath -ceq $script:bootstrapAuthority.transport.root_sentinel_path){$script:bootstrapFinal}else{$script:bootstrapStage}
+            if($null -eq $body){return [pscustomobject]@{State='absent';Bytes=$null;Sha256=$null}}
+            return [pscustomobject]@{State='present';Bytes=$body.Length;Sha256=(Get-CustodyByteSha256 ([byte[]]$body))}
+        }
+        Mock Assert-RemoteExactIdentity {
+            param($LogicalPath,$Bytes,$Sha256)
+            $body=if($LogicalPath -ceq $script:bootstrapAuthority.transport.root_sentinel_path){$script:bootstrapFinal}elseif($LogicalPath -ceq $script:bootstrapStagePath){$script:bootstrapStage}else{[byte[]](1,2,3)}
+            if($null -eq $body -or $body.Length -ne $Bytes -or (Get-CustodyByteSha256 ([byte[]]$body)) -cne $Sha256){throw 'Synthetic remote identity mismatch'}
+        }
+        Mock New-RemoteDeploymentLease {
+            $script:bootstrapLeaseExists=$true
+            if($script:bootstrapFailure -ceq 'lease-response-lost'){throw 'Synthetic lease response lost'}
+            $script:lease=[pscustomobject]@{DirectoryPath=$script:bootstrapAuthority.transport.lease_directory_path}
+            return $script:lease
+        }
+        Mock Assert-RemoteLeaseOwned {if(-not $script:bootstrapLeaseExists){throw 'Synthetic lost lease'}}
+        Mock Send-RemoteFile {
+            param($Payload,$LogicalPath)
+            $script:bootstrapStagePath=$LogicalPath;$script:bootstrapStage=[byte[]]$Payload.Clone()
+            if($script:bootstrapFailure -ceq 'partial-upload'){$script:bootstrapStage=[byte[]]$Payload[0..2];throw 'Synthetic upload interruption'}
+            if($script:bootstrapFailure -ceq 'foreign-stage'){$script:bootstrapStage=[byte[]](99,98,97);throw 'Synthetic substituted stage'}
+        }
+        Mock Rename-RemoteFile {
+            $script:bootstrapFinal=$script:bootstrapStage;$script:bootstrapStage=$null
+            if($script:bootstrapFailure -ceq 'rename-response-lost'){throw 'Synthetic rename response lost'}
+        }
+        Mock Remove-RemoteExactFile {
+            param($LogicalPath,$Bytes,$Sha256)
+            if($LogicalPath -cne $script:bootstrapStagePath -or $Bytes -ne $script:bootstrapStage.Length -or $Sha256 -cne (Get-CustodyByteSha256 $script:bootstrapStage)){throw 'Unsafe synthetic removal'}
+            $script:bootstrapStage=$null;return $true
+        }
+        Mock Remove-RemoteDeploymentLease {$script:bootstrapLeaseExists=$false;$script:lease=$null}
+    }
+    It 'installs exactly the sentinel under the existing lease and leaves the website untouched' {
+        $result=Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord
+        $result.status | Should Be 'installed-and-readback-verified'
+        $result.sentinel_verified | Should Be $true
+        $result.lease_retained_or_creation_ambiguous | Should Be $false
+        $result.website_published | Should Be $false
+        $result.seed_published | Should Be $false
+        (Get-CustodyByteSha256 $script:bootstrapFinal) | Should Be $script:bootstrapAuthority.transport.root_sentinel_sha256
+        Assert-MockCalled New-RemoteDeploymentLease -Times 1 -Exactly -Scope It
+        Assert-MockCalled Send-RemoteFile -Times 1 -Exactly -Scope It
+        Assert-MockCalled Rename-RemoteFile -Times 1 -Exactly -Scope It
+        Assert-MockCalled Remove-RemoteDeploymentLease -Times 1 -Exactly -Scope It
+        Assert-MockCalled Remove-RemoteExactFile -Times 0 -Exactly -Scope It
+    }
+    It 'verifies an existing exact sentinel without overwriting it' {
+        $script:bootstrapFinal=$script:bootstrapSentinel
+        (Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord).status | Should Be 'already-present-verified'
+        Assert-MockCalled New-RemoteDeploymentLease -Times 0 -Exactly -Scope It
+        Assert-MockCalled Send-RemoteFile -Times 0 -Exactly -Scope It
+    }
+    It 'rejects missing source authority and public drift before credential access' {
+        $script:sourceAuthorityAdmitted=$false
+        {Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord} | Should Throw 'before source authority'
+        $script:sourceAuthorityAdmitted=$true
+        Mock Get-PublicBytes {return ,([byte[]](9,8,7))}
+        {Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord} | Should Throw 'correspondence changed'
+        Assert-MockCalled Get-CredentialProfile -Times 0 -Exactly -Scope It
+    }
+    It 'refuses new root overlays before creating a lease' {
+        $script:bootstrapExtra='unreviewed.txt'
+        (Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord).status | Should Be 'failed'
+        Assert-MockCalled New-RemoteDeploymentLease -Times 0 -Exactly -Scope It
+        Assert-MockCalled Send-RemoteFile -Times 0 -Exactly -Scope It
+    }
+    It 'removes only an exact partial stage after interruption' {
+        $script:bootstrapFailure='partial-upload'
+        $result=Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord
+        $result.status | Should Be 'failed'
+        $result.recovery | Should Be 'owned-stage-removed-lease-released'
+        $result.sentinel_verified | Should Be $false
+        $null -eq $script:bootstrapStage | Should Be $true
+        Assert-MockCalled Remove-RemoteExactFile -Times 1 -Exactly -Scope It
+        Assert-MockCalled Rename-RemoteFile -Times 0 -Exactly -Scope It
+    }
+    It 'preserves successful promotion after a lost response and releases its owned lease' {
+        $script:bootstrapFailure='rename-response-lost'
+        $result=Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord
+        $result.status | Should Be 'failed'
+        $result.sentinel_verified | Should Be $true
+        $result.lease_retained_or_creation_ambiguous | Should Be $false
+        Assert-MockCalled Remove-RemoteExactFile -Times 0 -Exactly -Scope It
+    }
+    It 'retains an untrusted stage and lease instead of deleting substituted bytes' {
+        $script:bootstrapFailure='foreign-stage'
+        $result=Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord
+        $result.recovery | Should Be 'retained-for-exact-ownership-review'
+        $result.lease_retained_or_creation_ambiguous | Should Be $true
+        Assert-MockCalled Remove-RemoteExactFile -Times 0 -Exactly -Scope It
+        Assert-MockCalled Remove-RemoteDeploymentLease -Times 0 -Exactly -Scope It
+    }
+    It 'preserves a raced final target and identifies ambiguous lease creation' {
+        $script:bootstrapFailure='target-race'
+        $result=Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord
+        $result.sentinel_verified | Should Be $false
+        $result.lease_retained_or_creation_ambiguous | Should Be $true
+        $script:bootstrapFinal[0] | Should Be 9
+        Assert-MockCalled Rename-RemoteFile -Times 0 -Exactly -Scope It
+        $script:bootstrapFinal=$null;$script:bootstrapStage=$null;$script:bootstrapLeaseExists=$false;$script:lease=$null;$script:bootstrapFailure='lease-response-lost'
+        $result=Invoke-RootSentinelBootstrap -AuthorityRecord $script:bootstrapRecord
+        $result.lease_retained_or_creation_ambiguous | Should Be $true
+    }
 }
 
 Describe 'Shared FTP-export credentials without remote operations' {

@@ -626,6 +626,63 @@ function Get-CustodyExpectedDirectoryTree {
     return $tree
 }
 
+# Decode the bounded NLST response; only exact self/parent records are structural.
+function ConvertFrom-CustodyDirectoryListing {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes,
+        [string]$DirectoryPath = '',
+        [AllowEmptyCollection()][string[]]$SeedFilePaths = @()
+    )
+    if ($Bytes.Length -gt 65536) { throw 'Remote directory listing exceeds its byte bound.' }
+    if ($DirectoryPath.Length -gt 0) {
+        $null = Assert-CustodyRemotePath -Path $DirectoryPath -SeedFilePaths $SeedFilePaths -AllowAncestor
+    }
+    try { $text = [Text.UTF8Encoding]::new($false,$true).GetString($Bytes) }
+    catch { throw 'Remote directory listing is not UTF-8.' }
+    $entries = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in @($text -split '\r?\n')) {
+        if ($entry -ceq '' -or $entry -ceq '.' -or $entry -ceq '..') { continue }
+        if ($entry.Length -gt 512 -or $entry -cnotmatch '^[A-Za-z0-9._:-]+$') {
+            throw 'Remote directory listing contains an unsafe entry.'
+        }
+        $logical = if ($DirectoryPath.Length -eq 0) { $entry } else { "$DirectoryPath/$entry" }
+        $null = Assert-CustodyRemotePath -Path $logical -SeedFilePaths $SeedFilePaths -AllowAncestor
+        if (-not $seen.Add($entry)) { throw 'Remote directory listing contains a duplicate or case alias.' }
+        $entries.Add($entry)
+        if ($entries.Count -gt 500) { throw 'Remote directory listing exceeds its entry bound.' }
+    }
+    return $entries.ToArray()
+}
+
+function Assert-CustodyBootstrapManifest {
+    param([Parameter(Mandatory)]$Manifest,[Parameter(Mandatory)]$Authority)
+    Assert-CustodyExactKeys -Value $Manifest -Expected @('schema','observed_at_utc','root_entries','public_matches') -Label 'root bootstrap manifest'
+    if ($Manifest.schema -cne 'minimodel.root-bootstrap.v1' -or
+        [string]$Manifest.observed_at_utc -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$') {
+        throw 'Root bootstrap manifest identity is invalid.'
+    }
+    $entries = @($Manifest.root_entries)
+    if ($entries.Count -lt 3 -or $entries.Count -gt 64) { throw 'Root bootstrap inventory is outside its bound.' }
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $entries) {
+        if ($entry -isnot [string] -or $entry -cnotmatch '^[A-Za-z0-9._-]{1,128}$' -or
+            $entry -cin @('.','..',[string]$Authority.transport.root_sentinel_path,[string]$Authority.transport.lease_directory_path) -or
+            -not $seen.Add($entry)) { throw 'Root bootstrap inventory contains an unsafe or occupied control entry.' }
+    }
+    $publicMatches = @($Manifest.public_matches)
+    $paths = @('index.html','catalog/compositions.v1.json','catalog/peer-announcements.v1.json')
+    if ($publicMatches.Count -ne $paths.Count) { throw 'Root bootstrap public evidence is incomplete.' }
+    for ($index=0;$index -lt $paths.Count;$index++) {
+        $item=$publicMatches[$index]
+        Assert-CustodyExactKeys -Value $item -Expected @('path','bytes','sha256') -Label 'bootstrap public match'
+        if ($item.path -cne $paths[$index] -or $item.bytes -isnot [int] -or $item.bytes -lt 1 -or $item.bytes -gt 2097152 -or
+            ([string]$item.sha256).Length -ne 64 -or [string]$item.sha256 -cnotmatch '^[0-9a-f]{64}$') {
+            throw 'Root bootstrap public evidence identity is invalid.'
+        }
+    }
+}
+
 function Assert-CustodyRemoteDirectoryTree {
     param(
         [Parameter(Mandatory)][string[]]$ExpectedFilePaths,
@@ -944,6 +1001,8 @@ Export-ModuleMember -Function @(
     "Assert-CustodyPublishedReleasePair",
     "Get-CustodyExpectedDirectoryTree",
     "Assert-CustodyRemotePath",
+    "ConvertFrom-CustodyDirectoryListing",
+    "Assert-CustodyBootstrapManifest",
     "Assert-CustodyRemoteDirectoryTree",
     "New-CustodyLeaseOwnerBytes",
     "Assert-CustodyLeaseOwnership",

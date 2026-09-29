@@ -129,7 +129,9 @@ switch ($Case) {
             Assert-Throws -Action { Assert-CustodyTransportAuthority -Authority $bound -Observed $wrong } -Pattern "immutable publication transport tuple"
         }
 
-        Assert-Throws -Action { Assert-CustodyTransportAuthority -Authority $authority -Observed $observed } -Pattern "not bound.*credential access is forbidden"
+        $unbound=Copy-JsonValue $authority
+        $unbound.transport.status='unbound';$unbound.transport.host=$null;$unbound.transport.port=$null;$unbound.transport.username_sha256=$null;$unbound.transport.remote_root=$null
+        Assert-Throws -Action { Assert-CustodyTransportAuthority -Authority $unbound -Observed $observed } -Pattern "not bound.*credential access is forbidden"
     }
 
     "mutation-order" {

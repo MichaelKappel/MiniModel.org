@@ -34,13 +34,13 @@
     ]
   },
   "transport": {
-    "status": "unbound",
+    "status": "bound",
     "profile_name": "MiniModel.org",
     "protocol": "ftps-explicit",
-    "host": null,
-    "port": null,
-    "username_sha256": null,
-    "remote_root": null,
+    "host": "server41.shared.spaceship.host",
+    "port": 21,
+    "username_sha256": "efbabe420071a41d5b24570f14e8e9b5a72db8cde22dcb2437d03dc6baeba3b1",
+    "remote_root": ".",
     "root_sentinel_path": ".minimodel-publication-root.v1.json",
     "root_sentinel_source_path": "deploy/publication-root-sentinel.v1.json",
     "root_sentinel_bytes": 165,

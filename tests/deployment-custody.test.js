@@ -84,8 +84,9 @@ test("exercises bounded input, transfer and rollback using canonical functions w
       "$ErrorActionPreference='Stop'",
       "$result=Invoke-Pester -Script @('./tests/MiniModel.DeploymentCustody_test.ps1','./tests/MiniModel.StaticSeed_test.ps1') -CodeCoverage @('./tools/MiniModel.DeploymentCustody.psm1','./tools/MiniModel.StaticSeed.psm1') -PassThru -Quiet",
       "$coverage=$result.CodeCoverage",
+      "$changedCoverage=@('ConvertFrom-CustodyDirectoryListing','Assert-CustodyBootstrapManifest') | ForEach-Object { $name=$_; $hit=@($coverage.HitCommands | Where-Object Function -eq $name).Count; $miss=@($coverage.MissedCommands | Where-Object Function -eq $name).Count; [pscustomobject]@{name=$name;hit=$hit;analyzed=($hit+$miss)} }",
       "$result.TestResult | Where-Object { -not $_.Passed } | Select-Object Name,FailureMessage | ConvertTo-Json -Compress | Write-Output",
-      "[pscustomobject]@{total=$result.TotalCount;passed=$result.PassedCount;failed=$result.FailedCount;hit=$coverage.NumberOfCommandsExecuted;analyzed=$coverage.NumberOfCommandsAnalyzed} | ConvertTo-Json -Compress | Write-Output",
+      "[pscustomobject]@{total=$result.TotalCount;passed=$result.PassedCount;failed=$result.FailedCount;hit=$coverage.NumberOfCommandsExecuted;analyzed=$coverage.NumberOfCommandsAnalyzed;changedFunctions=@($changedCoverage)} | ConvertTo-Json -Compress | Write-Output",
       "if ($result.FailedCount -ne 0) { exit 1 }",
     ].join("\n");
     const result = spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command], {
@@ -137,15 +138,15 @@ test("binds the immutable 1.1.1 receipt without editing it", () => {
   ]);
 });
 
-test("keeps production transport blocked until an authorized secret-free tuple is recorded", () => {
+test("binds the observed transport tuple without claiming sentinel or website publication", () => {
   const authority = readJson("deploy/publication-authority.v1.json");
   assert.equal(authority.repository.root_policy, "script-parent-equals-git-toplevel");
   assert.equal(Object.hasOwn(authority.repository, "canonical_root"), false);
-  assert.equal(authority.transport.status, "unbound");
-  assert.equal(authority.transport.host, null);
-  assert.equal(authority.transport.port, null);
-  assert.equal(authority.transport.username_sha256, null);
-  assert.equal(authority.transport.remote_root, null);
+  assert.equal(authority.transport.status, "bound");
+  assert.equal(authority.transport.host, "server41.shared.spaceship.host");
+  assert.equal(authority.transport.port, 21);
+  assert.equal(authority.transport.username_sha256, "efbabe420071a41d5b24570f14e8e9b5a72db8cde22dcb2437d03dc6baeba3b1");
+  assert.equal(authority.transport.remote_root, ".");
   assert.equal(authority.transport.profile_name, "MiniModel.org");
   assert.equal(authority.transport.protocol, "ftps-explicit");
   assert.equal(authority.transport.lease_directory_path, ".minimodel-deployment-lease.v1");

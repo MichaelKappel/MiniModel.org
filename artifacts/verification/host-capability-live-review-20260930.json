@@ -1,0 +1,101 @@
+{
+    "schema":  "minimodel.implementation-review.v1",
+    "recorded_utc":  "2026-09-30T00:35:10.2349987Z",
+    "status":  "live-host-capability-verified-and-probe-removed",
+    "question":  "Can the existing admitted host support private, signed, durable metadata renewal without a developer-machine scheduler?",
+    "decision":  "The exact nonsecret live probe established the ten required host capabilities and removed its namespace and deployment lease. Proceed with separately admitted qualified-model seed and renewal installation; the actual renewal namespace must first prove its own HTTP denial. Keep model quality, initial publication and renewal behavior as separate unfinished gates.",
+    "files":  [
+                  {
+                      "path":  "deploy/receipts/site-deployment-20260930T002007Z.json",
+                      "bytes":  1506,
+                      "sha256":  "82f5903aa0d0162fa638281a03c6de2d5fec708a0806b50ca68cfdef47845dc1"
+                  },
+                  {
+                      "path":  "tools/deploy-site.ps1",
+                      "bytes":  132414,
+                      "sha256":  "f97e57529575077cf5bff5e1110638f99bd26ddbf5be741a44d5e147ec5311c8"
+                  },
+                  {
+                      "path":  "deploy/host-capability/README.md",
+                      "bytes":  3590,
+                      "sha256":  "6a91a51daa1e37aea9d94d638df48e4fe3ad22715bd9d5b0ec02a7db2c459ec2"
+                  }
+              ],
+    "live":  {
+                 "publisher_commit":  "8967c7741561c22d2a1c28e8c7d3a1cbd645f816",
+                 "admitted_tiny_commit":  "b472127832b3b8ccba1edf2cbe8bd23f661bbbd1",
+                 "operation_id":  "15d72e7b339945ebae2f3635d8b5e1ad",
+                 "started_utc":  "2026-09-30T00:20:54.0740023Z",
+                 "completed_utc":  "2026-09-30T00:31:51.2755542Z",
+                 "source_authority_gate":  {
+                                               "output":  "0101ad",
+                                               "verdict":  "pass",
+                                               "canonicalLayoutAvailable":  true,
+                                               "localScanPerformed":  true,
+                                               "coverageClass":  "registered-governed-roots-only",
+                                               "wholeVolumeInventoryPerformed":  false,
+                                               "require_clean":  true,
+                                               "require_remote_exact":  true
+                                           },
+                 "publisher_own_admission":  {
+                                                 "output":  "31ad0e",
+                                                 "notification":  "HOST-CAPABILITY-SOURCE-ADMISSION-PASSED",
+                                                 "method":  "Fixed text-only breakpoint at the existing credential-import line, after source/authority/manifest capture; no source or state changes."
+                                             },
+                 "entrypoint":  "tools/deploy-site.ps1 -ProbeHostedRenewal",
+                 "terminal":  {
+                                  "output":  "d2776f",
+                                  "exit_code":  0
+                              },
+                 "capabilities":  {
+                                      "php":  true,
+                                      "sodium":  true,
+                                      "leaseBinding":  true,
+                                      "privateRead":  true,
+                                      "privateWrite":  true,
+                                      "flush":  true,
+                                      "atomicRename":  true,
+                                      "readback":  true,
+                                      "flock":  true,
+                                      "cleanup":  true
+                                  },
+                 "private_denial_verified":  true,
+                 "namespace_cleanup_verified":  true,
+                 "lease_retained_or_creation_ambiguous":  false,
+                 "public_response_bytes":  274,
+                 "public_response_sha256":  "4f7d1c832d9bf61587385750a05183e4c349d2d1d4223846e43b1ef3bdaf61b7",
+                 "attempts":  1,
+                 "retries":  0
+             },
+    "dependency_followup":  {
+                                "reason":  "The independently tested Tiny catalog validator now performs one bounded peer-freshness pair reload and carries observed revision floors; static-seed source custody must bind its new exact identity.",
+                                "path":  "TinyRustLM.com/tinyrustlm/app/minimodel-catalog-v1.js",
+                                "bytes":  77343,
+                                "sha256":  "b0028c3194ca4d1f12481b0c2d76b6aed420afef8d82aaaee4593b922d955112",
+                                "baseline":  {
+                                                 "output":  "93668f",
+                                                 "result":  "Old pin rejected before child execution with Verified Node file identity drifted."
+                                             },
+                                "after":  {
+                                              "output":  "d3ffb9",
+                                              "passed":  5,
+                                              "failed":  0,
+                                              "scope":  "Existing actual Verified Node child boundary tests, including pinned dependency loading and real validator rejection."
+                                          },
+                                "timing":  "Publisher source was changed only after the live operation completed."
+                            },
+    "production_scope":  {
+                             "website_published":  false,
+                             "seed_published":  false,
+                             "discovery_published":  false,
+                             "signing_key_published":  false
+                         },
+    "limits":  [
+                   "The observation proves this admitted host operation at the recorded time; it is not a continuously deployed probe.",
+                   "The separate renewal namespace requires its own verified HTTP denial before key placement.",
+                   "No real model quality qualification, seed availability, fresh public catalog or live metadata renewal is established.",
+                   "Parsed HTTP response checks do not establish exact raw-wire header syntax.",
+                   "The source gate covered the seven registered governed roots, not a whole-volume inventory."
+               ],
+    "reusable_lesson":  "Validate the real hosting primitives with nonsecret data under the exact production lease; preserve a compact immutable receipt and retire only the verified temporary namespace."
+}

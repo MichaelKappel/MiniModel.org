@@ -1,0 +1,33 @@
+{
+    "schema":  "minimodel.host_capability_receipt.v1",
+    "operation_id":  "15d72e7b339945ebae2f3635d8b5e1ad",
+    "publisher_commit":  "8967c7741561c22d2a1c28e8c7d3a1cbd645f816",
+    "authority_sha256":  "408346c123906c607a7e411222309a3687dfba073df2bc1f31dbb59b0ebc2070",
+    "source_manifest_sha256":  "ea5d92a30cb542000fa1cdc694fd9756f48b1f8695482cdc11a1bc0b0639b2c1",
+    "started_utc":  "2026-09-30T00:20:54.0740023Z",
+    "status":  "verified-and-removed",
+    "private_denial_verified":  true,
+    "capabilities_verified":  true,
+    "namespace_cleanup_verified":  true,
+    "website_published":  false,
+    "seed_published":  false,
+    "discovery_published":  false,
+    "signing_key_published":  false,
+    "last_step":  "complete",
+    "capabilities":  {
+                         "php":  true,
+                         "sodium":  true,
+                         "leaseBinding":  true,
+                         "privateRead":  true,
+                         "privateWrite":  true,
+                         "flush":  true,
+                         "atomicRename":  true,
+                         "readback":  true,
+                         "flock":  true,
+                         "cleanup":  true
+                     },
+    "public_response_sha256":  "4f7d1c832d9bf61587385750a05183e4c349d2d1d4223846e43b1ef3bdaf61b7",
+    "public_response_bytes":  274,
+    "lease_retained_or_creation_ambiguous":  false,
+    "completed_utc":  "2026-09-30T00:31:51.2755542Z"
+}

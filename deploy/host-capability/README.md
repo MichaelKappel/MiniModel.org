@@ -43,3 +43,14 @@ uses the already installed php:8.3-cli image with networking disabled. It does
 not pull an image or copy a source checkout. Enable that execution with
 MINIMODEL_HOST_CAPABILITY_PHP_DOCKER=1. The test reports an explicit skip when
 the opt-in runtime is unavailable; this is never production capability evidence.
+
+The admitted live probe completed on 2026-09-30 at 00:31:51 UTC. Its
+[append-only receipt](../receipts/site-deployment-20260930T002007Z.json) records
+all ten capability checks as true, including file/directory fsync and replacement
+of an existing owned file. Private denial, exact namespace removal and lease
+release were verified. The temporary endpoint was removed; this is a recorded
+observation, not a currently deployed health endpoint.
+
+No signing key, model, discovery metadata or website release was published.
+The eventual renewal namespace must prove its own HTTP denial before receiving
+a key, and actual qualified-model publication and renewal remain separate gates.

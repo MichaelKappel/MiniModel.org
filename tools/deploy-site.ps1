@@ -71,7 +71,7 @@ function Invoke-VerifiedNode {
         $dependencyIdentities = @(
             @{Path=(Join-Path $repositoryRoot 'tools\build-static-seed-plan.js');Bytes=7934;Sha256='47821c9a826be9f0cf0ee0f44ec6aaf4fe24863dc912dc1a5f6a0ac08f47048d'},
             @{Path=(Join-Path $repositoryRoot 'catalog.js');Bytes=52668;Sha256='353a9a986931dfbee8306185f3254f9b8e12202a38cf20ea7f61ccdc8f6fe549'},
-            @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\minimodel-catalog-v1.js');Bytes=76134;Sha256='1ac264b1e347c61bd2e8bee1b878978cdf3e7077e60748305ef7bb65664b01fa'},
+            @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\minimodel-catalog-v1.js');Bytes=77343;Sha256='b0028c3194ca4d1f12481b0c2d76b6aed420afef8d82aaaee4593b922d955112'},
             @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\browser-model-admission.js');Bytes=14858;Sha256='87cdc059e71435f1572b3ad03fcce17701d5b73e83c3a6172e078a3349e5b683'},
             @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\catalog-admission-loader.js');Bytes=38187;Sha256='623bb655aacdb075ea575193a64ef91469c6eda545e54b1dd4718fcf22493951'},
             @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\operation-lifetime.js');Bytes=2292;Sha256='4a9d907a3c62b679f896d859e843124bf4252e6d2be0f8aacc7e754113a9f570'}

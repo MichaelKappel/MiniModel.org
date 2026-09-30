@@ -5,8 +5,8 @@
   "members": [
     {
       "path": ".htaccess",
-      "byteLength": 72,
-      "sha256": "4d6482e9099c03db47c3f4022ea82671ac5ee6131d6f9a4e5dc0129b76adec07"
+      "byteLength": 1037,
+      "sha256": "c93262f0ecd837a441e8e03f1561e83777c00669736e28224c65441075b3bcb9"
     },
     {
       "path": "private/.htaccess",

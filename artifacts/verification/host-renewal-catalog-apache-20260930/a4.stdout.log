@@ -1,0 +1,21 @@
+▶ canonical renewal rewrite on installed Apache preserves exact routes and response policy
+  ✔ exact compositions.v1.json GET/HEAD and query forwarding (162.4271ms)
+  ✔ exact peer-announcements.v1.json GET/HEAD and query forwarding (138.0718ms)
+  ✔ unrelated catalog resources retain their existing wildcard policy (17.7447ms)
+  ✔ direct handler access does not acquire original-route policy and core remains denied (28.2312ms)
+✔ canonical renewal rewrite on installed Apache preserves exact routes and response policy (7276.9293ms)
+ℹ {"version":"Server version: Apache/2.4.58 (Ubuntu)\nServer built:   2026-07-06T16:27:55","rewriteSha256":"a6f1d07af2d0acdaeb72670d7318779991bc5e5af5bad4f2199aaaff9318181e","handlerRulesSha256":"c93262f0ecd837a441e8e03f1561e83777c00669736e28224c65441075b3bcb9","scope":"isolated Apache routing/header configuration with synthetic Python CGI; no PHP, live host, catalog-signing, model, TLS or publication claim"}
+ℹ [Tue Sep 29 18:15:05.278762 2026] [mpm_prefork:notice] [pid 587] AH00163: Apache/2.4.58 (Ubuntu) configured -- resuming normal operations
+[Tue Sep 29 18:15:05.279951 2026] [core:notice] [pid 587] AH00094: Command line: '/usr/sbin/apache2 -f /mnt/e/Source/Rust/MiniModel.org/artifacts/tests/minimodel-browser-aKG4Mw/httpd.conf'
+[Tue Sep 29 18:15:06.677354 2026] [authz_core:error] [pid 588] [client 127.0.0.1:44390] AH01630: client denied by server configuration: /mnt/e/Source/Rust/MiniModel.org/artifacts/tests/minimodel-browser-aKG4Mw/.minimodel-metadata-renewal.v1/renewal-core.php
+[Tue Sep 29 18:15:06.882398 2026] [mpm_prefork:notice] [pid 587] AH00169: caught SIGTERM, shutting down
+
+ℹ {"ownedOutputRemoved":{"files":11,"bytes":3510}}
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7342.0456

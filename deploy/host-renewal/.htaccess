@@ -2,3 +2,22 @@ Options -Indexes
 <Files "renewal-core.php">
 Require all denied
 </Files>
+
+# Catalog directory directives do not survive the internal rewrite into this namespace.
+# Replace both response-header tables at the final handler, scoped to the original routes.
+<Files "metadata.php">
+  <IfModule mod_headers.c>
+    <If "%{THE_REQUEST} =~ m#^[A-Z]+ /catalog/(compositions\.v1\.json|peer-announcements\.v1\.json)(\?| )#">
+      Header onsuccess unset Access-Control-Allow-Origin
+      Header always set Access-Control-Allow-Origin "https://tinyrustlm.com"
+      Header onsuccess unset Access-Control-Allow-Methods
+      Header always set Access-Control-Allow-Methods "GET, HEAD"
+      Header onsuccess unset Access-Control-Allow-Credentials
+      Header always unset Access-Control-Allow-Credentials
+      Header onsuccess unset Cache-Control
+      Header always set Cache-Control "no-store, no-transform"
+      Header onsuccess unset X-Content-Type-Options
+      Header always set X-Content-Type-Options "nosniff"
+    </If>
+  </IfModule>
+</Files>

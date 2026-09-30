@@ -1,0 +1,30 @@
+# Installed only after qualified seed/evidence, private denial and the initial signed pair are verified.
+Options -MultiViews
+RewriteEngine On
+RewriteRule ^(compositions\.v1\.json|peer-announcements\.v1\.json)$ /.minimodel-metadata-renewal.v1/metadata.php [END]
+
+# THE_REQUEST preserves the original route through internal rewrites.
+# Apache maintains separate onsuccess/always header tables; replace both for the fixed routes.
+# https://httpd.apache.org/docs/2.4/mod/mod_headers.html
+<IfModule mod_headers.c>
+  Header set Access-Control-Allow-Origin "*" "expr=%{THE_REQUEST} !~ m#^[A-Z]+ /catalog/(compositions\.v1\.json|peer-announcements\.v1\.json)(\?| )#"
+  Header set Access-Control-Allow-Methods "GET, OPTIONS" "expr=%{THE_REQUEST} !~ m#^[A-Z]+ /catalog/(compositions\.v1\.json|peer-announcements\.v1\.json)(\?| )#"
+  Header set Access-Control-Allow-Headers "Content-Type"
+  Header set Vary "Origin"
+  <If "%{THE_REQUEST} =~ m#^[A-Z]+ /catalog/(compositions\.v1\.json|peer-announcements\.v1\.json)(\?| )#">
+    Header onsuccess unset Access-Control-Allow-Origin
+    Header always set Access-Control-Allow-Origin "https://tinyrustlm.com"
+    Header onsuccess unset Access-Control-Allow-Methods
+    Header always set Access-Control-Allow-Methods "GET, HEAD"
+    Header onsuccess unset Access-Control-Allow-Credentials
+    Header always unset Access-Control-Allow-Credentials
+    Header onsuccess unset Cache-Control
+    Header always set Cache-Control "no-store, no-transform"
+    Header onsuccess unset X-Content-Type-Options
+    Header always set X-Content-Type-Options "nosniff"
+  </If>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType application/json .json
+</IfModule>

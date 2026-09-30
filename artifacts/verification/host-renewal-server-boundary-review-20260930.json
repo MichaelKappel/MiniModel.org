@@ -1,0 +1,145 @@
+{
+    "schema":  "minimodel.host_renewal_server_boundary_review.v1",
+    "reviewedAtUtc":  "2026-09-30T01:18:08.3356189Z",
+    "status":  "implemented-and-tested-locally-not-published",
+    "files":  [
+                  {
+                      "path":  "tools/verify-host-renewal-key.js",
+                      "bytes":  2616,
+                      "sha256":  "d0ef74a942d8ff9dee7fc8aa4727ba1fb7bb0377a11035d979b109efb4a0cb42"
+                  },
+                  {
+                      "path":  "tests/verify-host-renewal-key_test.js",
+                      "bytes":  5617,
+                      "sha256":  "c66f2fb2ddfd0ed16d9facbf2ef394cda3b7061f556131fc5e5f9ee08780044c"
+                  },
+                  {
+                      "path":  "deploy/host-renewal-catalog.htaccess",
+                      "bytes":  1673,
+                      "sha256":  "a6f1d07af2d0acdaeb72670d7318779991bc5e5af5bad4f2199aaaff9318181e"
+                  },
+                  {
+                      "path":  "deploy/host-renewal/.htaccess",
+                      "bytes":  1037,
+                      "sha256":  "c93262f0ecd837a441e8e03f1561e83777c00669736e28224c65441075b3bcb9"
+                  },
+                  {
+                      "path":  "deploy/host-renewal/source-manifest.v1.json",
+                      "bytes":  759,
+                      "sha256":  "02b0645e9eeac3636e454cb3968d2c6660d814bb6225b092dec75cfbce20ea60"
+                  },
+                  {
+                      "path":  "tests/host-renewal-catalog-apache_test.js",
+                      "bytes":  12528,
+                      "sha256":  "0d33dd81251198c1ed37e6f3e1fdfc1a6d7ac32428ea52c5b7ee5fc42de4a97f"
+                  }
+              ],
+    "evidence":  [
+                     {
+                         "path":  "artifacts/verification/host-renewal-key-check-20260930/a1.stdout.log",
+                         "bytes":  1351,
+                         "sha256":  "c509f2b7fdd4a2d42ac15bdc47eea35c47f7775bf58f8040b29b764a5dcbcfe9"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-key-check-20260930/a1.stderr.log",
+                         "bytes":  1,
+                         "sha256":  "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/a1.stdout.log",
+                         "bytes":  1336,
+                         "sha256":  "3dcb5292cc6b43222ae89e648d7f111511912bce874e76100b2d3db20ea0337d"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/a1.stderr.log",
+                         "bytes":  0,
+                         "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/a2.stdout.log",
+                         "bytes":  3653,
+                         "sha256":  "240e4b67970e0bf68e863bd7cdef452eab442f051081cf40653805209e844304"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/a2.stderr.log",
+                         "bytes":  0,
+                         "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/a3.stdout.log",
+                         "bytes":  1460,
+                         "sha256":  "2e7d8dea7708abbdd88b54490d9d238ca376d692a15c3a00d5b1b690e8c0f039"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/a3.stderr.log",
+                         "bytes":  0,
+                         "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/a4.stdout.log",
+                         "bytes":  1821,
+                         "sha256":  "e7cd43ae205ee04412517d8e01a8378244282ca8dd987f5c0899813190d56299"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/a4.stderr.log",
+                         "bytes":  0,
+                         "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/manifest.stdout.log",
+                         "bytes":  188,
+                         "sha256":  "591e311c2a870b1afc6abbfebf0dde7fee0d1a15628d759c3790e5568cecaca2"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-catalog-apache-20260930/manifest.stderr.log",
+                         "bytes":  0,
+                         "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                     }
+                 ],
+    "keyValidation":  {
+                          "tests":  5,
+                          "pass":  5,
+                          "fail":  0,
+                          "linePercent":  100,
+                          "branchPercent":  96.67,
+                          "functionPercent":  75,
+                          "scope":  "Public RFC8032 vector only; exact64-byte binary stdin; constant-time derived public key comparison; fixed success/rejection output; temporary DER/frame clearing without whole-process-erasure claim.",
+                          "independentReview":  "Root read entire key helper/test and found no defect."
+                      },
+    "apacheValidation":  {
+                             "tests":  5,
+                             "pass":  5,
+                             "fail":  0,
+                             "manifestTests":  1,
+                             "manifestPass":  1,
+                             "version":  "Apache/2.4.58 (Ubuntu)",
+                             "scope":  "Installed WSL Apache in isolated loopback instance. Canonical source Include, synthetic Python CGI handler, no PHP/model/live host/TLS/publication claim.",
+                             "checks":  [
+                                            "Exact two GET/HEAD rewrites",
+                                            "Original query retained",
+                                            "Duplicate onsuccess and always headers removed in final handler context",
+                                            "Unrelated catalog resource policy preserved",
+                                            "Direct handler lacks original-route header policy and core remains denied"
+                                        ],
+                             "cleanup":  "Exact PID/config stopped; canonical owned test output removed; artifacts/tests empty at test completion."
+                         },
+    "preservedFailures":  [
+                              {
+                                  "attempt":  "Apache a1",
+                                  "cause":  "Fixture attempted case-only duplicate filenames on Windows; corrected fixture setup."
+                              },
+                              {
+                                  "attempt":  "Apache a2",
+                                  "cause":  "Real catalog header cleanup disappeared through internal rewrite. Conflicting synthetic inherited/CGI headers survived. This is not a claim that normal PHP returns wrong origin.",
+                                  "fix":  "Exact original-route condition and both header tables now enforced in final metadata.php context. PHP/core unchanged."
+                              }
+                          ],
+    "production":  {
+                       "keyRead":  false,
+                       "productionKeyCreated":  false,
+                       "published":  false,
+                       "seedQualified":  false,
+                       "installerEnabled":  false,
+                       "remaining":  "Final installer/lease/renewal verification and real qualified source. Existing host capability proof is separate; new operational namespace denial remains mandatory."
+                   }
+}

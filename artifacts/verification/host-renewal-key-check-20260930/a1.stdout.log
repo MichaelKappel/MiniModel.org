@@ -1,0 +1,23 @@
+✔ known public Ed25519 vector derives the exact public key without mutating caller-owned bytes (4.641ms)
+✔ derivation failure or wrong exported algorithm framing yields only false and clears temporary DER seed bytes (1.5766ms)
+✔ binary stdin handles arbitrary chunk boundaries and exact EOF with fixed pass/fail output (8.1392ms)
+✔ an oversized frame stops reading immediately, and stream errors cannot reveal input or exception text (0.3158ms)
+✔ actual CLI reads only raw stdin and emits exactly the fixed protocol for match, mismatch and malformed invocation (361.2266ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 456.624
+ℹ start of coverage report
+ℹ ----------------------------------------------------------------------------
+ℹ file                        | line % | branch % | funcs % | uncovered lines
+ℹ ----------------------------------------------------------------------------
+ℹ tools                       |        |          |         | 
+ℹ  verify-host-renewal-key.js | 100.00 |    96.67 |   75.00 | 
+ℹ ----------------------------------------------------------------------------
+ℹ all files                   | 100.00 |    96.67 |   75.00 | 
+ℹ ----------------------------------------------------------------------------
+ℹ end of coverage report

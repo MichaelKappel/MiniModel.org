@@ -1,0 +1,71 @@
+▶ canonical renewal rewrite on installed Apache preserves exact routes and response policy
+  ✖ exact compositions.v1.json GET/HEAD and query forwarding (53.2393ms)
+  ✖ exact peer-announcements.v1.json GET/HEAD and query forwarding (31.5803ms)
+  ✔ unrelated catalog resources retain their existing wildcard policy (28.325ms)
+✖ canonical renewal rewrite on installed Apache preserves exact routes and response policy (6787.3799ms)
+ℹ {"version":"Server version: Apache/2.4.58 (Ubuntu)\nServer built:   2026-07-06T16:27:55","rewriteSha256":"a6f1d07af2d0acdaeb72670d7318779991bc5e5af5bad4f2199aaaff9318181e","scope":"isolated Apache routing/header configuration with synthetic Python CGI; no PHP, live host, catalog-signing, model, TLS or publication claim"}
+ℹ [Tue Sep 29 18:12:20.384798 2026] [mpm_prefork:notice] [pid 586] AH00163: Apache/2.4.58 (Ubuntu) configured -- resuming normal operations
+[Tue Sep 29 18:12:20.385034 2026] [core:notice] [pid 586] AH00094: Command line: '/usr/sbin/apache2 -f /mnt/e/Source/Rust/MiniModel.org/artifacts/tests/minimodel-browser-S7AUXa/httpd.conf'
+[Tue Sep 29 18:12:21.563732 2026] [mpm_prefork:notice] [pid 586] AH00169: caught SIGTERM, shutting down
+
+ℹ {"ownedOutputRemoved":{"files":10,"bytes":3148}}
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6861.6473
+
+✖ failing tests:
+
+test at tests\host-renewal-catalog-apache_test.js:156:41
+✖ exact compositions.v1.json GET/HEAD and query forwarding (53.2393ms)
+  AssertionError [ERR_ASSERTION]: GET /catalog/compositions.v1.json access-control-allow-origin
+  + actual - expected
+  
+    [
+  +   'wrong-always-one, wrong-always-two',
+  +   'wrong-onsuccess'
+  -   'https://tinyrustlm.com'
+    ]
+  
+      at TestContext.<anonymous> (E:\Source\Rust\MiniModel.org\tests\host-renewal-catalog-apache_test.js:167:22)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async TestContext.<anonymous> (E:\Source\Rust\MiniModel.org\tests\host-renewal-catalog-apache_test.js:156:33)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'wrong-always-one, wrong-always-two', 'wrong-onsuccess' ],
+    expected: [ 'https://tinyrustlm.com' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests\host-renewal-catalog-apache_test.js:156:41
+✖ exact peer-announcements.v1.json GET/HEAD and query forwarding (31.5803ms)
+  AssertionError [ERR_ASSERTION]: GET /catalog/peer-announcements.v1.json access-control-allow-origin
+  + actual - expected
+  
+    [
+  +   'wrong-always-one, wrong-always-two',
+  +   'wrong-onsuccess'
+  -   'https://tinyrustlm.com'
+    ]
+  
+      at TestContext.<anonymous> (E:\Source\Rust\MiniModel.org\tests\host-renewal-catalog-apache_test.js:167:22)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async TestContext.<anonymous> (E:\Source\Rust\MiniModel.org\tests\host-renewal-catalog-apache_test.js:156:33)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'wrong-always-one, wrong-always-two', 'wrong-onsuccess' ],
+    expected: [ 'https://tinyrustlm.com' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

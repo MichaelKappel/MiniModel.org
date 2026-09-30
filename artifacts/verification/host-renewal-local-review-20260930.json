@@ -1,0 +1,138 @@
+{
+  "schema": "minimodel.host_renewal_local_review.v1",
+  "status": "in-progress-local-contract-tested-deployment-and-independent-review-pending",
+  "published": false,
+  "productionKeyCreated": false,
+  "sourceManifest": {
+    "path": "deploy/host-renewal/source-manifest.v1.json",
+    "bytes": 757,
+    "sha256": "8ac6fc3871e5208be8fff23bc1e2d918deb0ecb847d0b08eef337a8d25c99c9d"
+  },
+  "tests": {
+    "final": {
+      "log": "artifacts/verification/host-renewal-local-a3-20260930.stdout.log",
+      "nodePassed": 2,
+      "phpCases": 19,
+      "skipped": 0,
+      "image": "sha256:f62df9916bc05ae3c5120b41a115938f22623b0c98c815cbe2c67bc73cec21ef",
+      "stateFilesystem": "isolated Linux tmpfs; canonical source read-only mount",
+      "validation": "Actual PHP/libsodium outputs read by unchanged Mini catalog/peer reader and Tiny signing formatter; public deterministic 01*32 fixture seed only."
+    },
+    "prior": {
+      "localA1": "Windows-created fixture lock opened r+b failed retained file identity/open assertion; no renewal.",
+      "localA2": "Read-only lock descriptor advanced to replacement; Windows-created old pair replacement failed. Fixture lstat mode0555; not evidence all Windows-backed replacements fail.",
+      "diagnosticA1": "In-memory diagnostic eval wrapper failed strict_types first-statement rule; no production change.",
+      "diagnosticA2": "In-memory exception-line diagnostic located lock assertion236.",
+      "diagnosticA3": "In-memory exception-line/stat diagnostic located existing pair replacement assertion306 after lock-only descriptor correction."
+    }
+  },
+  "implementation": "Only fixed metadata routes, immutable approved initial pair, real timestamp/revision updates, public-key-matched signature, source evidence hashing, shared deployment lease and local lock, file/directory fsync, journal and atomic pair replacement. Expired cache never served. Configuration closure is additionally publisher-admitted before installation.",
+  "pending": [
+    "Independent source review and any resulting fixes",
+    "Additional concurrency/crash/symlink tests",
+    "Verified live PHP/atomic replacement/durability and namespace-specific private HTTP denial",
+    "Qualified real default and secure initial seed/config/key admission",
+    "Publisher integration and exact existing-route rewrite",
+    "Bounded browser metadata-pair race recovery",
+    "Live renewal and actual production acceptance"
+  ],
+  "sensitiveDataReview": "Source, synthetic fixture names/status, public deterministic test key, file-stat diagnostics and local paths only; no real model payload, credential, production private key or private conversation.",
+  "files": [
+    {
+      "path": "deploy/host-renewal/renewal-core.php",
+      "bytes": 17552,
+      "sha256": "7fbb04c31db53e18344d56638447f4e628aedb593baf05dd7a3881e4554ba2f9"
+    },
+    {
+      "path": "deploy/host-renewal/metadata.php",
+      "bytes": 647,
+      "sha256": "e4c4671a9c158789b529f6ffa7ea5415a381e1b1b719f20260c77ed1c208d076"
+    },
+    {
+      "path": "deploy/host-renewal/.htaccess",
+      "bytes": 72,
+      "sha256": "4d6482e9099c03db47c3f4022ea82671ac5ee6131d6f9a4e5dc0129b76adec07"
+    },
+    {
+      "path": "deploy/host-renewal/private/.htaccess",
+      "bytes": 19,
+      "sha256": "fa28d421a28ed9b6f4b997d5119c2b8adbacff6e2dd119a179b71230f9664934"
+    },
+    {
+      "path": "deploy/host-renewal/source-manifest.v1.json",
+      "bytes": 757,
+      "sha256": "8ac6fc3871e5208be8fff23bc1e2d918deb0ecb847d0b08eef337a8d25c99c9d"
+    },
+    {
+      "path": "deploy/host-renewal/README.md",
+      "bytes": 2314,
+      "sha256": "0dcb3bc724bc03c4dbaf4bfb8f456a37b79966490c554a760e4fd367777d602b"
+    },
+    {
+      "path": "tests/host-renewal.test.js",
+      "bytes": 9713,
+      "sha256": "b289bd56a1858e7fbe8550e5e832596de0f255d14012a4d57c804a82558bb202"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-local-a1-20260930.stdout.log",
+      "bytes": 1166,
+      "sha256": "2d5f2afb76bff15c056a277ca14a25e58ef586c3d77f24c985df19bd6d1e240d"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-local-a1-20260930.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-local-a2-20260930.stdout.log",
+      "bytes": 1171,
+      "sha256": "783c75c7ac0923d0de12033890c5d0742172252980510677221adb9a441e6562"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-local-a2-20260930.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-local-a3-20260930.stdout.log",
+      "bytes": 1478,
+      "sha256": "f90152c39f935afae7e69ae082827179fd277b442ffad61e3bca7d4970bb7dd7"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-local-a3-20260930.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-diagnostic-a1-20260930.stdout.log",
+      "bytes": 1334,
+      "sha256": "e57234191571d4582f2f7892e00087db6cb3a144e746adc3ef947e1bbb77c6ad"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-diagnostic-a1-20260930.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-diagnostic-a2-20260930.stdout.log",
+      "bytes": 4059,
+      "sha256": "b648b6356f4c7a0574eab105b37444f3770210aab4444b48517cc0c145b5ad6f"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-diagnostic-a2-20260930.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-diagnostic-a3-20260930.stdout.log",
+      "bytes": 3685,
+      "sha256": "f48a0ec64176df8d7bbc843958fad85152eda5f5b835309c41b4f6c3555554c8"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-diagnostic-a3-20260930.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "recordedAtUtc": "2026-09-30T00:15:05.619Z"
+}

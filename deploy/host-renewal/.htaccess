@@ -1,0 +1,4 @@
+Options -Indexes
+<Files "renewal-core.php">
+Require all denied
+</Files>

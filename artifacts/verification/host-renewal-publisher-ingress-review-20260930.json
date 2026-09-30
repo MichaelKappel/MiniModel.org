@@ -1,0 +1,51 @@
+{
+    "schema":  "minimodel.host_renewal_publisher_ingress_review.v1",
+    "reviewedAtUtc":  "2026-09-30T01:06:29.7681266Z",
+    "status":  "input-ingress-implemented-and-tested-no-installation-entrypoint",
+    "files":  [
+                  {
+                      "path":  "tools/deploy-site.ps1",
+                      "bytes":  138652,
+                      "sha256":  "8801c0105de4d475204d2f6ace2467f9bfd86cd97970d180069171f910437c5a"
+                  },
+                  {
+                      "path":  "tests/MiniModel.HostRenewal_test.ps1",
+                      "bytes":  9916,
+                      "sha256":  "77b3871a6b0640a397c099cec9f27d6a5ffc3cef110e3396a747f460e41da982"
+                  }
+              ],
+    "validation":  {
+                       "focusedTests":  9,
+                       "focusedPass":  9,
+                       "fullPublisherTests":  127,
+                       "fullPublisherPass":  127,
+                       "failed":  0,
+                       "skipped":  0,
+                       "commands":  [
+                                        "Invoke-Pester tests/MiniModel.HostRenewal_test.ps1",
+                                        "Invoke-Pester deployment custody, static seed, host capability and host renewal suites"
+                                    ],
+                       "evidence":  [
+                                        "553c18",
+                                        "d3afe4",
+                                        "9a3b75",
+                                        "c8d84b"
+                                    ],
+                       "scope":  "Actual Git runtime capture and actual pinned Node seed/renewal validators on synthetic metadata. Transport tests use in-memory mocks; no live account or model data.",
+                       "coverage":  "Actual custody, negative result, byte substitution and process-ingress scenarios retained; no numeric PowerShell source coverage claim."
+                   },
+    "independentReview":  {
+                              "reviewer":  "runtime_state_review",
+                              "result":  "No material source closure, capture or owner binding defect found. Complete Node dependency closure is pinned/read-leased; four runtime members match one committed manifest; six owned input identities, generated private bytes, release source/publisher commits and initial documents rebind after validation."
+                          },
+    "sourceClaims":  {
+                         "publicationAllowed":  false,
+                         "credentialRead":  false,
+                         "keyRead":  false,
+                         "keyCreated":  false,
+                         "modelRead":  false,
+                         "networkMutation":  false,
+                         "installModeEnabled":  false
+                     },
+    "remaining":  "Local installation transaction, key correspondence helper integration, Apache two-route verification, private namespace denial and real qualified publication. The separate untested rewrite file is excluded from this checkpoint."
+}

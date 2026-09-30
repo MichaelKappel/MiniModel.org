@@ -93,3 +93,5 @@ deploy/host-renewal-installation.md text eol=lf
 artifacts/verification/host-renewal-producer-review-20260930.json text eol=lf
 artifacts/verification/host-renewal-producer-a2-20260930.stdout.log -text -diff
 artifacts/verification/host-renewal-producer-a2-20260930.stderr.log -text -diff
+tests/MiniModel.HostRenewal_test.ps1 text eol=lf
+artifacts/verification/host-renewal-publisher-ingress-review-20260930.json text eol=lf

@@ -36,14 +36,14 @@ function Test-BootstrapPathHasReparsePoint {
 # Execute reviewed tools with their pinned dependency closure, retained read leases and bounded pipes.
 function Invoke-VerifiedNode {
     param(
-        [Parameter(Mandatory)][ValidateSet('source-authority','manifest','seed-admission')][string]$Tool,
+        [Parameter(Mandatory)][ValidateSet('source-authority','manifest','seed-admission','renewal-input')][string]$Tool,
         [AllowEmptyCollection()][string[]]$Arguments = @(),
         [AllowNull()][AllowEmptyCollection()][byte[]]$InputBytes,
         [ValidateRange(1,120000)][int]$TimeoutMilliseconds = 120000
     )
 
     $dependencyIdentities = @()
-    if ($Tool -cne 'seed-admission' -and $null -ne $InputBytes) { throw 'This verified tool does not accept stdin bytes.' }
+    if ($Tool -cnotin @('seed-admission','renewal-input') -and $null -ne $InputBytes) { throw 'This verified tool does not accept stdin bytes.' }
     if ($Tool -ceq 'source-authority') {
         if (@($Arguments | Where-Object { $_ -cnotin @('--require-clean','--require-remote-exact') }).Count -gt 0 -or
             @($Arguments | Select-Object -Unique).Count -ne $Arguments.Count) { throw 'Invalid source-authority arguments.' }
@@ -61,8 +61,9 @@ function Invoke-VerifiedNode {
         $maximumOutput = 2097152
     }
     else {
-        if ($Arguments.Count -ne 0 -or $null -eq $InputBytes -or $InputBytes.Length -lt 1 -or $InputBytes.Length -gt 3145728) {
-            throw 'Invalid seed-admission input.'
+        $inputMaximum=if($Tool -ceq 'renewal-input'){6291456}else{3145728}
+        if ($Arguments.Count -ne 0 -or $null -eq $InputBytes -or $InputBytes.Length -lt 1 -or $InputBytes.Length -gt $inputMaximum) {
+            throw ('Invalid '+$Tool+' input.')
         }
         $toolPath = Join-Path $repositoryRoot 'tools\admit-static-seed-publication.js'
         $toolBytes = 7611
@@ -76,6 +77,13 @@ function Invoke-VerifiedNode {
             @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\catalog-admission-loader.js');Bytes=38187;Sha256='623bb655aacdb075ea575193a64ef91469c6eda545e54b1dd4718fcf22493951'},
             @{Path=(Join-Path (Split-Path -Parent $repositoryRoot) 'TinyRustLM.com\tinyrustlm\app\operation-lifetime.js');Bytes=2292;Sha256='4a9d907a3c62b679f896d859e843124bf4252e6d2be0f8aacc7e754113a9f570'}
         )
+        if($Tool -ceq 'renewal-input') {
+            $dependencyIdentities+=@{Path=$toolPath;Bytes=$toolBytes;Sha256=$toolSha256}
+            $toolPath=Join-Path $repositoryRoot 'tools\build-host-renewal-input.js'
+            $toolBytes=8936
+            $toolSha256='8eecd5f4a5b5a796add8470b41841979f61e324a6feb0174f1aef174451eb251'
+            $maximumOutput=8388608
+        }
     }
     if (-not [IO.Path]::IsPathRooted($NodeExecutablePath)) { throw 'Node executable path must be absolute.' }
     $nodePath = [IO.Path]::GetFullPath($NodeExecutablePath)
@@ -766,6 +774,81 @@ function Get-StaticSeedPublicationInput {
         }
     }
     return [pscustomobject]@{Commit=$Commit;RegistrySha256=(Get-CustodyByteSha256 -Bytes $registryBytes);Inputs=$inputs;Admission=$admitted}
+}
+
+# Capture only the reviewed hosted renewal runtime closure from the admitted Git commit.
+function Get-HostedRenewalSourceInput {
+    param([Parameter(Mandatory)][string]$Commit)
+    $manifestBytes=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $Commit -RelativePath 'deploy/host-renewal/source-manifest.v1.json' -MaximumBytes 16384
+    $utf8=[Text.UTF8Encoding]::new($false,$true);$manifest=$utf8.GetString($manifestBytes)|ConvertFrom-Json
+    $names=@('.htaccess','private/.htaccess','renewal-core.php','metadata.php')
+    if(@($manifest.PSObject.Properties.Name).Count -ne 4 -or $manifest.schema -cne 'minimodel.host_renewal_source.v1' -or
+        $manifest.remoteNamespace -cne '.minimodel-metadata-renewal.v1' -or $manifest.published -ne $false -or @($manifest.members).Count -ne 4) {
+        throw 'Hosted renewal manifest is not the reviewed source closure.'
+    }
+    $files=[ordered]@{}
+    for($i=0;$i -lt $names.Count;$i++) {
+        $member=$manifest.members[$i]
+        if(@($member.PSObject.Properties.Name).Count -ne 3 -or $member.path -cne $names[$i] -or
+            $member.byteLength -lt 1 -or $member.byteLength -gt 32768 -or
+            ([string]$member.sha256).Length -ne 64 -or $member.sha256 -cnotmatch '^[a-f0-9]{64}$') {
+            throw 'Hosted renewal member identity is invalid.'
+        }
+        $body=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $Commit -RelativePath ('deploy/host-renewal/'+$member.path) -MaximumBytes $member.byteLength
+        if($body.Length -ne $member.byteLength -or (Get-CustodyByteSha256 $body) -cne $member.sha256) { throw 'Hosted renewal committed source identity differs.' }
+        $files[$member.path]=[byte[]]$body.Clone()
+    }
+    if($utf8.GetString($files['private/.htaccess']) -cne "Require all denied`n") { throw 'Hosted renewal private denial configuration differs.' }
+    return [pscustomobject]@{ManifestSha256=(Get-CustodyByteSha256 $manifestBytes);Namespace=$manifest.remoteNamespace;Files=$files}
+}
+
+# Derive immutable private configuration only from actual admitted public documents and reviewed source.
+function Get-HostedRenewalPublicationInput {
+    param([Parameter(Mandatory)][string]$Commit,[Parameter(Mandatory)]$AuthorityRecord)
+    $seed=Get-StaticSeedPublicationInput -Commit $Commit
+    $runtime=Get-HostedRenewalSourceInput -Commit $Commit
+    $utf8=[Text.UTF8Encoding]::new($false,$true)
+    $catalog=$utf8.GetString($seed.Inputs.catalog)|ConvertFrom-Json
+    $licenseRoute=[string]$catalog.entries[0].license.route
+    if(-not $licenseRoute.StartsWith('/') -or $licenseRoute.StartsWith('//')) { throw 'Hosted renewal license route is not local.' }
+    $licensePath=Assert-RelativePath -Path $licenseRoute.Substring(1)
+    $license=Get-CustodyGitBlobBytes -RepositoryRoot $repositoryRoot -Commit $Commit -RelativePath $licensePath -MaximumBytes 1048576
+    $inputs=[ordered]@{}
+    foreach($name in @('descriptor','catalog','peerFeed','admission','qualificationReceipt')) { $inputs[$name]=[byte[]]$seed.Inputs[$name].Clone() }
+    $inputs.license=[byte[]]$license.Clone()
+    $owner=[ordered]@{site='minimodel.org';release_id=[string]$AuthorityRecord.Value.candidate.release_id;
+        source_commit=[string]$AuthorityRecord.Value.candidate.source_commit;publisher_commit=$Commit;
+        manifest_sha256=$runtime.ManifestSha256;authority_sha256=$AuthorityRecord.Sha256}
+    $encoded=[ordered]@{}
+    foreach($name in $inputs.Keys) { $encoded[$name]=[Convert]::ToBase64String($inputs[$name]) }
+    $envelope=[ordered]@{inputs=$encoded;releaseOwner=$owner}
+    $envelopeBytes=$utf8.GetBytes((($envelope|ConvertTo-Json -Depth 4 -Compress)+"`n"))
+    $result=Invoke-VerifiedNode -Tool renewal-input -InputBytes $envelopeBytes
+    if($result.ExitCode -ne 0 -or $result.Stderr.Length -ne 0) { throw 'Canonical hosted renewal input admission failed.' }
+    $prepared=$result.Stdout|ConvertFrom-Json
+    if($prepared.schema -cne 'minimodel.host-renewal-input/1' -or $prepared.status -cne 'metadata-admitted-host-and-key-unverified' -or
+        $prepared.publicationAllowed -ne $false -or $prepared.compositionId -cne $seed.Admission.compositionId -or
+        $prepared.qualificationReceiptId -cne $seed.Admission.qualificationReceiptId -or @($prepared.sourceReferences).Count -ne 9) {
+        throw 'Hosted renewal input admission returned an unsupported result.'
+    }
+    foreach($name in $inputs.Keys) {
+        if($prepared.metadata.$name.bytes -ne $inputs[$name].Length -or $prepared.metadata.$name.sha256 -cne (Get-CustodyByteSha256 $inputs[$name])) {
+            throw 'Hosted renewal input admission consumed different bytes.'
+        }
+    }
+    $privateFiles=[ordered]@{}
+    foreach($pair in @(@('configuration','config.json'),@('pair','pair.json'))) {
+        $identity=$prepared.($pair[0]);$body=$utf8.GetBytes([string]$identity.text)
+        if($body.Length -lt 1 -or $body.Length -gt 1048576 -or $body.Length -ne $identity.bytes -or
+            (Get-CustodyByteSha256 $body) -cne $identity.sha256) { throw 'Hosted renewal generated private bytes differ.' }
+        $privateFiles[$pair[1]]=$body
+    }
+    $config=$utf8.GetString($privateFiles['config.json'])|ConvertFrom-Json
+    foreach($name in $owner.Keys) { if($config.release_owner.$name -cne $owner[$name]) { throw 'Hosted renewal release owner binding differs.' } }
+    if($config.initial_catalog -cne $utf8.GetString($inputs.catalog) -or $config.initial_peer_feed -cne $utf8.GetString($inputs.peerFeed)) {
+        throw 'Hosted renewal initial public bytes differ.'
+    }
+    return [pscustomobject]@{Commit=$Commit;Seed=$seed;Runtime=$runtime;Inputs=$inputs;Prepared=$prepared;PrivateFiles=$privateFiles;LicensePath=$licensePath;ReleaseOwner=$owner}
 }
 
 # Resolve only one of the seven admitted immutable members or its current operation's exact stage.

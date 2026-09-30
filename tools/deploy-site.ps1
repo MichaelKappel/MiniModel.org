@@ -1608,7 +1608,7 @@ function Get-HostedCapabilityInput {
 
 # Validate only the fixed public result shape; never persist unknown response fields or PHP diagnostics.
 function Assert-HostedCapabilityResult {
-    param([Parameter(Mandatory)][byte[]]$Bytes,[Parameter(Mandatory)][string]$OperationId)
+    param([Parameter(Mandatory)][byte[]]$Bytes,[Parameter(Mandatory)][string]$OperationId,[switch]$AllowFailedChecks)
     if($Bytes.Length -lt 1 -or $Bytes.Length -gt 4096){throw 'Hosted capability result exceeds its byte bound.'}
     $value=[Text.UTF8Encoding]::new($false,$true).GetString($Bytes)|ConvertFrom-Json
     $keys=@('schema','nonce','ok','checks')
@@ -1618,7 +1618,9 @@ function Assert-HostedCapabilityResult {
     if(@($value.checks.PSObject.Properties.Name).Count -ne $checks.Count -or
         @($value.checks.PSObject.Properties.Name|Where-Object {$_ -cnotin $checks}).Count -gt 0){throw 'Hosted capability check closure differs.'}
     foreach($name in $checks){if($value.checks.$name -isnot [bool]){throw 'Hosted capability check is not a boolean.'}}
-    if(-not $value.ok -or @($checks|Where-Object {-not $value.checks.$_}).Count -gt 0){throw 'Hosted capability prerequisite was not established.'}
+    $allPassed=@($checks|Where-Object {-not $value.checks.$_}).Count -eq 0
+    if($value.ok -ne $allPassed){throw 'Hosted capability result contradicts its check observations.'}
+    if(-not $allPassed -and -not $AllowFailedChecks){throw 'Hosted capability prerequisite was not established.'}
     return $value
 }
 
@@ -1650,7 +1652,7 @@ function Get-HostedCapabilityHttpObservation {
             if($count -gt 4096){throw 'Hosted capability HTTP body exceeds its byte bound.'}
         } while($read -gt 0)
         $body=[byte[]]::new($count);[Array]::Copy($buffer,$body,$count)
-        $result=Assert-HostedCapabilityResult -Bytes $body -OperationId $OperationId
+        $result=Assert-HostedCapabilityResult -Bytes $body -OperationId $OperationId -AllowFailedChecks
         return [pscustomobject]@{status=200;bytes=$count;sha256=(Get-CustodyByteSha256 $body);result=$result}
     } finally {
         if($null -ne $close){$close.Dispose()};if($response){$response.Dispose()};$cts.Dispose();$request.Dispose();$client.Dispose()
@@ -1761,6 +1763,7 @@ function Invoke-HostedCapabilityProbe {
         $receipt.last_step='public-capability-observation'
         $observation=Get-HostedCapabilityHttpObservation -RelativePath ($namespace+'/probe.json') -OperationId $operation
         $receipt.capabilities=$observation.result.checks;$receipt.public_response_sha256=$observation.sha256;$receipt.public_response_bytes=$observation.bytes
+        if(-not $observation.result.ok){throw 'Hosted capability prerequisite was not established.'}
         foreach($path in @('private/canary.txt','private/operation.json','probe-core.php','probe.php')) {
             $null=Get-HostedCapabilityHttpObservation -RelativePath ($namespace+'/'+$path) -OperationId $operation -Deny
         }

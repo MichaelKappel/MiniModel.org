@@ -32,6 +32,8 @@ contended flock, rename/readback and exact owned-file retirement. It revalidates
 the live deployment lease before mutations. A failed or ambiguous scratch
 operation is retained. The probe never contacts a network, accepts a filesystem
 path over HTTP, exposes environment values, or uses production keys.
+The `flush` check requires both file fsync and directory fsync after rename;
+file-only durability is insufficient for the planned atomic metadata renewal.
 
 The local test reads canonical PHP source through a read-only Docker mount and
 uses the already installed php:8.3-cli image with networking disabled. It does

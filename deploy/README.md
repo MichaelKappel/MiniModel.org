@@ -172,3 +172,31 @@ The root sentinel is authority material, not a site release artifact. It must
 remain byte-identical to `deploy/publication-root-sentinel.v1.json`; the site
 manifest never uploads or repairs it. Existing 1.1.1 receipts are immutable
 and must not be edited.
+
+## Existing-host renewal capability probe
+
+The separate `-ProbeHostedRenewal` operation tests the current bound account for
+the prerequisites documented in `host-capability/README.md`. It requires a clean,
+remote-exact canonical source admission and the installed root sentinel. Its
+only namespace is the previously absent `.minimodel-host-capability.v1`;
+website, catalog and model files remain outside this operation.
+
+```powershell
+.\tools\deploy-site.ps1 -ProbeHostedRenewal
+```
+
+The publisher holds the existing deployment lease, verifies a nonsecret canary
+is denied over HTTPS before uploading PHP or its operation record, and verifies
+the exact source closure over FTPS. A bounded no-query HTTPS response must bind
+the current operation and pass all ten capability checks. Well-formed negative
+checks and their response identity are retained in the failed receipt; arbitrary
+PHP diagnostics are never copied into it. Success removes only the exact probe
+files and empty owned directories, keeping private denial until its files are
+gone, then releases the lease. Any ambiguous failure retains the namespace and
+lease for exact review; do not rerun or remove it blindly.
+
+Receipts use the existing append-only `deploy/receipts/site-deployment-*.json`
+path. A successful local test is not live-host evidence. This operation installs
+no signing key and does not renew discovery, publish a seed, or qualify a model.
+The eventual renewal namespace must separately prove private HTTP denial before
+receiving a real key.

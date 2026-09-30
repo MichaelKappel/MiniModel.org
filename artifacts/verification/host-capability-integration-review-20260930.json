@@ -1,0 +1,126 @@
+{
+    "schema":  "minimodel.implementation-review.v1",
+    "recorded_utc":  "2026-09-30T00:06:47.3162008Z",
+    "status":  "host-capability-publisher-locally-tested-production-unverified",
+    "base_commit":  "6afb0ac9678af7eacf26b8fc9a2354f42ebda1b0",
+    "question":  "Can the admitted nonsecret probe establish the precise host prerequisites and retain useful failed capability evidence without weakening publication custody?",
+    "decision":  "Keep the exact closed capability shape. Retain validated negative booleans and response identities in failed receipts, reject contradictory success summaries, and never use a negative result to clean or release uncertain state. Require file fsync and directory fsync after rename before declaring flush capability. Hold production execution for a fresh coordinated clean-source admission.",
+    "files":  [
+                  {
+                      "path":  "deploy/README.md",
+                      "bytes":  12041,
+                      "sha256":  "3956bfee73124ae0babddf6fe7432776c38610db57ae1b81bd7e542ba09a5b4a"
+                  },
+                  {
+                      "path":  "deploy/host-capability/README.md",
+                      "bytes":  2676,
+                      "sha256":  "720621b1d4229e6a21d76a5dc62215ce8ec85bbe36abe833befdf07223fb762e"
+                  },
+                  {
+                      "path":  "deploy/host-capability/probe-core.php",
+                      "bytes":  9269,
+                      "sha256":  "ca2b24a6c3f9c620d039b371c860eb166797fbdb67f5b0230ab92e926519de7e"
+                  },
+                  {
+                      "path":  "deploy/host-capability/source-manifest.v1.json",
+                      "bytes":  763,
+                      "sha256":  "adc060670635340e7b431c1dc0ebfd925120e41721a0bc058bda9188dbf86682"
+                  },
+                  {
+                      "path":  "tests/MiniModel.HostCapability_test.ps1",
+                      "bytes":  20903,
+                      "sha256":  "1066bd7126c87e230b8d1eb016d9d3e3eebb09aa0911cfc8a3af473f0ffffe60"
+                  },
+                  {
+                      "path":  "tests/host-capability.test.js",
+                      "bytes":  10485,
+                      "sha256":  "0995d364eb4367895d44773e0d6b0a8b796635b2813e634e52a148e693a4738b"
+                  },
+                  {
+                      "path":  "tools/deploy-site.ps1",
+                      "bytes":  132414,
+                      "sha256":  "0d1a8410cadb99b42ac8762779682df05b35d3760a183e0e9cce404f0087ac06"
+                  }
+              ],
+    "validation":  {
+                       "combined_pester":  {
+                                               "passed":  118,
+                                               "failed":  0,
+                                               "output":  "e850d1",
+                                               "meaning":  "Complete existing custody/static-seed and new host-capability suites. Executed after the diagnostic fix and before only the PHP directory-fsync extension."
+                                           },
+                       "combined_node":  {
+                                             "passed":  23,
+                                             "failed":  0,
+                                             "output":  "689674",
+                                             "command":  "node --test tests/deployment-custody.test.js"
+                                         },
+                       "final_focused_pester":  {
+                                                    "passed":  19,
+                                                    "failed":  0,
+                                                    "output":  "ed4508",
+                                                    "command":  "Invoke-Pester -Script \u0027./tests/MiniModel.HostCapability_test.ps1\u0027 -PassThru -Quiet"
+                                                },
+                       "actual_php":  {
+                                          "node_passed":  2,
+                                          "php_cases":  19,
+                                          "failed":  0,
+                                          "skipped":  0,
+                                          "output":  "1ab31c",
+                                          "command":  "MINIMODEL_HOST_CAPABILITY_PHP_DOCKER=1 node --test tests/host-capability.test.js",
+                                          "php_version":  "8.3.33",
+                                          "image":  "sha256:f62df9916bc05ae3c5120b41a115938f22623b0c98c815cbe2c67bc73cec21ef",
+                                          "network":  "none",
+                                          "source":  "canonical-read-only-mount",
+                                          "scope":  "Actual directory fsync, refusal of file/symlink substitutes, all original success and rejection cases."
+                                      },
+                       "manifest_format_readback":  {
+                                                        "passed":  1,
+                                                        "output":  "15b101",
+                                                        "meaning":  "Only existing two-space JSON formatting was restored after the functional suites; exact manifest source identities revalidated."
+                                                    },
+                       "coverage":  "The complete Pester run measured 504/763 existing module commands. AST-imported publisher functions are exercised behaviorally; no file/line coverage claim is made for them.",
+                       "scratch":  "Both canonical artifacts/tests and TinyRustLM artifacts/tests/minimodel-host-capability contained no remaining entries after owned cleanup. No earlier blocked output was touched.",
+                       "diff_check":  "passed"
+                   },
+    "independent_review":  [
+                               {
+                                   "reviewer":  "runtime_state_review",
+                                   "scope":  "Read-only full bounded probe publisher at 6afb0ac",
+                                   "result":  "No material defect found in namespace custody, denial-before-code ordering, bounded HTTP body, reverse cleanup or ambiguity retention."
+                               },
+                               {
+                                   "reviewer":  "root coordinating agent",
+                                   "scope":  "Final diagnostic and directory fsync follow-up",
+                                   "result":  "Accepted source-level diff; full root transaction readback pending before live execution."
+                               }
+                           ],
+    "prior_evidence":  [
+                           "artifacts/verification/host-capability-integration-checkpoint-20260929.json",
+                           "artifacts/verification/host-capability-local-review-20260929.json"
+                       ],
+    "retained_failures":  [
+                              {
+                                  "output":  "564bd0",
+                                  "passed":  12,
+                                  "failed":  2,
+                                  "meaning":  "Earlier in-memory HTTP fixture output pollution; corrected fixture, retained in prior checkpoint."
+                              }
+                          ],
+    "production":  {
+                       "probe_executed":  false,
+                       "signing_key_published":  false,
+                       "website_published":  false,
+                       "seed_published":  false,
+                       "discovery_published":  false
+                   },
+    "limits":  [
+                   "Local Docker/Pester success does not establish live PHP, denial, rewrite, TLS or storage capability.",
+                   "Parsed HTTP checks do not prove exact raw-wire header syntax.",
+                   "Live execution requires fresh clean/remote-exact canonical admission and the exact bound account, sentinel and lease.",
+                   "Any failed or ambiguous live namespace is retained for exact review; no blind retry or broad deletion.",
+                   "A later renewal namespace must independently demonstrate HTTP denial before receiving any real key.",
+                   "No real model qualification or usable public default is claimed."
+               ],
+    "reusable_lesson":  "Treat durability and diagnostics as measured contracts: file-only flush is insufficient, and a negative fixed-shape capability result should remain inspectable without leaking arbitrary server output."
+}

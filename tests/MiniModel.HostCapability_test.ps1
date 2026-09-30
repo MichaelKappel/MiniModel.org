@@ -22,6 +22,17 @@ function New-TestCapabilityResultBytes {
     return ,[Text.Encoding]::UTF8.GetBytes((([ordered]@{schema='minimodel.host_capability_result.v1';nonce=$OperationId;ok=($BadCheck.Length -eq 0);checks=$checks}|ConvertTo-Json -Depth 4 -Compress)+"`n"))
 }
 
+Describe 'Actual committed capability manifest ingress' {
+    It 'loads the current immutable Git source closure without credentials or transport' {
+        $commit=(& git -c ('safe.directory='+$repositoryRoot) -C $repositoryRoot rev-parse HEAD).Trim()
+        if($LASTEXITCODE -ne 0){throw 'Fixture could not identify the canonical commit.'}
+        $input=Get-HostedCapabilityInput -Commit $commit
+        $input.Files.Count | Should Be 4
+        $input.ManifestSha256 | Should Match '^[0-9a-f]{64}$'
+        $input.Files['probe.php'].Length | Should Be 554
+    }
+}
+
 Describe 'Committed capability source closure' {
     BeforeEach {
         $script:capabilityBlobs=@{}
@@ -81,6 +92,16 @@ Describe 'Closed hosted capability result' {
         $value.checks.sodium='true'
         {Assert-HostedCapabilityResult -Bytes ([Text.Encoding]::UTF8.GetBytes(($value|ConvertTo-Json -Depth 4))) -OperationId ('1'*32)} | Should Throw 'not a boolean'
     }
+    It 'can retain only consistent fixed-shape failed checks without treating them as success' {
+        $body=New-TestCapabilityResultBytes -BadCheck 'sodium'
+        $result=Assert-HostedCapabilityResult -Bytes $body -OperationId ('1'*32) -AllowFailedChecks
+        $result.ok | Should Be $false
+        $result.checks.sodium | Should Be $false
+        $result.checks.php | Should Be $true
+        $value=[Text.Encoding]::UTF8.GetString($body)|ConvertFrom-Json
+        $value.ok=$true
+        {Assert-HostedCapabilityResult -Bytes ([Text.Encoding]::UTF8.GetBytes(($value|ConvertTo-Json -Depth 4))) -OperationId ('1'*32) -AllowFailedChecks} | Should Throw 'contradicts'
+    }
 }
 
 Describe 'Capability HTTP ingress and lifetime without network' {
@@ -122,6 +143,32 @@ Describe 'Capability HTTP ingress and lifetime without network' {
             {Get-HostedCapabilityHttpObservation -RelativePath $route -OperationId ('1'*32)} | Should Throw 'not admitted'
         }
         Assert-MockCalled New-StaticSeedHttpClient -Times 0 -Exactly -Scope It
+    }
+    It 'retains validated negative HTTP observations and still closes the response' {
+        $script:capResponse.Content.Dispose()
+        $script:capStream=[IO.MemoryStream]::new((New-TestCapabilityResultBytes -BadCheck 'sodium'),$false)
+        $script:capResponse.Content=[Net.Http.StreamContent]::new($script:capStream)
+        $script:capResponse.Content.Headers.ContentType=[Net.Http.Headers.MediaTypeHeaderValue]::new('application/json')
+        $value=Get-HostedCapabilityHttpObservation -RelativePath '.minimodel-host-capability.v1/probe.json' -OperationId ('1'*32)
+        $value.result.ok | Should Be $false
+        $value.result.checks.sodium | Should Be $false
+        $value.sha256.Length | Should Be 64
+        $script:capStream.CanRead | Should Be $false
+        $script:capClient.Disposed | Should Be $true
+    }
+    It 'rejects an oversized actual HTTP body even without a declared length' {
+        $script:capResponse.Content.Dispose()
+        $packed=[IO.MemoryStream]::new()
+        $compress=[IO.Compression.GZipStream]::new($packed,[IO.Compression.CompressionMode]::Compress,$true)
+        try{$compress.Write([byte[]]::new(4097),0,4097)}finally{$compress.Dispose()}
+        $packed.Position=0
+        # A non-seekable memory-only stream prevents StreamContent from inferring Content-Length.
+        $script:capStream=[IO.Compression.GZipStream]::new($packed,[IO.Compression.CompressionMode]::Decompress)
+        $script:capResponse.Content=[Net.Http.StreamContent]::new($script:capStream)
+        $script:capResponse.Content.Headers.ContentType=[Net.Http.Headers.MediaTypeHeaderValue]::new('application/json')
+        $script:capResponse.Content.Headers.ContentLength | Should Be $null
+        {Get-HostedCapabilityHttpObservation -RelativePath '.minimodel-host-capability.v1/probe.json' -OperationId ('1'*32)} | Should Throw 'body exceeds'
+        $script:capStream.CanRead | Should Be $false
     }
 }
 
@@ -188,8 +235,9 @@ Describe 'Capability publisher ordering and exact namespace cleanup' {
             $script:capTrace.Add('http:'+$RelativePath)
             if($Deny){if($script:capFailure -ceq 'denial'){throw 'Synthetic private denial failed.'};return [pscustomobject]@{denied=$true;status=403}}
             if($script:capFailure -ceq 'php'){throw 'Synthetic PHP capability failed.'}
-            $body=New-TestCapabilityResultBytes -OperationId $OperationId
-            return [pscustomobject]@{result=(Assert-HostedCapabilityResult -Bytes $body -OperationId $OperationId);bytes=$body.Length;sha256=(Get-CustodyByteSha256 $body)}
+            $badCheck=if($script:capFailure -ceq 'negative'){'sodium'}else{''}
+            $body=New-TestCapabilityResultBytes -OperationId $OperationId -BadCheck $badCheck
+            return [pscustomobject]@{result=(Assert-HostedCapabilityResult -Bytes $body -OperationId $OperationId -AllowFailedChecks);bytes=$body.Length;sha256=(Get-CustodyByteSha256 $body)}
         }
     }
     AfterEach {$script:lease=$null;$script:credential=$null}
@@ -224,6 +272,19 @@ Describe 'Capability publisher ordering and exact namespace cleanup' {
         $receipt.lease_retained_or_creation_ambiguous | Should Be $true
         $script:capFiles.Count | Should Be 6
         Assert-MockCalled Remove-RemoteExactFile -Times 0 -Exactly -Scope It
+    }
+    It 'records exact false prerequisite checks and retains the failed namespace and lease' {
+        $script:capFailure='negative';$receipt=Invoke-HostedCapabilityProbe -AuthorityRecord $script:capAuthority
+        $receipt.status | Should Be 'failed'
+        $receipt.capabilities_verified | Should Be $false
+        $receipt.capabilities.sodium | Should Be $false
+        $receipt.capabilities.php | Should Be $true
+        @($receipt.capabilities.PSObject.Properties).Count | Should Be 10
+        $receipt.public_response_sha256.Length | Should Be 64
+        $receipt.lease_retained_or_creation_ambiguous | Should Be $true
+        $script:capFiles.Count | Should Be 6
+        Assert-MockCalled Remove-RemoteExactFile -Times 0 -Exactly -Scope It
+        Assert-MockCalled Remove-RemoteDeploymentLease -Times 0 -Exactly -Scope It
     }
     It 'refuses an existing namespace before the lease or any upload' {
         $null=$script:capDirectories.Add('.minimodel-host-capability.v1')

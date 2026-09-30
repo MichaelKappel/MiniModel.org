@@ -31,6 +31,15 @@ function mmProbeRead(string $path, int $limit): string {
         return $bytes;
     } finally { fclose($stream); }
 }
+function mmProbeSyncDirectory(string $path): void {
+    $before = mmProbeStat($path, true);
+    $stream = @fopen($path, 'rb');
+    mmProbeRequire(is_resource($stream));
+    try {
+        mmProbeRequire(mmProbeSame($before, fstat($stream)) && @fsync($stream));
+        mmProbeRequire(mmProbeSame($before, mmProbeStat($path, true)));
+    } finally { fclose($stream); }
+}
 function mmHostCapability(string $root, string $method, string $query,
     string $uri = '/.minimodel-host-capability.v1/probe.json'): array {
     $checks = array_fill_keys(['php', 'sodium', 'leaseBinding', 'privateRead',
@@ -127,7 +136,6 @@ function mmHostCapability(string $root, string $method, string $query,
         mmProbeRequire(fwrite($write, $payload) === strlen($payload));
         $result['checks']['privateWrite'] = true;
         mmProbeRequire(fflush($write) && fsync($write));
-        $result['checks']['flush'] = true;
         $fileStat = fstat($write);
         fclose($write);
         $write = null;
@@ -137,6 +145,8 @@ function mmHostCapability(string $root, string $method, string $query,
         mmProbeRequire(@rename($pending, $final));
         $result['checks']['atomicRename'] = true;
         $assertWork();
+        mmProbeSyncDirectory($work);
+        $result['checks']['flush'] = true; // Both file contents and directory entry were flushed.
         mmProbeRequire(mmProbeSame($fileStat, mmProbeStat($final))
             && mmProbeRead($final, 128) === $payload && @lstat($pending) === false);
         $result['checks']['readback'] = true;

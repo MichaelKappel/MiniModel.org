@@ -86,3 +86,10 @@ artifacts/verification/host-renewal-closure-a1-20260930.stdout.log -text -diff
 artifacts/verification/host-renewal-closure-a1-20260930.stderr.log -text -diff
 artifacts/verification/host-renewal-closure-a2-20260930.stdout.log -text -diff
 artifacts/verification/host-renewal-closure-a2-20260930.stderr.log -text -diff
+tools/build-host-renewal-input.js text eol=lf
+tests/build-host-renewal-input_test.js text eol=lf
+tests/helpers/static-seed-publication-fixture.js text eol=lf
+deploy/host-renewal-installation.md text eol=lf
+artifacts/verification/host-renewal-producer-review-20260930.json text eol=lf
+artifacts/verification/host-renewal-producer-a2-20260930.stdout.log -text -diff
+artifacts/verification/host-renewal-producer-a2-20260930.stderr.log -text -diff

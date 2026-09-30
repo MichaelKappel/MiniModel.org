@@ -1,0 +1,36 @@
+✔ admission consumes real canonical browser receipt binding and returns metadata-only seed plan (25.3924ms)
+✔ admission rejects unrelated descriptor, member, piece-set and real receipt bytes (78.4061ms)
+✔ a rehashed qualification-shaped failure is rejected by the real receipt parser (8.7827ms)
+✔ time, byte bounds, exact fields and immutable snapshots are enforced before async work (20.5713ms)
+✔ canonical envelope preserves exact bytes and rejects aliases, unknown fields and overflow (12.4319ms)
+✔ actual metadata-only CLI has bounded stdin and refuses path arguments (287.6605ms)
+✔ renewal input uses actual admission and binds canonical pair to exactly nine ordered references (27.6799ms)
+✔ admitted buffers and release identity are snapshotted before async validation (13.5918ms)
+✔ failed actual qualification remains rejected even when its catalog digest is repaired (9.8194ms)
+✔ renewal rejects signed catalog/feed time mismatch; canonical browser admission rejects fractional timestamps (34.0818ms)
+✔ license routes cannot collide with evidence, discovery, hidden or executable control paths (94.1037ms)
+✔ bounded data properties and release owner reject empty, extra, accessor and malformed fields (8.4027ms)
+✔ canonical renewal envelope preserves owned bytes and rejects additional key or file input (13.1629ms)
+✔ actual renewal CLI accepts bounded metadata stdin and rejects path/secret arguments (292.6761ms)
+✔ actual pinned PHP core accepts producer bytes, exact references and Ed25519 initial pair (1399.1711ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2514.4266
+ℹ start of coverage report
+ℹ -------------------------------------------------------------------------------------
+ℹ file                                 | line % | branch % | funcs % | uncovered lines
+ℹ -------------------------------------------------------------------------------------
+ℹ tests                                |        |          |         | 
+ℹ  helpers                             |        |          |         | 
+ℹ   static-seed-publication-fixture.js | 100.00 |   100.00 |  100.00 | 
+ℹ tools                                |        |          |         | 
+ℹ  build-host-renewal-input.js         |  89.71 |    98.15 |   90.48 | 120-131 135-136
+ℹ -------------------------------------------------------------------------------------
+ℹ all files                            |  92.13 |    98.33 |   92.31 | 
+ℹ -------------------------------------------------------------------------------------
+ℹ end of coverage report

@@ -1,0 +1,82 @@
+{
+    "schema":  "minimodel.host_renewal_producer_review.v1",
+    "reviewedAtUtc":  "2026-09-30T00:54:27.4475856Z",
+    "status":  "implemented-and-tested-locally-not-wired-or-published",
+    "scope":  "Pure metadata input producer reuses actual canonical seed/admission/qualification readers; owns all public buffers and release identity before asynchronous validation; binds exactly six seed members and admission, qualification, reviewed license; emits canonical private configuration and initial signed pair without accepting keys, model paths or caller-selected references.",
+    "files":  [
+                  {
+                      "path":  "tools/build-host-renewal-input.js",
+                      "bytes":  8936,
+                      "sha256":  "8eecd5f4a5b5a796add8470b41841979f61e324a6feb0174f1aef174451eb251"
+                  },
+                  {
+                      "path":  "tests/build-host-renewal-input_test.js",
+                      "bytes":  11379,
+                      "sha256":  "ef94383e7ba757e67b7421df8ec10fa80d979095a065961a8c4edc46b759e280"
+                  },
+                  {
+                      "path":  "tests/helpers/static-seed-publication-fixture.js",
+                      "bytes":  3041,
+                      "sha256":  "1fdf4f15dfd324878a58807c2b3ac861715dcb9204dcb0c69b7aae6fe96fc201"
+                  },
+                  {
+                      "path":  "tests/admit-static-seed-publication_test.js",
+                      "bytes":  6457,
+                      "sha256":  "3d0cc05ae3beff4da6adc255fc320ee7de1fc267f64fb9cf1fb60d8619cf0695"
+                  },
+                  {
+                      "path":  "deploy/host-renewal-installation.md",
+                      "bytes":  9984,
+                      "sha256":  "660ff9d19042a98f370c4fcdcce7acc81e73528155707a1bec371c38d6a2d8f1"
+                  }
+              ],
+    "validation":  {
+                       "tests":  15,
+                       "pass":  15,
+                       "fail":  0,
+                       "skipped":  0,
+                       "producerLinePercent":  89.71,
+                       "producerBranchPercent":  98.15,
+                       "producerFunctionPercent":  90.48,
+                       "fixtureLinePercent":  100,
+                       "fixtureBranchPercent":  100,
+                       "fixtureFunctionPercent":  100,
+                       "actualPhpImage":  "sha256:f62df9916bc05ae3c5120b41a115938f22623b0c98c815cbe2c67bc73cec21ef",
+                       "actualPhpCoreSha256":  "c5113e101ae1fce459205c4c74bd52779cf4045158047ec64437d48c108f6640",
+                       "actualPhpInterop":  "Unchanged real core accepted producer config, exact9-reference policy and Ed25519 initial pair through mmRenewParse, mmRenewReferences and mmRenewPair. Read-only source mount, network disabled, no fixture/model writes.",
+                       "cliCoverageLimit":  "Success and rejection paths run in actual child Node CLI processes; these child processes intentionally disable inherited V8 coverage. Their main-loop lines are excluded from instrumented producer coverage rather than claimed covered."
+                   },
+    "failuresRetained":  [
+                             {
+                                 "evidence":  "Tool transcript 42f751",
+                                 "tests":  14,
+                                 "pass":  13,
+                                 "fail":  1,
+                                 "cause":  "Test expected a renewal-specific rejection for fractional UTC, but unchanged canonical browser reader rejected first with code string. Test now preserves the exact earlier boundary; production admission was not weakened."
+                             }
+                         ],
+    "evidence":  [
+                     {
+                         "path":  "artifacts/verification/host-renewal-producer-a2-20260930.stdout.log",
+                         "bytes":  2638,
+                         "sha256":  "8680e77f54d602a6b9a2681c341eac0835bb3fb0236f5dee28210335dc751cb2"
+                     },
+                     {
+                         "path":  "artifacts/verification/host-renewal-producer-a2-20260930.stderr.log",
+                         "bytes":  0,
+                         "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                     }
+                 ],
+    "independentReview":  {
+                              "reviewer":  "root, independent of producer author",
+                              "result":  "Structure accepted: actual admission, snapshots, ordered9 references, exact signed pair and publicationAllowed=false.",
+                              "followup":  "Added explicit route whitespace/control exclusion and newline negative requested by review. Existing reader rejects newline first; producer also independently excludes controls."
+                          },
+    "production":  {
+                       "keyCreated":  false,
+                       "modelRead":  false,
+                       "published":  false,
+                       "defaultQualified":  false,
+                       "remaining":  "Pinned publisher integration, real qualification, distinct private boundary proof, seed and evidence publication, scoped metadata route promotion, real renewal observation."
+                   }
+}

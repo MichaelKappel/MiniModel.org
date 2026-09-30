@@ -1,0 +1,11 @@
+{"schema":"minimodel.host_renewal_local_test.v1","image":"sha256:f62df9916bc05ae3c5120b41a115938f22623b0c98c815cbe2c67bc73cec21ef","cases":[{"name":"fresh","status":200,"renewed":false},{"name":"renew","status":200,"renewed":true},{"name":"expired-renews","status":200,"renewed":true},{"name":"busy-valid","status":200,"renewed":false},{"name":"busy-expired","status":503,"renewed":false},{"name":"journal-retained","status":200,"renewed":false},{"name":"source-corrupt","status":503,"renewed":false},{"name":"wrong-key","status":503,"renewed":false},{"name":"bad-signature","status":503,"renewed":false},{"name":"immutable-change","status":503,"renewed":false},{"name":"wrong-config-binding","status":503,"renewed":false},{"name":"private-denial-missing","status":503,"renewed":false},{"name":"noncanonical-pair","status":503,"renewed":false},{"name":"wrong-seed-reference","status":503,"renewed":false},{"name":"wrong-source-hash","status":503,"renewed":false},{"name":"missing-source","status":503,"renewed":false},{"name":"extra-source","status":503,"renewed":false},{"name":"wrong-admission-reference","status":503,"renewed":false},{"name":"wrong-receipt-reference","status":503,"renewed":false},{"name":"source-symlink","status":503,"renewed":false},{"name":"source-hardlink","status":503,"renewed":false},{"name":"parent-symlink","status":503,"renewed":false},{"name":"held-lock-valid","status":200,"renewed":false},{"name":"interrupted-next-retained","status":200,"renewed":false},{"name":"concurrent-expired","status":200,"renewed":true},{"name":"head","status":200,"renewed":false},{"name":"post","status":405,"renewed":false},{"name":"query","status":400,"renewed":false},{"name":"empty-query","status":400,"renewed":false},{"name":"direct-handler","status":404,"renewed":false},{"name":"peer-route","status":200,"renewed":true}],"referencePolicyCases":20,"productionKey":false,"published":false}
+✔ renewal source manifest binds its exact four deployed files (3.1931ms)
+✔ actual PHP renews a signed pair and rejects unsafe state; outputs pass unchanged JS readers (3522.9406ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3940.5456

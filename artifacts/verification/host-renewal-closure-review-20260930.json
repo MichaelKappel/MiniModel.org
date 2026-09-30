@@ -1,0 +1,88 @@
+{
+  "schema": "minimodel.host_renewal_closure_review.v1",
+  "reviewedAtUtc": "2026-09-30T00:49:32.255Z",
+  "status": "implemented-and-tested-locally-not-published",
+  "defects": [
+    {
+      "problem": "Real seed paths contain a colon in the composition identity; the original generic path grammar rejected them.",
+      "fix": "Bind exactly six canonical composition paths and three approved evidence routes before pair use or lease acquisition."
+    },
+    {
+      "problem": "Original1GiB source cap rejected a potential qualified1.5B Q8 model.",
+      "fix": "Use the existing2GiB hosted-model bound and narrower member/evidence caps; actual model qualification and device limits remain separate."
+    },
+    {
+      "problem": "Two simultaneous requests for expired metadata could return503 for the lock loser even when the first request successfully renewed.",
+      "evidence": "artifacts/verification/host-renewal-closure-a1-20260930.stdout.log",
+      "fix": "Wait at most30seconds only when existing metadata is expired, then revalidate the current pair after acquiring the local lock."
+    }
+  ],
+  "files": [
+    {
+      "path": "deploy/host-renewal/renewal-core.php",
+      "bytes": 20282,
+      "sha256": "c5113e101ae1fce459205c4c74bd52779cf4045158047ec64437d48c108f6640"
+    },
+    {
+      "path": "deploy/host-renewal/source-manifest.v1.json",
+      "bytes": 757,
+      "sha256": "613002929f2e2a9e97c3ccd6ddf05f8e5ef90053c7f272431199bb0bf38cafb7"
+    },
+    {
+      "path": "tests/host-renewal.test.js",
+      "bytes": 16329,
+      "sha256": "3de74f8940afb150f66b5404f59dffa81d67ce5b5d395492b36d7b30a226fb6a"
+    },
+    {
+      "path": "deploy/host-renewal/README.md",
+      "bytes": 3575,
+      "sha256": "57603324f2dbc3a0c1f844e5a700264d136520bbeb2ea3449f366682a4c95cfd"
+    }
+  ],
+  "validation": {
+    "runnerTests": 2,
+    "pass": 2,
+    "fail": 0,
+    "skipped": 0,
+    "phpStateScenarios": 31,
+    "referencePolicyCases": 20,
+    "actualParallelPhpProcesses": 2,
+    "coverage": "Pinned PHP runtime lacks coverage instrumentation; actual branch scenarios are retained without a numeric coverage claim.",
+    "timeoutLimit": "Actual lock contention and immediate-current fallback tested; the full30-second timeout duration is not measured.",
+    "largeSizeBoundary": "2GiB boundary is metadata-only. No large synthetic payload or performance claim."
+  },
+  "failurePreservation": "First new closure test run reproduced concurrent503. Raw failure is unchanged; second run passes after bounded-lock fix.",
+  "evidence": [
+    {
+      "path": "artifacts/verification/host-renewal-closure-a1-20260930.stdout.log",
+      "bytes": 1204,
+      "sha256": "b0d3bbf7b8afddef2bda5c8030bc4916819fda3602855d1bf834f0a961bc8408"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-closure-a1-20260930.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-closure-a2-20260930.stdout.log",
+      "bytes": 2207,
+      "sha256": "a134811c42aa57bca3c28b0a0c46c957557eace6c34949adc56ae971d58f50c5"
+    },
+    {
+      "path": "artifacts/verification/host-renewal-closure-a2-20260930.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "independentReview": {
+    "reviewer": "hosting implementation agent, separate from root author",
+    "sourceSha256": "c5113e101ae1fce459205c4c74bd52779cf4045158047ec64437d48c108f6640",
+    "result": "No material blocker found in exact source closure, source hash/inode checks, or bounded lock revalidation."
+  },
+  "production": {
+    "keyCreated": false,
+    "published": false,
+    "defaultQualified": false,
+    "remaining": "Publisher integration, real qualified seed/evidence, distinct private namespace denial, public actual renewal and expiration monitoring."
+  }
+}

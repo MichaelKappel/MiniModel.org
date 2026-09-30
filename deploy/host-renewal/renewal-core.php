@@ -144,15 +144,54 @@ function mmRenewPair(object $pair, object $config, string $configHash,
     }
     return [$c, $f, $generated, $expires];
 }
-function mmRenewSource(string $site, object $ref): void {
-    mmRenewKeys($ref, ['path', 'bytes', 'sha256']);
-    mmRenewRequire(is_string($ref->path) && strlen($ref->path) <= 512
-        && preg_match('/^[A-Za-z0-9_-][A-Za-z0-9._\/-]*$/D', $ref->path) === 1
-        && !in_array('..', explode('/', $ref->path), true)
-        && !in_array('.', explode('/', $ref->path), true)
-        && !in_array('', explode('/', $ref->path), true)
-        && is_int($ref->bytes) && $ref->bytes > 0 && $ref->bytes <= 1073741824
-        && preg_match('/^[a-f0-9]{64}$/D', $ref->sha256) === 1);
+// Bind the exact hosted six-member composition and its three approved evidence routes.
+function mmRenewReferences(object $entry, array $refs): array {
+    $names = ['model.slm2', 'tokenizer.tokenizer2', 'template.template2',
+        'sampling.sampling2', 'prompt.prompt2', 'composition.acg2'];
+    $caps = [2147483648, 67108864, 1048576, 65800, 512, 896];
+    $composition = $entry->composition;
+    mmRenewRequire(count($refs) === 9 && $composition->member_count === 6
+        && is_array($composition->members) && count($composition->members) === 6
+        && preg_match('/^sha256:[a-f0-9]{64}$/D', $composition->composition_id) === 1);
+    $prefix = 'tinyrustlm/direct-composition/v1/compositions/'
+        . $composition->composition_id . '/members/';
+    $expected = []; $limits = [];
+    foreach ($names as $i => $name) {
+        $member = $composition->members[$i];
+        mmRenewRequire($member->name === $name);
+        $expected[] = [$prefix . $name, $member->bytes, $member->sha256];
+        $limits[] = $caps[$i];
+    }
+    $a = $entry->browser_admission; $q = $entry->qualification; $l = $entry->license;
+    mmRenewRequire($l->review_status === 'reviewed');
+    foreach ([$a->route, $q->receipt_route, $l->route] as $route) {
+        mmRenewRequire(is_string($route) && strlen($route) <= 512
+            && preg_match('/^\/[A-Za-z0-9_-][A-Za-z0-9._\/-]*$/D', $route) === 1);
+        $parts = explode('/', substr($route, 1));
+        mmRenewRequire(!in_array('..', $parts, true) && !in_array('.', $parts, true)
+            && !in_array('', $parts, true));
+        mmRenewRequire(!str_starts_with($route, '/tinyrustlm/direct-composition/'));
+    }
+    $expected[] = [substr($a->route, 1), $a->bytes, $a->sha256];
+    $expected[] = [substr($q->receipt_route, 1), $q->receipt_bytes, $q->receipt_sha256];
+    // License bytes/hash come from the committed, reviewed publisher input, not a caller.
+    $expected[] = [substr($l->route, 1), $refs[8]->bytes, 'sha256:' . $refs[8]->sha256];
+    array_push($limits, 1048576, 1048576, 1048576);
+    foreach ($refs as $i => $ref) {
+        mmRenewKeys($ref, ['path', 'bytes', 'sha256']);
+        [$path, $bytes, $digest] = $expected[$i];
+        mmRenewRequire(is_string($digest) && preg_match('/^sha256:[a-f0-9]{64}$/D', $digest) === 1
+            && is_int($bytes) && $bytes > 0 && $bytes <= $limits[$i]
+            && $ref->path === $path && $ref->bytes === $bytes
+            && $ref->sha256 === substr($digest, 7));
+    }
+    mmRenewRequire($refs[5]->bytes === 896
+        && count(array_unique(array_column($refs, 'path'))) === 9);
+    return $limits;
+}
+// Stream one already policy-bound reference, preserving path/inode and size/hash identity.
+function mmRenewSource(string $site, object $ref, int $limit): void {
+    mmRenewRequire($ref->bytes <= $limit);
     $parts = explode('/', $ref->path); $path = $site; $dirs = [];
     array_pop($parts);
     foreach ($parts as $part) {
@@ -177,6 +216,15 @@ function mmRenewSource(string $site, object $ref): void {
         }
     } finally { fclose($h); }
 }
+// A current verified pair may return immediately; expired concurrent GETs wait at most 30s.
+function mmRenewLock(mixed $lock, bool $waitForRenewal): void {
+    $deadline = hrtime(true) + 30000000000;
+    do {
+        if (flock($lock, LOCK_EX | LOCK_NB)) { return; }
+        mmRenewRequire($waitForRenewal && hrtime(true) < $deadline);
+        usleep(50000);
+    } while (true);
+}
 function mmRenewMetadata(string $root, string $method, string $query, string $uri): array {
     $routes = ['/catalog/compositions.v1.json' => 'catalog',
         '/catalog/peer-announcements.v1.json' => 'peer_feed'];
@@ -186,7 +234,7 @@ function mmRenewMetadata(string $root, string $method, string $query, string $ur
     if ($query !== '' || strpos($uri, '?') !== false) { return [400, $error]; }
     $field = $routes[$uri]; $lock = null; $fallback = null; $fallbackExpires = 0;
     try {
-        mmRenewRequire(PHP_VERSION_ID >= 80100 && function_exists('fsync')
+        mmRenewRequire(PHP_VERSION_ID >= 80100 && PHP_INT_SIZE >= 8 && function_exists('fsync')
             && function_exists('sodium_crypto_sign_detached'));
         $site = dirname($root); $private = $root . '/private';
         $siteStat = mmRenewStat($site, true);
@@ -198,8 +246,7 @@ function mmRenewMetadata(string $root, string $method, string $query, string $ur
             'release_owner', 'source_references', 'ttl_seconds', 'refresh_before_seconds']);
         mmRenewRequire($config->schema === 'minimodel.metadata_renewal_config.v1'
             && $config->ttl_seconds === 86400 && $config->refresh_before_seconds === 21600
-            && is_array($config->source_references) && count($config->source_references) >= 9
-            && count($config->source_references) <= 16);
+            && is_array($config->source_references) && count($config->source_references) === 9);
         mmRenewRequire(count(array_unique(array_column($config->source_references, 'path')))
             === count($config->source_references));
         mmRenewKeys($config->release_owner, ['site', 'release_id', 'source_commit',
@@ -214,6 +261,7 @@ function mmRenewMetadata(string $root, string $method, string $query, string $ur
             && $initialFeed->announcements[0]->outside_proof_status === 'not-required-operator-seed'
             && $initialFeed->announcements[0]->outside_proof_receipt_sha256 === null
             && $initialCatalog->entries[0]->qualification->status === 'qualified');
+        $referenceLimits = mmRenewReferences($initialCatalog->entries[0], $config->source_references);
         $binding = function () use ($site, $siteStat, $root, $rootStat, $private,
             $privateStat, $configBytes): void {
             mmRenewRequire(mmRenewSame($siteStat, mmRenewStat($site, true))
@@ -234,7 +282,7 @@ function mmRenewMetadata(string $root, string $method, string $query, string $ur
         mmRenewRequire($lockStat['size'] === 0);
         $lock = @fopen($lockPath, 'rb'); // Lock-only descriptor; the file is never modified.
         mmRenewRequire(is_resource($lock) && mmRenewSame($lockStat, fstat($lock)));
-        mmRenewRequire(flock($lock, LOCK_EX | LOCK_NB));
+        mmRenewLock($lock, $expires <= time());
         $binding();
         // Another request may have completed while this request opened the lock.
         $pairBytes = mmRenewRead($pairPath, 1048576); $pair = mmRenewParse($pairBytes);
@@ -266,7 +314,9 @@ function mmRenewMetadata(string $root, string $method, string $query, string $ur
                 && mmRenewSame($lockStat, mmRenewStat($lockPath)));
         };
         $leaseBinding();
-        foreach ($config->source_references as $ref) { mmRenewSource($site, $ref); }
+        foreach ($config->source_references as $i => $ref) {
+            mmRenewSource($site, $ref, $referenceLimits[$i]);
+        }
         $leaseBinding();
         $seed = mmRenewRead($private . '/signing-key.seed', 32);
         mmRenewRequire(strlen($seed) === 32);

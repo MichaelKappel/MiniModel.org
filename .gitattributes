@@ -82,3 +82,7 @@ artifacts/verification/host-renewal-diagnostic-a2-20260930.stdout.log -text -dif
 artifacts/verification/host-renewal-diagnostic-a2-20260930.stderr.log -text -diff
 artifacts/verification/host-renewal-diagnostic-a3-20260930.stdout.log -text -diff
 artifacts/verification/host-renewal-diagnostic-a3-20260930.stderr.log -text -diff
+artifacts/verification/host-renewal-closure-a1-20260930.stdout.log -text -diff
+artifacts/verification/host-renewal-closure-a1-20260930.stderr.log -text -diff
+artifacts/verification/host-renewal-closure-a2-20260930.stdout.log -text -diff
+artifacts/verification/host-renewal-closure-a2-20260930.stderr.log -text -diff

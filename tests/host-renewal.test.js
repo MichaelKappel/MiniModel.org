@@ -29,8 +29,17 @@ function fixture(base,name,age=72000) {
  Object.assign(f.announcements[0],{peer_base_url:"https://minimodel.org/",outside_proof_status:"not-required-operator-seed",outside_proof_receipt_sha256:null,
  issued_at_utc:c.generated_at_utc,expires_utc:c.valid_until_utc});
  f.announcements[0].signature=crypto.sign(null,api.peerAnnouncementSigningBytes(f.announcements[0]),key).toString("base64url");
- const refs=Array.from({length:9},(_,i)=>{const bytes=Buffer.from("synthetic-proof-"+i+"\n"),p="evidence-"+i+".txt";
- fs.writeFileSync(path.join(site,p),bytes);return{path:p,bytes:bytes.length,sha256:sha(bytes)};});
+ // Plain synthetic evidence bytes; no usable model or production qualification.
+ const refs=[],entry=c.entries[0],prefix="tinyrustlm/direct-composition/v1/compositions/"+entry.composition.composition_id+"/members/";
+ const save=(route,bytes)=>{const index=refs.length;fs.writeFileSync(path.join(site,"evidence-"+index+".txt"),bytes);
+ const ref={path:route,bytes:bytes.length,sha256:sha(bytes)};refs.push(ref);return ref;};
+ entry.composition.members.forEach((member,i)=>{const bytes=Buffer.alloc(i===5?896:i===4?512:32,65+i);
+ const ref=save(prefix+member.name,bytes);member.bytes=ref.bytes;member.sha256="sha256:"+ref.sha256;});
+ let ref=save(entry.browser_admission.route.slice(1),Buffer.from(source.admissionText));
+ entry.browser_admission.bytes=ref.bytes;entry.browser_admission.sha256="sha256:"+ref.sha256;
+ ref=save(entry.qualification.receipt_route.slice(1),Buffer.from(source.qualificationReceiptText));
+ entry.qualification.receipt_bytes=ref.bytes;entry.qualification.receipt_sha256="sha256:"+ref.sha256;
+ save(entry.license.route.slice(1),Buffer.from("Synthetic test license only\n"));
  const config={schema:"minimodel.metadata_renewal_config.v1",initial_catalog:canon(c),initial_peer_feed:canon(f),
  release_owner:{site:"minimodel.org",release_id:"synthetic-test-never-live",source_commit:"a".repeat(40),publisher_commit:"b".repeat(40),manifest_sha256:"c".repeat(64),authority_sha256:"d".repeat(64)},
  source_references:refs,ttl_seconds:86400,refresh_before_seconds:21600};
@@ -56,9 +65,9 @@ test("actual PHP renews a signed pair and rejects unsafe state; outputs pass unc
  assert.equal(image.status,0,image.stderr);assert.match(image.stdout.trim(),/^sha256:[a-f0-9]{64}$/);
  const owned=createOwnedTemporaryDirectory({temporaryParent:path.resolve(root,"../TinyRustLM.com/artifacts/tests/minimodel-host-renewal")});
  try{
- const cases=[];
+ const cases=[];let policyBase;
  function add(name,age,mutate,expected=200,renew=false,request={}) {
-  const x=fixture(owned.rootPath,name,age);if(mutate)mutate(x);
+  const x=fixture(owned.rootPath,name,age);if(name==="fresh")policyBase={entry:x.c.entries[0],refs:x.config.source_references};if(mutate)mutate(x);
   cases.push({name,expected,renew,initialRevision:x.c.revision,...request});
  }
  add("fresh",0,null,200,false);
@@ -76,12 +85,44 @@ test("actual PHP renews a signed pair and rejects unsafe state; outputs pass unc
  add("wrong-config-binding",0,x=>pairChange(x,p=>p.config_sha256="0".repeat(64)),503);
  add("private-denial-missing",0,x=>fs.writeFileSync(path.join(x.priv,".htaccess"),"Require all granted\n"),503);
  add("noncanonical-pair",0,x=>fs.appendFileSync(path.join(x.priv,"pair.json")," "),503);
+ // Change config and its digest together: closure validation must reject bad publisher inputs.
+ const configChange=(x,fn)=>{const cfg=JSON.parse(fs.readFileSync(path.join(x.priv,"config.json")));fn(cfg);
+ const bytes=canon(cfg);fs.writeFileSync(path.join(x.priv,"config.json"),bytes);
+ pairChange(x,p=>p.config_sha256=sha(bytes));};
+ add("wrong-seed-reference",0,x=>configChange(x,cfg=>cfg.source_references[0].path=cfg.source_references[0].path.replace("sha256:","sha256:0")),503);
+ add("wrong-source-hash",0,x=>configChange(x,cfg=>cfg.source_references[0].sha256="0".repeat(64)),503);
+ add("missing-source",0,x=>configChange(x,cfg=>cfg.source_references.pop()),503);
+ add("extra-source",0,x=>configChange(x,cfg=>cfg.source_references.push({path:"extra",bytes:1,sha256:"0".repeat(64)})),503);
+ add("wrong-admission-reference",0,x=>configChange(x,cfg=>cfg.source_references[6].path="other.json"),503);
+ add("wrong-receipt-reference",0,x=>configChange(x,cfg=>cfg.source_references[7].bytes++),503);
+ add("source-symlink",90000,null,503,false,{linuxMutation:"source-symlink"});
+ add("source-hardlink",90000,null,503,false,{linuxMutation:"source-hardlink"});
+ add("parent-symlink",90000,null,503,false,{linuxMutation:"parent-symlink"});
+ add("held-lock-valid",72000,null,200,false,{linuxMutation:"held-lock"});
+ add("interrupted-next-retained",72000,x=>fs.writeFileSync(path.join(x.priv,"pair.next"),"retain"));
+ add("concurrent-expired",90000,null,200,true,{linuxMutation:"concurrent"});
  add("head",0,null,200,false,{method:"HEAD"});
  add("post",0,null,405,false,{method:"POST"});
  add("query",0,null,400,false,{query:"path=other",uri:"/catalog/compositions.v1.json?path=other"});
  add("empty-query",0,null,400,false,{uri:"/catalog/compositions.v1.json?"});
  add("direct-handler",0,null,404,false,{uri:"/.minimodel-metadata-renewal.v1/metadata.php"});
  add("peer-route",72000,null,200,true,{uri:"/catalog/peer-announcements.v1.json"});
+ // Pure metadata limits: no large payload is allocated or claimed to have executed.
+ const policies=[];
+ const policy=(name,mutate,ok)=>{const x=JSON.parse(canon(policyBase));if(mutate)mutate(x);policies.push({name,...x,ok});};
+ policy("exact-closure",null,true);
+ policy("two-gib-model",x=>{x.entry.composition.members[0].bytes=x.refs[0].bytes=2147483648;},true);
+ const caps=[2147483648,67108864,1048576,65800,512,896];
+ caps.forEach((cap,i)=>policy("over-limit-"+i,x=>{x.entry.composition.members[i].bytes=x.refs[i].bytes=cap+1;},false));
+ policy("wrong-graph-size",x=>{x.entry.composition.members[5].bytes=x.refs[5].bytes=895;},false);
+ policy("zero-model",x=>{x.entry.composition.members[0].bytes=x.refs[0].bytes=0;},false);
+ policy("noninteger-size",x=>{x.entry.composition.members[0].bytes=x.refs[0].bytes=1.5;},false);
+ policy("member-order",x=>{x.entry.composition.members.reverse();},false);
+ for(const route of ["/other:seed/license.txt","/proof/../key","/proof//license","//host/license","/.minimodel-metadata-renewal.v1/private/key","/tinyrustlm/direct-composition/license.txt"]){
+ policy("unsafe-route:"+route,x=>{x.entry.license.route=route;x.refs[8].path=route.slice(1);},false);}
+ policy("duplicate-reference",x=>{x.entry.license.route=x.entry.browser_admission.route;x.refs[8].path=x.refs[6].path;},false);
+ policy("wrong-digest",x=>{x.refs[0].sha256="0".repeat(64);},false);
+ fs.writeFileSync(path.join(owned.rootPath,"policies.json"),canon(policies));
  fs.writeFileSync(path.join(owned.rootPath,"cases.json"),canon(cases));
  const php='<?php\nrequire "/source/deploy/host-renewal/renewal-core.php";\n'+
  '$out=[]; foreach(json_decode(file_get_contents("/renewal-tests/cases.json")) as $c){'+
@@ -90,9 +131,25 @@ test("actual PHP renews a signed pair and rejects unsafe state; outputs pass unc
  '$dest=$base.substr($item->getPathname(),strlen($input));if($item->isLink()){throw new RuntimeException("fixture link");}'+
  'if($item->isDir()){mkdir($dest,0700);}else{if(!copy($item->getPathname(),$dest)){throw new RuntimeException("fixture copy");}chmod($dest,0600);}}'+
  '$root=$base."/.minimodel-metadata-renewal.v1";'+
+ '$cfg=json_decode(file_get_contents($root."/private/config.json"));'+
+ // Canonical colon-bearing remote paths are constructed only inside PHP-owned Linux tmpfs.
+ 'foreach($cfg->source_references as $i=>$ref){$src=$base."/evidence-".$i.".txt";'+
+ 'if(!is_file($src)){continue;}$dest=$base."/".$ref->path;if(!is_dir(dirname($dest))){mkdir(dirname($dest),0700,true);}rename($src,$dest);}'+
+ '$mutation=$c->linuxMutation??"";$held=null;'+
+ 'if($mutation==="source-symlink"||$mutation==="source-hardlink"){$p=$base."/".$cfg->source_references[0]->path;rename($p,$base."/target");'+
+ 'if($mutation==="source-symlink"){symlink($base."/target",$p);}else{link($base."/target",$p);}}'+
+ 'if($mutation==="parent-symlink"){$p=dirname($base."/".$cfg->source_references[0]->path);rename($p,$base."/target-dir");symlink($base."/target-dir",$p);}'+
+ 'if($mutation==="held-lock"||$mutation==="concurrent"){$held=fopen($root."/private/renewal.lock","rb");flock($held,LOCK_EX);}'+
+ '$concurrent=[];if($mutation==="concurrent"){$children=[];'+
+ 'for($i=0;$i<2;$i++){$pipes=[];$code="require \\"/source/deploy/host-renewal/renewal-core.php\\";echo json_encode(mmRenewMetadata(\\$argv[1],\\"GET\\",\\"\\",\\"/catalog/compositions.v1.json\\"));";'+
+ '$proc=proc_open([PHP_BINARY,"-r",$code,$root],[0=>["pipe","r"],1=>["pipe","w"],2=>["pipe","w"]],$pipes);fclose($pipes[0]);$children[]=[$proc,$pipes];}'+
+ 'usleep(250000);flock($held,LOCK_UN);fclose($held);$held=null;foreach($children as [$proc,$pipes]){$text=stream_get_contents($pipes[1]);$err=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);'+
+ 'if(proc_close($proc)!==0||$err!==""){throw new RuntimeException("child failure ".$err);}$concurrent[]=json_decode($text,true);}}'+
  '[$status,$body]=mmRenewMetadata($root,$c->method??"GET",$c->query??"",$c->uri??"/catalog/compositions.v1.json");'+
  '$out[]=["name"=>$c->name,"status"=>$status,"body"=>$body,"pair"=>file_get_contents($root."/private/pair.json"),'+
- '"leaseExists"=>is_dir(dirname($root)."/.minimodel-deployment-lease.v1"),"journalExists"=>file_exists($root."/private/pending.json")];}'+
+ '"leaseExists"=>is_dir(dirname($root)."/.minimodel-deployment-lease.v1"),"journalExists"=>file_exists($root."/private/pending.json"),"nextExists"=>file_exists($root."/private/pair.next"),"concurrent"=>$concurrent];if(is_resource($held)){flock($held,LOCK_UN);fclose($held);}}'+
+ '$policies=[];foreach(json_decode(file_get_contents("/renewal-tests/policies.json")) as $p){try{mmRenewReferences($p->entry,$p->refs);$ok=true;}catch(Throwable $e){$ok=false;}$policies[]=["name"=>$p->name,"ok"=>$ok];}'+
+ '$out[]=["name"=>"reference-policy","policies"=>$policies];'+
  'echo json_encode($out,JSON_THROW_ON_ERROR),"\\n";';
  const r=spawnSync("docker",["run","--rm","-i","--pull=never","--network","none","--read-only","--cap-drop","ALL","--security-opt","no-new-privileges",
  "--tmpfs","/renewal-runtime:rw,noexec,nosuid,size=16777216",
@@ -100,7 +157,7 @@ test("actual PHP renews a signed pair and rejects unsafe state; outputs pass unc
  {input:php,encoding:"utf8",timeout:90000,maxBuffer:4*1024*1024,windowsHide:true});
  assert.equal(r.status,0,r.stdout+r.stderr);assert.equal(r.stderr,"");
  const output=JSON.parse(r.stdout),summaries=[];
- for(const actual of output){const planned=cases.find(x=>x.name===actual.name);
+ for(const actual of output){if(actual.name==="reference-policy"){assert.equal(actual.policies.length,policies.length);for(const p of actual.policies)assert.equal(p.ok,policies.find(x=>x.name===p.name).ok,p.name);continue;}const planned=cases.find(x=>x.name===actual.name);
  assert.equal(actual.status,planned.expected,actual.name);
  if(actual.status===200){
  const pair=JSON.parse(actual.pair),c=JSON.parse(pair.catalog),f=JSON.parse(pair.peer_feed);
@@ -112,8 +169,10 @@ test("actual PHP renews a signed pair and rejects unsafe state; outputs pass unc
  }
  if(actual.name.startsWith("busy"))assert(actual.leaseExists);
  if(actual.name==="journal-retained")assert(actual.journalExists);
+ if(actual.name==="interrupted-next-retained")assert(actual.nextExists);
+ if(actual.name==="concurrent-expired"){assert.equal(actual.concurrent.length,2);for(const child of actual.concurrent){assert.equal(child[0],200);assert.equal(JSON.parse(child[1]).revision,planned.initialRevision+1);}}
  summaries.push({name:actual.name,status:actual.status,renewed:planned.renew});
  }
- console.log(JSON.stringify({schema:"minimodel.host_renewal_local_test.v1",image:image.stdout.trim(),cases:summaries,productionKey:false,published:false}));
+ console.log(JSON.stringify({schema:"minimodel.host_renewal_local_test.v1",image:image.stdout.trim(),cases:summaries,referencePolicyCases:policies.length,productionKey:false,published:false}));
  }finally{removeOwnedTemporaryDirectory(owned);}
 });

@@ -1,0 +1,86 @@
+{
+    "schema":  "minimodel.implementation-review.v1",
+    "recorded_utc":  "2026-09-30T00:13:39.3506771Z",
+    "status":  "atomic-replacement-capability-locally-tested-production-unverified",
+    "base_commit":  "85299dcb3f1407334abed37bb16fa325cdfab83f",
+    "question":  "Does the exact probe establish atomic replacement of an existing owned metadata pair, not only rename to an absent name?",
+    "decision":  "Create and fsync an exact old committed payload in the exclusively owned scratch directory. Bind old and pending inode/bytes, rename pending over old, verify the new inode/body and old pending absence, then fsync the directory. Report the existing atomicRename check only after that replacement readback. Preserve both files on a failed ownership precondition.",
+    "files":  [
+                  {
+                      "path":  "deploy/host-capability/probe-core.php",
+                      "bytes":  10295,
+                      "sha256":  "0322fe37dd985266e49ce81455dee6843ca70682fe58fabfa6d806a153b16405"
+                  },
+                  {
+                      "path":  "deploy/host-capability/source-manifest.v1.json",
+                      "bytes":  764,
+                      "sha256":  "ea5d92a30cb542000fa1cdc694fd9756f48b1f8695482cdc11a1bc0b0639b2c1"
+                  },
+                  {
+                      "path":  "deploy/host-capability/README.md",
+                      "bytes":  2910,
+                      "sha256":  "944d99fea6c529d0161ef6df863a428a279a6da3ed71f25d89abcdfe755a46e7"
+                  },
+                  {
+                      "path":  "tests/host-capability.test.js",
+                      "bytes":  12325,
+                      "sha256":  "08c3c8df7aeb9d4c7459f44a580106d11550186c640681619abd7606fa1182a8"
+                  }
+              ],
+    "validation":  {
+                       "actual_php":  {
+                                          "cases":  23,
+                                          "node_passed":  2,
+                                          "failed":  0,
+                                          "skipped":  0,
+                                          "output":  "b8dab6",
+                                          "command":  "MINIMODEL_HOST_CAPABILITY_PHP_DOCKER=1 node --test tests/host-capability.test.js",
+                                          "image":  "sha256:f62df9916bc05ae3c5120b41a115938f22623b0c98c815cbe2c67bc73cec21ef",
+                                          "php_version":  "8.3.33",
+                                          "network":  "none",
+                                          "source_mount":  "canonical-read-only",
+                                          "state":  "PHP-created fixtures in the canonical ownership-marked Windows-backed Docker mount",
+                                          "new_cases":  [
+                                                            "replace-existing",
+                                                            "replace-old-substituted",
+                                                            "replace-pending-substituted",
+                                                            "replace-target-missing"
+                                                        ]
+                                      },
+                       "publisher_focused":  {
+                                                 "passed":  19,
+                                                 "failed":  0,
+                                                 "output":  "1f6d73"
+                                             },
+                       "initial_extended_probe":  {
+                                                      "cases":  19,
+                                                      "node_passed":  1,
+                                                      "failed":  0,
+                                                      "output":  "bc3bf4",
+                                                      "meaning":  "The existing Windows-backed mount passed the actual replacement extension. No predicted failure occurred and no Linux tmpfs substitution was made."
+                                                  },
+                       "scratch":  "Canonical host-capability test parent empty after owned cleanup.",
+                       "diff_check":  "passed",
+                       "coverage":  "Actual PHP execution and exact file-preservation assertions; no percentage coverage claim."
+                   },
+    "prior_evidence":  [
+                           "artifacts/verification/host-capability-integration-review-20260930.json",
+                           "artifacts/verification/host-capability-local-review-20260929.json"
+                       ],
+    "review":  {
+                   "requester":  "root coordinating agent",
+                   "reason":  "The independently tested renewal implementation replaces an existing pair; the previous absent-destination probe did not establish that required capability."
+               },
+    "production":  {
+                       "probe_executed":  false,
+                       "keys_published":  false,
+                       "seed_published":  false,
+                       "discovery_published":  false
+                   },
+    "limits":  [
+                   "This local PHP-created fixture result does not generalize to every Windows mount or ACL transition.",
+                   "Actual shared-host PHP, replacement and directory durability remain to be demonstrated by the admitted live probe.",
+                   "No source, configuration, credential, catalog or model qualification authority is created by a capability result."
+               ],
+    "reusable_lesson":  "Measure the filesystem operation the production path actually needs; successful rename to an absent name is weaker evidence than replacing a verified existing predecessor."
+}

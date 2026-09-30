@@ -14,8 +14,8 @@
     },
     {
       "path": "probe-core.php",
-      "byteLength": 9269,
-      "sha256": "ca2b24a6c3f9c620d039b371c860eb166797fbdb67f5b0230ab92e926519de7e"
+      "byteLength": 10295,
+      "sha256": "0322fe37dd985266e49ce81455dee6843ca70682fe58fabfa6d806a153b16405"
     },
     {
       "path": "probe.php",

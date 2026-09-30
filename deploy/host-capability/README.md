@@ -34,6 +34,9 @@ operation is retained. The probe never contacts a network, accepts a filesystem
 path over HTTP, exposes environment values, or uses production keys.
 The `flush` check requires both file fsync and directory fsync after rename;
 file-only durability is insufficient for the planned atomic metadata renewal.
+The `atomicRename` check replaces an existing exact owned old payload with the
+staged new payload, then verifies its new inode and bytes. Rename to an absent
+name alone does not establish the replacement required by metadata renewal.
 
 The local test reads canonical PHP source through a read-only Docker mount and
 uses the already installed php:8.3-cli image with networking disabled. It does

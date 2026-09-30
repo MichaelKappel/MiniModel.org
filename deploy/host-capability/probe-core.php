@@ -40,6 +40,16 @@ function mmProbeSyncDirectory(string $path): void {
         mmProbeRequire(mmProbeSame($before, mmProbeStat($path, true)));
     } finally { fclose($stream); }
 }
+function mmProbeReplaceOwned(string $pending, string $final, array $pendingStat,
+    array $finalStat, string $newBytes, string $oldBytes): void {
+    mmProbeRequire(mmProbeSame($pendingStat, mmProbeStat($pending))
+        && mmProbeRead($pending, 128) === $newBytes
+        && mmProbeSame($finalStat, mmProbeStat($final))
+        && mmProbeRead($final, 128) === $oldBytes);
+    mmProbeRequire(@rename($pending, $final));
+    mmProbeRequire(mmProbeSame($pendingStat, mmProbeStat($final))
+        && mmProbeRead($final, 128) === $newBytes && @lstat($pending) === false);
+}
 function mmHostCapability(string $root, string $method, string $query,
     string $uri = '/.minimodel-host-capability.v1/probe.json'): array {
     $checks = array_fill_keys(['php', 'sodium', 'leaseBinding', 'privateRead',
@@ -140,11 +150,21 @@ function mmHostCapability(string $root, string $method, string $query,
         fclose($write);
         $write = null;
         $assertWork();
-        mmProbeRequire(mmProbeSame($fileStat, mmProbeStat($pending))
-            && mmProbeRead($pending, 128) === $payload && @lstat($final) === false);
-        mmProbeRequire(@rename($pending, $final));
-        $result['checks']['atomicRename'] = true;
+        $oldPayload = 'minimodel-host-capability-old:' . $id . "\n";
+        mmProbeRequire(@lstat($final) === false);
+        $write = @fopen($final, 'x+b');
+        mmProbeRequire(is_resource($write));
+        mmProbeRequire(fwrite($write, $oldPayload) === strlen($oldPayload)
+            && fflush($write) && fsync($write));
+        $oldStat = fstat($write);
+        fclose($write);
+        $write = null;
+        mmProbeSyncDirectory($work);
         $assertWork();
+        // Prove replacement of an existing exact owned pair, not merely rename to an absent name.
+        mmProbeReplaceOwned($pending, $final, $fileStat, $oldStat, $payload, $oldPayload);
+        $assertWork();
+        $result['checks']['atomicRename'] = true;
         mmProbeSyncDirectory($work);
         $result['checks']['flush'] = true; // Both file contents and directory entry were flushed.
         mmProbeRequire(mmProbeSame($fileStat, mmProbeStat($final))
